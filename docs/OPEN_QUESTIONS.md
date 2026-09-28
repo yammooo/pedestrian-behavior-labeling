@@ -1,7 +1,7 @@
 # Open questions
 
 Status: Active  
-Last updated: 2026-09-25
+Last updated: 2026-09-28
 
 ## Purpose and ownership
 
@@ -24,7 +24,7 @@ Status: Open. A pure 12→4 dictionary is not defensible. Determine conditional 
 
 ### Q4. Which inputs can be produced comparably in all three datasets?
 
-Status: Open. The [three-way audit](DATASET_CONTRACT.md) suggests RGB plus ordered 2D boxes as the smallest candidate, but PedSynth++ IDs/timing and release alignment remain unverified. Metric positions and ego compensation are not confirmed across PedSynth++, LOKI, and ECP2.0 tracking. Resolve by inspecting all relevant releases and testing comparable feature/pose extraction. Keep simulator-private state out of model inputs.
+Status: Open. The [three-way audit](DATASET_CONTRACT.md) suggests RGB plus ordered 2D boxes as the smallest candidate, but PedSynth++ IDs/timing and release alignment remain unverified. [Selected LOKI clips](DATASETS/LOKI.md#selected-clip-observations-2026-09-28) include labeled pedestrians outside the RGB view and 2D-only frames without behavior labels; decide how those cases enter an RGB/2D benchmark. Metric positions and ego compensation are not confirmed across PedSynth++, LOKI, and ECP2.0 tracking. Resolve by inspecting all relevant releases and testing comparable feature/pose extraction. Keep simulator-private state out of model inputs.
 
 ## Experimental decisions after the gate
 

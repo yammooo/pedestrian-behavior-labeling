@@ -14,11 +14,11 @@ Last updated: 2026-09-25
 
 | Input | PedSynth++ | LOKI | ECP2.0 tracking | Contract implication |
 |---|---|---|---|---|
-| RGB frames | Reported; demo has `.png` | Reported; `image_*.png` | Reported images | Shared raw modality. Resolutions and frame rates differ. |
-| 2D person boxes | Reported per frame | Reported with `track_id` | Reported dense 2D trajectories | Shared candidate. Check coordinate convention, visibility, and missing frames. |
-| Track identity + time order | Multi-person clips; persistent ID/timestamps **unverified** | `track_id`; 5 Hz annotations | Unique ID over sequence; dense tracks | Required conceptually, but PedSynth++ export and timing must be checked before declaring a common field. |
-| Metric pedestrian position | Export **unverified**; CARLA access alone is insufficient | 3D box position reported | World-fixed BEV position + height reported | **Not yet a confirmed three-way input.** Test release availability and coordinate conversion. |
-| Ego motion/pose | Moving ego; export **unverified** | Odometry and ego-motion data reported | Ego-motion data reported | Conditional; needed if deriving comparable metric trajectories. |
+| RGB frames | Reported; demo has `.png` | Observed locally; `image_*.png` | Reported images | Shared raw modality. Resolutions and frame rates differ. |
+| 2D person boxes | Reported per frame | Observed locally with `track_id` | Reported dense 2D trajectories | Shared candidate. Check coordinate convention, visibility, and missing frames. |
+| Track identity + time order | Multi-person clips; persistent ID/timestamps **unverified** | Observed `track_id` and aligned frame suffixes; 5 Hz reported | Unique ID over sequence; dense tracks | Required conceptually, but PedSynth++ export and timing must be checked before declaring a common field. |
+| Metric pedestrian position | Export **unverified**; CARLA access alone is insufficient | 3D box position observed in local labels | World-fixed BEV position + height reported | **Not yet a confirmed three-way input.** Test release availability and coordinate conversion. |
+| Ego motion/pose | Moving ego; export **unverified** | Odometry files observed; ego-motion use unverified | Ego-motion data reported | Conditional; needed if deriving comparable metric trajectories. |
 | 2D body pose | Estimated COCO-17 reported; file coverage unverified | Derivable from RGB, not provided | Derivable from RGB, not established in tracking package | Optional derived modality; run the same estimator in all domains. |
 | Raw LiDAR | Reported and in demo | Reported | Used for trajectory generation; public tracking-package availability unverified | Not a safe common requirement. |
 | Road/map semantics | Simulator context; comparable export unverified | Lane/context labels and map cloud reported | Comparable road labels unverified | Optional derived evidence, not shared GT. |

@@ -10,7 +10,7 @@ Last updated: 2026-09-24
 
 ## LOKI target actions
 
-The [LOKI paper](https://openaccess.thecvf.com/content/ICCV2021/papers/Girase_LOKI_Long_Term_and_Key_Intentions_for_Trajectory_Prediction_ICCV_2021_paper.pdf) reports four frame-wise pedestrian actions. Its prediction experiments turn a later action into an intention target; this project needs the original current-frame actions. Exact release values, annotation boundaries, and class counts still need inspection.
+The [LOKI paper](https://openaccess.thecvf.com/content/ICCV2021/papers/Girase_LOKI_Long_Term_and_Key_Intentions_for_Trajectory_Prediction_ICCV_2021_paper.pdf) reports four frame-wise pedestrian actions. Its prediction experiments turn a later action into an intention target; this project needs the original current-frame actions. A first local release scan confirms the four raw `intended_actions` values and counts in the [LOKI note](DATASETS/LOKI.md); annotation boundaries and semantics still need visual inspection.
 
 | Candidate state | Intended meaning | Known source terminology |
 |---|---|---|

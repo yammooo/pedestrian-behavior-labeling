@@ -9,10 +9,22 @@ Start with the [research documentation guide](docs/README.md).
 ## Layout
 
 - `docs/` — canonical research documents, dataset/literature notes, decisions, and log.
-- `src/` — future reusable package; empty by design until data inspection is complete.
+- `src/` — native dataset readers and inspection tools.
 - `data/` — local datasets only; never commit datasets.
 - `notebooks/`, `scripts/`, `configs/`, `tests/` — reserved for later, evidence-driven work.
 
 ## Status
 
 Initialized 2026-09-22. The prior ZOD-IAC work is historical context, not this repository's implementation base.
+
+## Inspect LOKI
+
+Create the project Conda environment from the repository root (with `ffmpeg` on `PATH`):
+
+```bash
+conda create -n pedestrian-behavior python=3.11 pillow pip
+conda activate pedestrian-behavior
+python -m pip install --no-deps -e .
+```
+
+See the [inspection commands](src/pedestrian_behavior/inspection/README.md) for LOKI summaries and visual galleries.

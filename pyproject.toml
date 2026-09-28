@@ -9,5 +9,8 @@ description = "Research workspace for pedestrian behavior annotation"
 requires-python = ">=3.10"
 dependencies = []
 
+[project.optional-dependencies]
+inspection = ["Pillow>=10"]
+
 [tool.setuptools.packages.find]
 where = ["src"]

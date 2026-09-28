@@ -99,6 +99,12 @@ Keep one-off inspection tools in `scripts/`.
 Keep exploratory notebooks in `notebooks/`.
 Keep configuration in `configs/`.
 
+## Python environment
+
+Run project Python commands in the `pedestrian-behavior` Conda environment
+(Python 3.11). Activate it with `conda activate pedestrian-behavior`.
+The inspection commands also require `ffmpeg` on `PATH`.
+
 ## Compute resources
 
 - Local laptop: ThinkPad T14 Gen 4, Intel i7, integrated graphics.
@@ -127,5 +133,5 @@ If a task changes our understanding:
 
 ## Validation
 
-Testing/linting commands will be added here once the implementation
-environment is established.
+Run `python -m unittest discover -s tests` from the repository root in the
+project Conda environment.

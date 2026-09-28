@@ -16,7 +16,7 @@ Status: Open. The paper lists `RETREAT`, while post-checkpoint generator inspect
 
 ### Q2. Does LOKI support a fair low-label benchmark?
 
-Status: Open. The paper reports four frame-wise actions, but actual independent tracks, durations, transitions, and rare-class coverage are unknown. Resolve with released annotation counts and a scene/sequence-aware split; then set feasible track budgets and a selection rule that avoids easy-case bias.
+Status: Open. A first local release scan found raw action counts and distinct `(scenario, track_id)` counts (see the [LOKI note](DATASETS/LOKI.md)); track durations, episodes, transitions, rare-class coverage across scenes, and release provenance remain unchecked. Resolve these and define a scene-aware split before setting feasible track budgets and a selection rule that avoids easy-case bias.
 
 ### Q3. Which PedSynth++ behaviors can supervise the LOKI states?
 

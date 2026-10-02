@@ -2,7 +2,7 @@
 
 Status: Current direction; methods are working hypotheses
 
-Last updated: 2026-10-01
+Last updated: 2026-10-02
 
 ## Purpose and ownership
 
@@ -19,12 +19,12 @@ ZOD-IAC exposed the cost of jointly constructing reliable trajectories and label
 
 ## Current investigation priority
 
-1. Establish whether ROAD-Waymo behaviour annotations can be linked reliably to original Waymo 3D pedestrian tracks.
+1. Complete visual acceptance and reproducibility of the acquired ROAD-Waymo/Waymo index; structural joins and partial 3D coverage are now verified.
 2. Establish native annotation meanings and characterize LOKI's pedestrian population.
 3. Build simple target diagnostics and a ROAD-Waymo source baseline before testing extensions.
 4. Test whether complementary real supervision improves transfer beyond that baseline.
 
-ROAD-Waymo is the baseline source **candidate**, not a verified 3D behaviour dataset. nuScenes or ROAD may be added next; neither inclusion nor order is selected. IDD-PeD is a later option. [Dataset roles](DATASETS/DATASET_MATRIX.md) distinguish these candidates from LOKI, the main target, and possible later applications.
+ROAD-Waymo is the baseline source with [verified partial 3D correspondence](DATASETS/ROAD_WAYMO.md#acquired-index-and-access-2026-10-02); native semantics and training acceptance remain open. nuScenes or ROAD may be added next; neither inclusion nor order is selected. IDD-PeD is a later option. [Dataset roles](DATASETS/DATASET_MATRIX.md) distinguish these candidates from LOKI, the main target, and possible later applications.
 
 LOKI is 3D-first: behaviour labels can accompany pedestrians without a 2D box. Source camera selection and target population differences may matter as much as geography or sensors. Strict zero-shot excludes LOKI from training and model selection and requires a defensible semantic comparison. Existing exploratory inspection must be disclosed; exact split safeguards belong in the evaluation plan.
 

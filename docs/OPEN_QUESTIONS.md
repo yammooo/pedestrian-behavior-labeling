@@ -2,7 +2,7 @@
 
 Status: Active; superseded questions retained for historical links
 
-Last updated: 2026-10-01
+Last updated: 2026-10-02
 
 ## Purpose and ownership
 
@@ -13,15 +13,15 @@ Last updated: 2026-10-01
 
 ### Q12. Can ROAD-Waymo behaviour annotations be linked robustly to Waymo 3D tracks?
 
-Open. No release or linkage implementation has been acquired here. Establish segment/frame/object correspondences, association provenance and coverage, varied manual validation, and a predeclared acceptance rule. [Gate 1](DATASET_INSPECTION_PLAN.md#gate-1--road-waymo--waymo-linkage) owns the checks. Failure requires reconsidering source supervision.
+Partially resolved. The [acquired remote index](DATASETS/ROAD_WAYMO.md#acquired-index-and-access-2026-10-02) has verified official same-frame associations, explicit missingness and a full-export consistency audit. ROAD-authoritative population/class policy is accepted. Remaining work is varied visual validation, disagreement review, release/code provenance and a predeclared training acceptance rule. [Gate 1](DATASET_INSPECTION_PLAN.md#gate-1--road-waymo--waymo-linkage) owns the checks. Failure requires reconsidering source supervision.
 
 ### Q17. How much usable pedestrian sequence supervision does each source provide?
 
-Open. [Population comparison](DATASETS/DATASET_MATRIX.md#pedestrian-sequence-scale) separates pedestrian tubes from all-agent/frame counts. Verify acquired-release counts by split, native identity, action, length and gaps. ROAD-Waymo's reported 11,759 pedestrian tubes include only 516 waiting action tubes; the retained 3D-matched subset is unknown. Reconcile IDD-PeD's 4,916 split total with the paper's >5,000, and recount nuScenes's externally reported 8,143 with explicit category/split scope. Scene diversity and non-overlapping identities matter alongside frame volume.
+Open. [Population comparison](DATASETS/DATASET_MATRIX.md#pedestrian-sequence-scale) separates pedestrian tubes from all-agent/frame counts. Verify acquired-release counts by split, native identity, action, length and gaps. ROAD-Waymo's acquired train/validation subset has 9,573 pedestrian tracks: 6,540 with any paired 3D frame and 4,606 fully paired. Characterize paired lengths/gaps and action episodes; the paper's 516 waiting action tubes are a different count from current labeled rows. Reconcile IDD-PeD's 4,916 split total with the paper's >5,000, and recount nuScenes's externally reported 8,143 with explicit category/split scope. Scene diversity and non-overlapping identities matter alongside frame volume.
 
 ### Q13. What do the native source annotations actually mean?
 
-Open. Extract exact ROAD-Waymo labels from the acquired version; compare definitions, applicability, timing, and examples with LOKI before zero-shot mapping. Audit nuScenes attributes/scene supervision and ROAD/IDD-PeD native annotations without forcing them into one taxonomy. The ontology table is preliminary.
+Open. ROAD-Waymo native vocabulary and observed pedestrian action strings are now recorded in the dataset note; compare definitions, applicability, timing, overlap and examples with LOKI before zero-shot mapping. Audit nuScenes attributes/scene supervision and ROAD/IDD-PeD native annotations without forcing them into one taxonomy. The ontology table is preliminary.
 
 ### Q2. Does LOKI support a fair low-label benchmark?
 

@@ -2,7 +2,7 @@
 
 Status: Immediate feasibility and protocol gates
 
-Last updated: 2026-10-01
+Last updated: 2026-10-02
 
 ## Purpose and ownership
 
@@ -13,7 +13,7 @@ Last updated: 2026-10-01
 
 For every inspected asset, record source URL, acquisition date, release/version or commit, checksum where available, files, schema, timing, units, IDs, and missing/duplicate rows. Distinguish paper descriptions, official format documentation, local observations, and checkpoint-reported evidence. Keep raw data and generated media outside Git.
 
-ROAD-Waymo has not been acquired and no linkage implementation exists in this workspace. The new gates must not inherit a claim that its behaviour annotations are already 3D supervision.
+ROAD-Waymo and Waymo Perception v2 are acquired on `aalto`. The [inspected merged index](DATASETS/ROAD_WAYMO.md#acquired-index-and-access-2026-10-02) establishes partial same-frame 3D correspondence through official associations. Mapping/export scripts currently live in the external remote workspace; preserve their runnable provenance before a training adapter depends on them.
 
 ## Gate 1 — ROAD-Waymo ↔ Waymo linkage
 
@@ -26,7 +26,9 @@ ROAD-Waymo has not been acquired and no linkage implementation exists in this wo
 | Manual validation | Visual checks on varied tracks/frames, including crowded, small, occluded, and failed associations; record selection and observed mismatches. |
 | Population/coverage | Matched, unmatched, ambiguous, and excluded counts; determine which behaviour-labeled pedestrians actually obtain usable 3D observations. |
 
-Start with a small matched subset before broader processing. The manual sample size, acceptable matching quality, and acceptance rule are open and must be declared before calling the gate passed. Preserve mismatch examples and the mapping evidence.
+Status on 2026-10-02: scene/frame/object joins and export consistency have been audited across the acquired annotation population. All pedestrian timestamps are automatically verified; the merged policy retains native geometry regardless of original Waymo class. This repository inspection rechecked the full CSV and one original association/box sample. Counts, artifacts and limitations live in the dataset note.
+
+The feasibility question is no longer unimplemented. Varied visual validation, semantic-disagreement review, acquisition provenance and a predeclared training acceptance rule still need documentation. The supplied export pass is not a measured visual association error rate. Preserve mismatch examples; do not retrospectively call an undeclared manual acceptance rule satisfied.
 
 If robust linkage is not supported, reconsider the source-training plan before building the proposed multimodal method. A visual ROAD-Waymo release alone does not pass this gate.
 
@@ -54,4 +56,4 @@ Before a run, settle its applicable metric definitions, label-budget unit, sampl
 
 Update the relevant dataset note once with measured evidence; link it from the matrix and ontology. Record unresolved questions and gate outcomes, then add a short log pointer. Use [experiment records](EXPERIMENTS/README.md) for reproducible feasibility runs and later comparisons.
 
-Write small native inspection/association utilities only after inspecting sample files. This documentation update does not implement the model, acquire large datasets, or pass these gates.
+Write small native inspection/association utilities only after inspecting sample files. This documentation update records the existing remote acquisition and index; it does not implement the model or declare all training gates passed.

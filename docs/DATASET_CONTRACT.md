@@ -2,7 +2,7 @@
 
 Status: Provisional heterogeneous contract; minimum requirements unresolved
 
-Last updated: 2026-10-01
+Last updated: 2026-10-02
 
 ## Purpose and ownership
 
@@ -29,7 +29,7 @@ This table specifies inspection obligations, not a software schema or adapter fr
 ## Current evidence
 
 - [LOKI](DATASETS/LOKI.md): local identity joins and same-frame PLY/3D-box plotting have been checked. Physical units, ego-forward direction, odometry/map transforms, and RGB projection remain unverified.
-- [ROAD-Waymo](DATASETS/ROAD_WAYMO.md): behaviour data has not been acquired locally; linkage to original Waymo 3D tracks is unproven.
+- [ROAD-Waymo](DATASETS/ROAD_WAYMO.md): acquired on `aalto`; official same-frame associations and native geometry are preserved in the inspected merged index. ROAD defines the pedestrian population; `has_3d_box` masks 3D supervision. Vehicle-frame boxes require ego compensation before deriving world-motion features.
 - [nuScenes](DATASETS/NUSCENES.md): candidate 3D/scene source; its native keyframe annotations do not establish dense behaviour supervision.
 - [ROAD](DATASETS/ROAD.md) and [IDD-PeD](DATASETS/IDD_PED.md): potential visual supervision; usable 3D correspondence is not assumed.
 - PedSynth++ and ECP2.0 do not determine the current minimum contract.
@@ -37,6 +37,8 @@ This table specifies inspection obligations, not a software schema or adapter fr
 ## Missing modalities and labels
 
 Represent actual availability explicitly. Apply a task loss only where its native annotation exists. Do not fabricate behaviour targets, treat an unlabeled frame as negative, or fill annotation gaps as ground truth. Interpolation used for a gallery camera center is not a recovered pedestrian observation.
+
+For the acquired ROAD-Waymo index, retain complete ROAD sequences and their missing-3D masks. Parse CSV boolean strings explicitly, preserve original Waymo types/disagreements, and define repeated-observation handling before producing one sample per track/time. ROAD train/val both come from Waymo training; preserve both split fields. Native and camera-synchronized boxes are distinct geometry sources.
 
 A projected 3D box and an annotated 2D observation have different provenance. Any resampling or derived geometry must record its method and uncertainty. Exact missing-input behavior is chosen after the inspection gates.
 

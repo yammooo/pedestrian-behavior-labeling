@@ -2,7 +2,7 @@
 
 Status: Provisional schedule, conditional on evidence
 
-Last updated: 2026-10-01
+Last updated: 2026-10-02
 
 ## Purpose and ownership
 
@@ -15,7 +15,7 @@ The traineeship ends **17 December 2026**. These windows express priorities, not
 
 | Window | Intended work / gate |
 |---|---|
-| 1–9 October | Acquire and test ROAD-Waymo/Waymo linkage; native ontology audit; LOKI population/visibility characterization; define the first source/target protocol. |
+| 1–9 October | Complete visual/reproducibility acceptance of the acquired ROAD-Waymo/Waymo index; native ontology audit; LOKI population/visibility characterization; define the first source/target protocol. |
 | 12–23 October | Small verified data layer and simple baselines: LOKI trajectory-only, scene diagnostic if feasible, ROAD-Waymo source baseline, basic transfer. Assess the next source; do not assume nuScenes must precede ROAD. |
 | 26 October–13 November | If baselines justify it, test shared representations and a first complementary source. Compare with ROAD-Waymo alone; architecture and native heads remain hypotheses. |
 | 16–27 November | Conditional generalization experiments: missing RGB, justified sensor perturbations/alignment, source additions, and negative transfer. IDD-PeD is a later option. |

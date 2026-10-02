@@ -2,7 +2,7 @@
 
 Status: Working hypotheses; no model architecture selected
 
-Last updated: 2026-10-01
+Last updated: 2026-10-02
 
 ## Purpose and ownership
 
@@ -42,6 +42,6 @@ Measure negative transfer through controlled source/task ablations. Gradient dia
 
 ## Implementation boundaries
 
-The existing LOKI reader and RGB/BEV gallery remain native inspection tools. Keep native annotation meanings and coordinates intact. ROAD-Waymo inspection and association utilities are the next justified additions after seeing released files.
+The existing LOKI reader and RGB/BEV gallery remain native inspection tools. Keep native annotation meanings and coordinates intact. ROAD-Waymo association/export utilities already exist in the external `aalto` mapping workspace; the [dataset note](DATASETS/ROAD_WAYMO.md#acquired-index-and-access-2026-10-02) records their paths. Preserve reproducible code before adding a small native reader; do not rebuild the validated join.
 
 Later adapters may produce comparable observations with provenance and masks. Do not build a model, rigid shared schema, adapter hierarchy, or viewer framework during this documentation migration. [Experiment records](EXPERIMENTS/README.md) will tie any later implementation to its hypothesis, configuration, and observed result.

@@ -2,7 +2,7 @@
 
 Status: Native semantic audit in progress; cross-dataset mappings unaccepted
 
-Last updated: 2026-10-01
+Last updated: 2026-10-02
 
 ## Purpose and ownership
 
@@ -28,7 +28,7 @@ This is the initial audit structure, not a completed ontology comparison. Read t
 
 | Dataset | Annotation / semantic meaning | Temporal granularity | Available modalities | Possible shared concept | Uncertainties |
 |---|---|---|---|---|---|
-| [ROAD-Waymo](DATASETS/ROAD_WAYMO.md) | Agent action and location labels; checkpoint suggests move, stop, waiting, crossing and direction variants | Frame/box labels and tubes documented; actual cadence unknown | Frontal RGB/2D labels; original Waymo 3D/LiDAR/ego/map correspondence conditional | Motion, scene relation, crossing behaviour | Exact released vocabulary, definitions, overlap, timing, and 3D linkage unverified |
+| [ROAD-Waymo](DATASETS/ROAD_WAYMO.md) | Observed Ped actions: Mov, MovAway, MovTow, PushObj, Stop, Wait2X, Xing, XingFmLft, XingFmRht; native location labels separate | Frame/box labels and tubes; exact gaps/boundaries to characterize | FRONT RGB/2D and partial official native 3D pairs; LiDAR/ego files referenced; map coverage unknown | Motion, scene relation, crossing behaviour | Definitions, overlap, timing, visual association acceptance and LOKI compatibility |
 | [nuScenes](DATASETS/NUSCENES.md) | `pedestrian.moving`, `pedestrian.standing`, `pedestrian.sitting_lying_down`; separate scene/map annotations | Native box keyframes at 2 Hz; no dense behaviour GT assumed | RGB, LiDAR, 3D boxes, calibration, ego pose, scene expansions | Motion and 3D scene grounding | Attribute coverage, scene-target derivation, package alignment, and supervision feasibility |
 | [ROAD](DATASETS/ROAD.md) | Native action/location annotations | Frame/box labels and tubes documented; release coverage to inspect | Video/2D tracks; no convenient 3D supervision assumed | Visual behaviour and scene relation | Exact pedestrian subset, semantic agreement with ROAD-Waymo, temporal coverage |
 | [IDD-PeD](DATASETS/IDD_PED.md) | Separate crossing, interaction, activity, attention, social and stationary attributes | Frame-level attributes documented | Video/2D tracks and contextual annotations; 3D correspondence unverified | Visual behaviour/context | Multi-attribute semantics, applicability, annotation coverage, domain-selection differences |

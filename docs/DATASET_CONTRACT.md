@@ -1,33 +1,47 @@
 # Dataset input contract
 
-Status: Provisional comparison; minimum contract not decided  
-Last updated: 2026-09-25
+Status: Provisional heterogeneous contract; minimum requirements unresolved
+
+Last updated: 2026-10-01
 
 ## Purpose and ownership
 
-- Contains: the **three-way intersection** of usable inputs across PedSynth++ (source), LOKI (real benchmark), and ECP2.0 (possible deployment target), plus the resulting contract decision gate.
-- Links out: detailed evidence and release schemas to [dataset notes](DATASETS/DATASET_MATRIX.md); target labels to [LABEL_ONTOLOGY.md](LABEL_ONTOLOGY.md).
+- Contains: identity, time, coordinate conventions, modality/annotation availability, and leakage rules.
+- Links out: release evidence to [dataset notes](DATASETS/DATASET_MATRIX.md), label semantics to [LABEL_ONTOLOGY.md](LABEL_ONTOLOGY.md), and verification to [DATASET_INSPECTION_PLAN.md](DATASET_INSPECTION_PLAN.md).
 
-## Shared-input audit
+## Contract direction
 
-“Reported” means a paper or official dataset page describes it, **not** that we have inspected the release. “Derivable” means it could be computed with the same method from reported data; quality is untested. ECP2.0 here means its **tracking extension**, not the separate detection, 2.5D, or dense-pose packages.
+The former PedSynth++/LOKI/ECP2.0 three-way input intersection is superseded. The deployment goal assumes existing pedestrian 3D tracks, while a visual-only source may still supervise a suitable branch. A source need not expose every target modality. The minimum usable target input and exact shared representation remain open.
 
-| Input | PedSynth++ | LOKI | ECP2.0 tracking | Contract implication |
-|---|---|---|---|---|
-| RGB frames | Reported; demo has `.png` | Observed locally; `image_*.png` | Reported images | Shared raw modality. Resolutions and frame rates differ. |
-| 2D person boxes | Reported per frame | Observed locally with `track_id` | Reported dense 2D trajectories | Shared candidate. Check coordinate convention, visibility, and missing frames. |
-| Track identity + time order | Multi-person clips; persistent ID/timestamps **unverified** | Observed `track_id` and aligned frame suffixes; 5 Hz reported | Unique ID over sequence; dense tracks | Required conceptually, but PedSynth++ export and timing must be checked before declaring a common field. |
-| Metric pedestrian position | Export **unverified**; CARLA access alone is insufficient | 3D box position observed in local labels | World-fixed BEV position + height reported | **Not yet a confirmed three-way input.** Test release availability and coordinate conversion. |
-| Ego motion/pose | Moving ego; export **unverified** | Odometry files observed; ego-motion use unverified | Ego-motion data reported | Conditional; needed if deriving comparable metric trajectories. |
-| 2D body pose | Estimated COCO-17 reported; file coverage unverified | Derivable from RGB, not provided | Derivable from RGB, not established in tracking package | Optional derived modality; run the same estimator in all domains. |
-| Raw LiDAR | Reported and in demo | Reported | Used for trajectory generation; public tracking-package availability unverified | Not a safe common requirement. |
-| Road/map semantics | Simulator context; comparable export unverified | Lane/context labels and map cloud reported | Comparable road labels unverified | Optional derived evidence, not shared GT. |
-| Behavior labels | FSM + crossing reported | Four pedestrian actions reported | No matching four-state GT reported | Supervision/evaluation only; **never model input**. |
+| Concept | Required clarification before an adapter is accepted |
+|---|---|
+| Dataset, sequence, pedestrian identity | Stable native IDs, identity continuity, and validated cross-release associations. Keep association provenance; a ROAD tube ID is not automatically a Waymo object ID. |
+| Time and annotation cadence | Sensor timestamps, annotation times, frame indexing, gaps, and synchronization tolerance. Do not equate annotation cadence with capture rate. |
+| 3D boxes and trajectory | Coordinate frame, origin, axes, units, dimensions, rotation convention, and ego/world transforms. Derive metric velocity only after verifying these. |
+| RGB and 2D observations | Camera identity, box convention, calibration, crop/context policy, and per-observation availability. Missing boxes do not alone establish a particular visibility condition. |
+| Point clouds | Sensor configuration, point fields, timing, accumulation, ego compensation, and pedestrian/local-scene correspondence. |
+| Ego/map/scene context | Coordinate transforms, semantic definitions, coverage, and whether context is provided or derived. |
+| Availability and quality | Distinguish missing modality, occlusion, sparse returns, missing annotation, and uncertain association. |
+| Supervision | Preserve native labels, definitions, annotation coverage, and masks independently from model inputs. |
 
-Sources: [PedSynth++ paper](https://arxiv.org/pdf/2605.24950) and [demo](https://zenodo.org/records/20444839); [LOKI paper](https://arxiv.org/pdf/2108.08236) and [official format](https://usa.honda-ri.com/loki); [ECP2.0 paper](https://doi.org/10.1109/TPAMI.2024.3471170) and [current tracking access page](https://eurocity-tracking-dataset.tudelft.nl/). Each [dataset note](DATASETS/DATASET_MATRIX.md) records caveats.
+This table specifies inspection obligations, not a software schema or adapter framework.
 
-## Contract decision gate
+## Current evidence
 
-The **candidate minimum** is a pedestrian's ordered 2D track linked to RGB frames: dataset/sequence ID, track ID, frame time or reconstructible timing, and 2D boxes. This is a proposal, not an accepted contract, because PedSynth++ track IDs/timing and release-level alignment are still unverified. Pose can be derived from RGB; metric motion, ego pose, and road context remain optional until the same usable representation is confirmed across the three datasets.
+- [LOKI](DATASETS/LOKI.md): local identity joins and same-frame PLY/3D-box plotting have been checked. Physical units, ego-forward direction, odometry/map transforms, and RGB projection remain unverified.
+- [ROAD-Waymo](DATASETS/ROAD_WAYMO.md): behaviour data has not been acquired locally; linkage to original Waymo 3D tracks is unproven.
+- [nuScenes](DATASETS/NUSCENES.md): candidate 3D/scene source; its native keyframe annotations do not establish dense behaviour supervision.
+- [ROAD](DATASETS/ROAD.md) and [IDD-PeD](DATASETS/IDD_PED.md): potential visual supervision; usable 3D correspondence is not assumed.
+- PedSynth++ and ECP2.0 do not determine the current minimum contract.
 
-Before accepting the contract, inspect each release for: stable IDs, time units, 2D box convention, RGB/box alignment, missing observations, and whether PedSynth++ exports 3D positions and ego pose. Derived speed/acceleration must specify coordinates and units rather than assume that 2D motion is metric. Keep behavior GT, CARLA FSM/route information, and other privileged simulator facts outside model inputs. The unresolved choice is tracked in [open question Q4](OPEN_QUESTIONS.md#q4-which-inputs-can-be-produced-comparably-in-all-three-datasets).
+## Missing modalities and labels
+
+Represent actual availability explicitly. Apply a task loss only where its native annotation exists. Do not fabricate behaviour targets, treat an unlabeled frame as negative, or fill annotation gaps as ground truth. Interpolation used for a gallery camera center is not a recovered pedestrian observation.
+
+A projected 3D box and an annotated 2D observation have different provenance. Any resampling or derived geometry must record its method and uncertainty. Exact missing-input behavior is chosen after the inspection gates.
+
+## Leakage rules
+
+Behaviour labels, future-derived prediction targets, and simulator-private route/intention fields stay outside inference inputs. Complete recorded observations are permitted because the task is offline.
+
+Strict zero-shot uses no LOKI training or model selection, including unlabeled representation adaptation. Source/target semantic comparison is documented separately from training. Splits, inspected-scene handling, and low-shot access belong in [EVALUATION_PLAN.md](EVALUATION_PLAN.md).

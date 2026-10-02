@@ -1,40 +1,39 @@
 # Problem definition
 
-Status: Accepted scope; provisional formulation  
-Last updated: 2026-09-24
+Status: Accepted offline scope; provisional formulation
+
+Last updated: 2026-10-01
 
 ## Purpose and ownership
 
-- Contains: annotation unit, permitted temporal context, task inputs and outputs, and exclusions.
-- Links out: scientific motivation to [RESEARCH_DIRECTION.md](RESEARCH_DIRECTION.md), input fields to [DATASET_CONTRACT.md](DATASET_CONTRACT.md), and state meanings to [LABEL_ONTOLOGY.md](LABEL_ONTOLOGY.md).
+- Contains: annotation unit, temporal context, task inputs and outputs, and exclusions.
+- Links out: motivation to [RESEARCH_DIRECTION.md](RESEARCH_DIRECTION.md), fields to [DATASET_CONTRACT.md](DATASET_CONTRACT.md), and semantics to [LABEL_ONTOLOGY.md](LABEL_ONTOLOGY.md).
 
 ## Primary task
 
-Given a complete recorded pedestrian track and dataset-provided observations, assign a coherent per-frame observable behavior-state sequence. Future frames may be used. The labeler may later generate segments, transitions, and derived crossing events from that sequence.
+Given an existing pedestrian track over a recorded sequence, assign a dense per-frame behaviour-state sequence. The labeler may use the complete track, including future observations. The unit is a tracked pedestrian over a recorded temporal segment; it may contain several states.
 
-The unit is a tracked pedestrian over a recorded temporal segment. A frame can have a current behavior label; complete tracks can contain several states. The intended target is a state sequence, while any crossing event or segment summary is derived from that sequence. The exact [ontology](LABEL_ONTOLOGY.md) remains provisional.
+The task is offline dataset annotation. It assumes existing tracks whose suitability must be checked, rather than reconstructing detections and associations. The intended research artifact is an operational offline labeler with reproducible experimental evidence.
 
-## Candidate inputs (not settled)
+## Inputs and missing evidence
 
-Track identity, timestamps, and observations that can be produced for the same pedestrian across source and target datasets. The minimum shared representation is unresolved; see the [dataset contract](DATASET_CONTRACT.md). Complete recorded context may be used because annotation is offline.
+Ideal target inputs include pedestrian identity and time, 3D boxes/trajectory, point clouds, ego pose, RGB and 2D boxes where available, and potentially scene/map information. RGB is not a universal requirement: useful labeling of 3D-only pedestrians is a central research hypothesis.
 
-## Outputs
+Source datasets may provide complementary subsets of these inputs and different annotations. Their usable fields, coordinates, and minimum requirements remain unresolved in the dataset contract. Neither absent RGB nor absent ground truth implies a behaviour class.
 
-- Primary: a per-frame behavior-state sequence for each tracked pedestrian; class meanings remain provisional.
-- Derived, if the accepted ontology supports them: behavior segments, state transitions, and crossing onset/end.
-- Confidence and abstention, later if transfer and error analysis justify them.
+## Outputs and observability
 
-## Non-goals for the initial phase
+- Primary: a per-frame state sequence using an explicitly documented output ontology.
+- Derived, if meaningful: segments, transitions, and crossing onset/end.
+- End goal: confidence or uncertainty supporting automatic acceptance and optional human review; method and coverage targets remain open.
 
-- Rebuilding detection, LiDAR uplift, or tracking for a target dataset.
-- Treating a future-derived label as an online observable prediction.
-- Treating CARLA FSM state, perfect simulator route, or future simulator intent as deployable model input.
+Moving and stopping are largely observable. Crossing also depends on road relation. Waiting to cross can include inferred intention that limited observations cannot uniquely identify. Future context may help but cannot guarantee identifiability. Preserve uncertainty rather than describing every target label as a directly observable physical state.
 
-## Critical distinction
+## Task boundary
 
-| Task | Input at time `t` | Future frames allowed? | Output |
-|---|---|---:|---|
-| Offline annotation | Complete recording/track | Yes | Behavior segments or events |
-| Online prediction | Observations up to `t` | No | Future behavior or latent intention |
+| Task | Temporal evidence | Output |
+|---|---|---|
+| Offline annotation | Complete recorded track; future frames allowed | Current-frame states; optionally derived segments/events |
+| Online prediction | Observations up to the current time | Future actions or intention |
 
-Offline annotation is the accepted project scope; online prediction may be a later comparison, not the primary problem.
+Offline annotation is [accepted scope](DECISIONS/0001-offline-annotation-primary-task.md). Initial work excludes rebuilding target detection/tracking, onboard prediction, and substantial model implementation before the feasibility and protocol gates. Synthetic route/FSM knowledge and annotation ground truth are supervision or history, not deployable inputs.

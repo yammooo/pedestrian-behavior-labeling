@@ -1,58 +1,47 @@
 # Dataset matrix
 
-Status: Draft; verify against released data and annotation manuals before experimental use.  
-Last updated: 2026-09-25
+Status: Current candidate roles; release and association checks incomplete
+
+Last updated: 2026-10-01
 
 ## Purpose and ownership
 
-- Contains: a compact cross-dataset comparison and candidate experimental roles; update it when dataset notes change.
-- Links out: detailed facts, sources, access conditions, and unresolved release fields to each dataset note. Use `unknown` where data has not been checked.
+- Contains: compact source/target roles, modality and annotation coverage, and verification status.
+- Links out: detailed facts, primary sources, provenance, and caveats to native dataset notes.
 
-Legend: **reported** = stated in project handoff or cited paper; **unknown** = not yet verified; **N/A** = not the dataset's intended provision.
+**Documented** means official paper/format evidence; **observed** means local inspection; **checkpoint-reported** means project context not independently revalidated. An available sensor does not imply behaviour GT for its full tracked population.
 
-| Dataset | RGB | LiDAR | 2D boxes / IDs | 3D representation | Ego motion | Behavior labels | Reported ontology | Quality metadata | Candidate project role |
-|---|---|---|---|---|---|---|---|---|---|
-| PedSynth++ / ARCANE-PedSynth | Yes, paper-reported | Yes, paper-reported | Multi-pedestrian clips and dense annotations reported; exact fields need inspection | Needs release inspection | Moving ego vehicle reported; exact export needs inspection | Per-frame FSM states and binary crossing labels, paper-reported | Paper lists 12 states including `RETREAT`; post-checkpoint code inspection found `NORMAL_CROSSING` instead; CSV values unknown | Needs release inspection | Candidate synthetic pretraining source; suitability gate pending |
-| LOKI | One RGB camera, paper-reported | Four LiDARs, paper-reported | Local release joins 2D/3D pedestrian rows on `track_id`; coverage needs quantification | 3D position, dimensions, yaw in official format description | CAN-bus compensation and odometry files reported | Yes, four raw actions confirmed in local release | Moving, waiting to cross, crossing road, stopped | Missing labels not yet quantified | Main real benchmark; initial per-action track counts in [LOKI note](LOKI.md) |
-| EMT | Dash-camera RGB reported | Unknown | Tracking benchmark reported; exact released fields need verification | Unknown | Unknown | Intention benchmark reported | Stopping, walking, waiting to cross, crossing reported | Unknown | Ontology comparison and cross-domain candidate |
-| ECP2.0 | Yes | Auxiliary LiDAR used for uplift | Dense 2D tracks / IDs reported | World-fixed 3D position plus height; not dense full cuboids as primary representation | Yes, vehicle inertial sensing / ego compensation reported | No equivalent rich behavior labels reported | N/A | `unsure` frames and `weak` tracks reported | Deployment/enrichment and transfer candidate |
-| PIE | Video reported | Unknown | Pedestrian track annotations reported | Unknown | Unknown | Crossing-related annotations reported | Needs verification | Needs verification | Literature/possible additional test |
-| JAAD | Video reported | Unknown | Pedestrian annotations reported | Unknown | Unknown | Crossing-related annotations reported | Needs verification | Needs verification | Literature/possible additional test |
-| ZOD / ZOD-IAC | ZOD RGB reported | ZOD LiDAR reported | ZOD-IAC tracks generated from detections | Derived 3D positions reported | Reported | Geometry/human-reviewed crossing records in prior project | ZOD-IAC-specific cross/no-cross and onset | GOLD/SILVER and review provenance in old project | Historical reference; possible future target |
+| Dataset | Current role | Candidate observations | Native supervision / population | Main unresolved gate |
+|---|---|---|---|---|
+| [ROAD-Waymo](ROAD_WAYMO.md) | Baseline source candidate | Frontal RGB/2D tubes documented; original Waymo 3D/LiDAR/ego correspondence conditional; map coverage unknown | Native action/location labels; frontal annotation population | Not acquired; exact vocabulary and all 3D associations unproven |
+| [nuScenes](NUSCENES.md) | Possible next source; order open | RGB, LiDAR, calibrated 3D annotations/ego and scene expansions documented | Limited pedestrian motion attributes; scene labels at native cadence, not dense behaviour GT | Local packages and usable scene supervision unverified |
+| [ROAD](ROAD.md) | Possible next visual source; order open | Video/2D tubes documented; no convenient 3D supervision assumed | Native agent/action/location annotations | Pedestrian semantics, temporal coverage and source benefit |
+| [IDD-PeD](IDD_PED.md) | Later optional visual/context source | Tracked video/2D/context annotations documented; 3D correspondence unverified | Multiple frame-level behavioural/context attributes; selection needs audit | Native applicability, release coverage, and justification for inclusion |
+| [LOKI](LOKI.md) | Main 3D-first target; strict zero-shot and low-shot/scratch regimes kept separate | Local RGB, 2D/3D rows, point clouds, odometry and map files; transforms remain partly unverified | Four actions in 3D label rows; GT can exist without a 2D observation | Complete population/cohort characterization, semantics, coordinates, splits |
+| [PedSynth++](PED_SYNTH_PLUS_PLUS.md) | Historical route; optional future synthetic augmentation | Local RGB/2D release; metadata disables LiDAR/DVS; generator export work separate | Required rich FSM not available in inspected active generator | Not the current foundation; retain provenance and prior findings |
+| [ECP2.0](ECP2.md) | Possible later application; no internship dependency | Dense person trajectories and metric locations paper-reported; released fields to verify | No matching rich behaviour GT established | Access, suitable 3D/context fields, independent audit |
+| [EMT](EMT.md) | Background; no current experiment selected | Dash-camera tracking paper-reported; other modalities unknown | Similar action terminology, compatibility unverified | Reinspect only if deliberately selected later |
+| [PIE / JAAD](PIE_JAAD.md) | Literature/background; not selected sources | Video/pedestrian annotations reported | Crossing/intention conventions require native interpretation | No current experiment depends on them |
+| [ZOD-IAC](ZOD_IAC.md) | Historical motivation and prior work | Prior detection/lifting/tracking pipeline | Geometry/review-derived crossing records | Track construction is outside the current task |
 
-## Modality and context audit
+## Pedestrian sequence scale
 
-| Dataset | Radar | 3D boxes | Body orientation / pose | Road/map or scene semantics | Geography / diversity | Public availability / access |
-|---|---|---|---|---|---|---|
-| PedSynth++ / ARCANE-PedSynth | DVS reported; radar unknown | Needs release inspection | Estimated 2D pose keypoints reported | CARLA towns/scenarios; exact fields need inspection | 533 clips, 12 weather conditions, 4 CARLA towns reported | Generator code is open; full data by author request per paper; Zenodo demo subset |
-| LOKI | Not reported | 3D boxes with position, dimensions, yaw in official format description | Pose not reported; derive from RGB if needed | Lane/context labels and `map.ply` reported; release details need inspection | Tokyo urban/suburban scenarios; varied time/weather | Non-commercial; university-email request |
-| EMT | Unknown | Unknown | Unknown | Unknown | Arab Gulf region reported; weather/clothing variation reported | Public repository reported; terms need verification |
-| ECP2.0 | Unknown | Not primary dense representation | Unknown | Unknown | 29 cities, 11 European countries; time/weather/season diversity reported | Non-commercial research access reported |
-| PIE | Unknown | Unknown | Unknown | Unknown | Needs verification | Needs verification |
-| JAAD | Unknown | Unknown | Unknown | Unknown | Needs verification | Needs verification |
-| ZOD / ZOD-IAC | ZOD-specific; needs verification | Not part of the new contract | Unknown | `ego_road` polygon in historical pipeline | ZOD-specific | Needs verification |
+Counts below refer to native tracked identities/tubes, not training windows or frame boxes. Dataset notes own sources, splits and caveats.
 
-## Candidate experimental role audit
+| Dataset | Recording sequences | Pedestrian tracks/tubes | Evidence / limitation |
+|---|---|---:|---|
+| ROAD-Waymo | 1,000 × ~20 s videos | 11,759 | Paper v1; 2,186 test; usable matched 3D subset unknown |
+| nuScenes | 1,000 × 20 s scenes; 850 with public GT | 8,143 reported extraction | Independent study; release/split/category scope needs recount; limited motion attributes |
+| ROAD | 22 × ~8 min videos | 4,212 | Paper; 645 test; visual tubes |
+| IDD-PeD | Video count unknown; 45 s–10 min | 4,916 in release split description | 3,284 train / 1,632 test; paper says >5,000 |
+| LOKI | 644 scenarios; 616 with 3D pedestrians | 12,364 with 3D/action GT | Local count; 4,139 never have a 2D box |
 
-| Dataset | Training/development | Supervised validation | Cross-domain test | Deployment/enrichment | Behavior ground truth? |
-|---|---|---|---|---|---|
-| PedSynth++ / ARCANE-PedSynth | Candidate source pretraining | Held-out source diagnostic | Source side for `S→R` | No | Yes, paper-reported; actual values unknown |
-| LOKI | Scratch/few-shot/full-supervision reference | Main held-out real test | Target for `S→R` | Not primary current target | Yes, reported |
-| EMT | Not central | Only after audit | Possible external real test | No | Reported; semantics unverified |
-| ECP2.0 | No behavior GT reported | Independent manual audit only, if pursued | Possible later target | Candidate later enrichment | No equivalent rich behavior GT reported |
-| PIE | Not selected | Not selected | Possible later | No | Crossing-related, needs verification |
-| JAAD | Not selected | Not selected | Possible later | No | Crossing-related, needs verification |
-| ZOD / ZOD-IAC | No | Historical subset only | Possible future target | Possible future target | Prior project-specific labels |
+The headline 54k ROAD-Waymo / 7k ROAD / >28k LOKI agent counts include other classes. Usable supervision also depends on class balance, sequence length, behaviour coverage, 3D association and independent scenes. Overlapping windows cannot increase independent pedestrian population size.
 
-## Details still to verify
+## Comparison boundaries
 
-| Dataset | Temporal frequency | Road/map / scene semantics | Pose/orientation | Availability / license | Primary source |
-|---|---|---|---|---|---|
-| PedSynth++ / ARCANE-PedSynth | Clips about 10–15 s at 30 FPS reported; verify actual release timestamps | CARLA scenario context reported; exact annotations need inspection | Estimated 2D pose keypoints reported | Full data upon author request per paper; demo subset on Zenodo | [ARCANE-PedSynth paper](https://arxiv.org/pdf/2605.24950) |
-| LOKI | 5 Hz annotation; camera captures 30 Hz, LiDAR spins at 10 Hz; verify release timing | Lane/context information reported; exact released annotations need inspection | Pose not reported; 3D box yaw in official format description | Non-commercial; university-email request | [LOKI paper](https://arxiv.org/pdf/2108.08236), [official dataset page](https://usa.honda-ri.com/loki) |
-| EMT | Needs verification | Needs verification | Needs verification | Public repository reported; terms need verification | [EMT paper](https://arxiv.org/abs/2502.19260) |
-| ECP2.0 | Needs verification | Needs verification | Needs verification | Non-commercial research access reported | [ECP2.0 paper](https://doi.org/10.1109/TPAMI.2024.3471170) |
-| PIE / JAAD | Needs verification | Needs verification | Needs verification | Needs verification | See literature notes |
-| ZOD / ZOD-IAC | ZOD-specific; needs reinspection only if reused | ZOD-specific | Unknown | ZOD access/terms need verification | Historical internal/public repository context |
+ROAD-Waymo alone comes first if linkage passes. Whether nuScenes or ROAD is added next is undecided; IDD-PeD is optional later. More sources may hurt and must be tested.
 
-This matrix deliberately does not turn an absent verification into a “yes.”
+Do not map all sources into LOKI's four classes. [LABEL_ONTOLOGY.md](../LABEL_ONTOLOGY.md) owns the native semantic audit; [DATASET_CONTRACT.md](../DATASET_CONTRACT.md) owns heterogeneous availability and leakage rules.
+
+Detailed counts and sensor specifications remain in their dataset notes. This matrix does not declare ROAD-Waymo matched, nuScenes behaviour-equivalent, or ECP data available before the traineeship ends.

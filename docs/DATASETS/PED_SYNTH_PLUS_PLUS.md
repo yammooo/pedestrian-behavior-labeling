@@ -1,35 +1,78 @@
 # PedSynth++ / ARCANE-PedSynth
 
-Status: Paper and public demo description verified; full release not inspected  
-Last updated: 2026-09-25
+Status: Historical source investigation; inspected local release lacks required rich supervision
 
-## Role and scale
+Last updated: 2026-10-01
 
-Candidate synthetic pretraining source, **not yet accepted** as LOKI-compatible supervision. The [ARCANE-PedSynth paper](https://arxiv.org/pdf/2605.24950) reports 533 CARLA clips, 177,231 frames, 3,426 distinct pedestrians (2,143 crossing; 1,283 non-crossing), and 1,631,312 annotated pedestrian-frames. Clips last about 10–15 s at 30 FPS and contain roughly 5–10 pedestrians and 5–10 traffic vehicles with a moving ego car. Four maps are reported: Town01, Town02, Town03, Town05; 12 weather/lighting settings. These are paper-level statistics, not counts verified from released files.
+## Current role and evidence
 
-## Sensors and timing
+Synthetic data is optional future augmentation, not the foundational training source. The 2026-10-01 user checkpoint reports generator inspection, developer correspondence, generated-clip review, and CARLA reproduction. Those reports are distinguished below from local release checks and paper claims.
 
-| Item | Paper specification | Distributed form reported |
+The [paper](https://arxiv.org/pdf/2605.24950) reports 533 CARLA clips, 177,231 frames, 3,426 pedestrians, 12 weather settings and a rich behaviour FSM. These remain paper statistics, not verified behavioural coverage in the local release.
+
+## Paper and demo descriptions
+
+| Item | Paper specification | Demo record description; archive not revalidated here |
 |---|---|---|
-| RGB | Ego-mounted at driver-eye level; 1280 × 720; 90° field of view; 30 FPS. | `.png` frames in the [12-clip demo](https://zenodo.org/records/20444839). |
-| LiDAR | Roof-mounted; 64 channels; 100 m range; 1 million points/s; 20 Hz; 360° horizontal coverage. | `.bin` point clouds in the demo. Binary record layout not documented there. |
-| DVS/event camera | Co-located with RGB; asynchronous brightness events; paper's pipeline diagram gives ±0.3 threshold in log mode. | `.npz` in the demo. Event array schema/resolution not verified. |
-| Ego/3D pose and calibration | Moving ego is reported. | Exported ego poses, pedestrian metric tracks, intrinsics/extrinsics, and exact synchronization metadata **not confirmed**. Do not infer them solely from CARLA's internal availability. |
+| RGB | 1280 × 720, 90° FOV, 30 FPS | PNG frames |
+| LiDAR | 64 channels, 100 m range, 1 million points/s, 20 Hz, 360° coverage | BIN files; record layout unverified |
+| DVS | Co-located event camera | NPZ files; array schema unverified |
+| Pose | AlphaPose-derived COCO-17 estimates | Coverage/package agreement unverified |
+| Ego/3D geometry | Moving ego and simulator geometry | Does not establish released pedestrian trajectories or ego-pose files |
 
-[Paper, §2.2.3 and Fig. 2](https://arxiv.org/pdf/2605.24950); [Zenodo demo record](https://zenodo.org/records/20444839). Raw DVS has no established LOKI counterpart and is not a first shared input.
+Sources: [paper](https://arxiv.org/pdf/2605.24950), [12-clip Zenodo demo description](https://zenodo.org/records/20444839). The demo is a separate described package; its stated modalities must not be attributed automatically to the local/Hugging Face release.
 
-## Labels and derived data
+The paper describes dense behaviour/crossing fields and a visibility gate, with crossing requiring crossing-related state and driving-lane occupancy. Table 4 includes `RETREAT`; the inspected generator enum instead includes `NORMAL_CROSSING`. Paper names and declared enums are not evidence that those states are reached or exported.
 
-The paper reports per-visible-pedestrian, per-frame 2D boxes, FSM behavior state, binary crossing, distance to ego, time-to-crossing markers, and character archetype. Its crossing flag requires both a crossing-related FSM state **and** physical occupancy of a CARLA driving lane; it is not simply an FSM lookup. A visibility gate requires <70 m distance, camera-facing position, an in-frame box, and a minimum projected box size (15 × 30 px; 8 × 15 px beyond 50 m). Estimated COCO-17 2D pose is produced after rendering with AlphaPose using simulator-provided boxes; it is **not** perfect simulator skeleton ground truth. Whether the demo/full release includes those keypoints for every clip requires file inspection. [Paper, §2.2.3–2.2.4](https://arxiv.org/pdf/2605.24950).
+## Observed local release
 
-The paper's 12-state list includes `RETREAT`. A prior inspection of the public generator reported `NORMAL_CROSSING` in its enum instead; retreat logic was present without an obvious corresponding enum value. **Neither paper list nor code enum proves the values in the released CSV.** Do not build a 12→4 mapping yet; see [label ontology](../LABEL_ONTOLOGY.md).
+The local `data/pedsynth-plusplus` copy contains weather/town/timestamp clips with PNG frames, MP4, CSV/JSON labels, and sensor metadata. Release revision/checksum and exact Hugging Face source URL remain unknown.
 
-## Files and access
+A read-only check on 2026-10-01 found:
 
-- The [public Zenodo package](https://zenodo.org/records/20444839) is a **12-clip demonstration subset**, one clip per listed weather/category condition, distributed as `PedSynth_for_paper_2026-05-29_v1.zip` (25.5 GB). Its record explicitly reports RGB `.png`, LiDAR `.bin`, DVS `.npz`, metadata/annotation files, and `ALL_WEATHER_combined_labels.csv`.
-- The [paper's pipeline diagram](https://arxiv.org/pdf/2605.24950) describes labels in CSV/JSON and pose keypoints in JSON, with per-weather and global combined labels. This describes generation outputs, **not a verified archive tree or guaranteed contents of the demo**.
-- The paper says the **full** 533-clip dataset is available from the corresponding author on reasonable request. The [generator repository](https://github.com/wielgosz-info/carla-pedestrians) is public, but its source code is not the dataset. Exact clip directory names, CSV columns, stable pedestrian IDs, timestamps, calibration, 3D trajectories, and keypoint files remain unverified.
+- 550 sensor metadata files: RGB enabled in all; LiDAR and DVS disabled in all.
+- 533 per-clip CSVs with the same header: `video_id, frame_id, pedestrian_id, bbox_x_min, bbox_y_min, bbox_x_max, bbox_y_max, crossing, crossing_point, behavior_type, distance_to_ego, visible`.
+- No BIN, NPZ or PLY files at the inspected clip-file level. The metadata/CSV count difference needs provenance clarification; it is not proof of 550 fully annotated clips.
 
-## Immediate checks
+The sample `clear_noon/Town01/20251213-174508` has `behavior_type=normal` in inspected rows. A category field is not proof of the paper's framewise FSM labels. The current CSV header contains no 3D pedestrian geometry or ego-pose fields. These release observations do not establish the contents of every other distribution.
 
-List the demo archive before extraction, inspect CSV headers and unique values (`RETREAT` vs `NORMAL_CROSSING`), count independent tracks and state durations, then check temporal transitions and whether generic non-crossing `STOPPED` occurs. Verify metric motion and pose availability before making them shared inputs with LOKI. See the [inspection plan](../DATASET_INSPECTION_PLAN.md).
+## Generator findings and completed side work
+
+The local sibling `carla-pedestrians/PED_SYNTH_PAPER_CODE_GAPS.md` records inspection of the baseline scenarios commit `2e47ab3`. The October checkpoint reports this active-path distinction:
+
+| Reachability | States |
+|---|---|
+| Assigned in normal generation | WALKING_SIDEWALK, CROSSING_ROAD, FINISHED_CROSSING |
+| Helper methods outside active run path | SUDDEN_CROSSING, JAYWALKING, DISTRACTED_BEHAVIOR |
+| Declared but not entered | LOOKING_AROUND, CHECKING_TRAFFIC, HESITATING, RUNNING_ACROSS, PAUSING_MID_CROSS, NORMAL_CROSSING |
+
+Checking/hesitation fields were placeholders. Exporting an enum or the three active states would not supply the advertised rich behaviour implementation. This is evidence about the inspected path/version, not every possible private implementation. The [public generator](https://github.com/wielgosz-info/carla-pedestrians) is distinct from downloaded data.
+
+The checkpoint reports successful CARLA 0.9.13 reproduction on the Aalto RTX 4080 machine and an upstream PR opened for structured pedestrian 3D/ego exports. Local code corroborates the export implementation: scenarios commit `4ac8888` adds `pedestrians_3d.csv`, `ego_pose.csv`, and LiDAR mount metadata; parent checkout commit `ac9bfb2` pins it. PR URL and current upstream status are unknown. Do not imply merging or fully validated sensor alignment.
+
+The local gap note also records a baseline smoke clip with raw sensors, missing rich FSM export, synchronization concerns, and duplicated visible-label rows. Geometry export remains useful infrastructure history; it does not fix behavioural semantics or make the downloaded release multimodal.
+
+## Research history
+
+The original hypothesis was that rich synthetic framewise behaviour supervision could reduce real labels needed for LOKI adaptation. It was provisional and never an accepted training mapping.
+
+| Former raw-state mapping candidate | Former interpretation / unresolved risk |
+|---|---|
+| WALKING_SIDEWALK → MOVING | Needed released motion verification |
+| CHECKING_TRAFFIC, HESITATING → WAITING_TO_CROSS | Needed comparable onset/episode semantics; absent from inspected active path |
+| LOOKING_AROUND → conditional/exclude | Could accompany moving, stopping, or waiting |
+| CROSSING_ROAD, JAYWALKING, RUNNING_ACROSS → CROSSING | Only while road relation supports crossing |
+| SUDDEN_CROSSING → conditional MOVING/CROSSING | FSM entry might precede road entry |
+| PAUSING_MID_CROSS → CROSSING | Active crossing can have zero speed |
+| DISTRACTED_BEHAVIOR → conditional/exclude | Distraction is orthogonal to movement |
+| FINISHED_CROSSING → conditional MOVING/STOPPED | Depended on later motion |
+| RETREAT (paper), NORMAL_CROSSING (enum) → unresolved | Released presence and semantics unverified |
+| No obvious state → generic STOPPED gap | Non-crossing stationarity coverage was unclear |
+
+The former evaluation idea compared native rich, binary crossing, and collapsed-state pretraining against scratch at fixed LOKI track budgets, with zero-shot as a diagnostic. It depended on source labels and common inputs that were not established. Git retains the full former plans.
+
+The route was demoted because the inspected release lacked expected 3D/sensor exports and the active generator lacked the needed rich states. The checkpoint also reports reviewed generated clips with close/ahead spawning, early clustered crossing interactions and few useful later interactions; these qualitative examples were not a population frequency study. Developer discussion reportedly involved crossing-label flicker and temporal smoothing; correspondence dates and independent validation are unavailable.
+
+Naveed's later inability to access the promised richer code is checkpoint-reported correspondence. The operational assumption is that implementation is unavailable; the current project must not depend on its arrival. This does not establish that synthetic pretraining is permanently impossible.
+
+The [pivot record](../DECISIONS/0002-real-source-feasibility-first.md) owns the strategic priority. Controlled synthetic road/scene supervision, rare configurations, or sensor stress testing may return only if real-source experiments justify them; no new CARLA FSM is planned.

@@ -1,7 +1,10 @@
 # ARCANE-PedSynth: Synthetic Multi-Pedestrian Datasets with Behavioural Crossing Annotations
 
-Citation: Riaz, Wielgosz, López Peña, 2026.  
+Citation: Riaz, Wielgosz, López Peña, 2026.
+
 Link: <https://arxiv.org/abs/2605.24950>
+
+Project relevance updated: 2026-10-01. Paper claims below are distinct from [inspected release/generator findings](../../DATASETS/PED_SYNTH_PLUS_PLUS.md).
 
 ## Problem
 
@@ -13,11 +16,11 @@ CARLA simulation with configurable pedestrian/traffic scenarios. The paper repor
 
 ## Outputs / labels
 
-PedSynth++ provides per-frame crossing labels and a paper-reported 12-state behavioral FSM. [Table 4](https://arxiv.org/pdf/2605.24950) lists `RETREAT`; the post-checkpoint inspection of the public generator enum found `NORMAL_CROSSING` instead. Released CSV values, frequencies, and generator-version agreement remain unverified.
+The paper describes per-frame crossing labels and a 12-state behavioral FSM. [Table 4](https://arxiv.org/pdf/2605.24950) lists `RETREAT`; the inspected public generator enum instead contains `NORMAL_CROSSING`. The active-path and local-release limitations are recorded in the dataset note; declared states do not establish exported rich supervision.
 
 ## Online or offline?
 
-The framework supports data generation for pedestrian crossing prediction, but its dense state labels are a candidate supervision source for this project's offline annotation task.
+The framework supports data generation for pedestrian crossing prediction. Its advertised dense state labels motivated the former offline-supervision hypothesis, now demoted because the required rich implementation is unavailable in the inspected path.
 
 ## Dataset(s)
 
@@ -25,7 +28,7 @@ ARCANE-PedSynth framework; PedSynth++ example dataset (533 multi-pedestrian clip
 
 ## Method
 
-CARLA-based generation with a hybrid AI/manual pedestrian controller and a 12-state behavior FSM; pose is estimated from rendered RGB rather than injected as perfect simulator skeleton ground truth.
+The paper reports CARLA-based generation with a hybrid AI/manual pedestrian controller and a 12-state behavior FSM; pose is estimated from rendered RGB rather than injected as perfect simulator skeleton ground truth. This describes the paper, not a reproduction of all declared states.
 
 ## Evaluation
 
@@ -33,15 +36,15 @@ The paper demonstrates the generated dataset/framework. It does not establish Pe
 
 ## Most relevant results
 
-It supplies a candidate synthetic source with rich behavior states, synchronized modalities, and an estimated-pose pathway that could be shared with real RGB.
+The paper motivates rich synthetic supervision and estimated pose. It does not establish those rich labels or sensor synchronization in the inspected release/generator.
 
 ## What we can reuse
 
-The dataset as source supervision, shared pose-extraction principle, and explicit distinction between available sensors and simulator-private state.
+The distinction between sensor observations and simulator-private state, plus optional future controlled synthetic generation if real-source experiments justify it.
 
 ## What this paper already solves
 
-Synthetic behavior-rich pedestrian data generation and dense source labels.
+It presents a synthetic generation framework and reports behaviour-rich labels. Local reproduction of the reported rich behaviour implementation has not been established.
 
 ## What it does not solve
 
@@ -49,8 +52,8 @@ Canonical ontology mapping, target observability, zero/few-shot transfer to LOKI
 
 ## Relationship to our possible contribution
 
-PedSynth++ is a candidate source dataset, not the contribution itself. The project would study whether and why its behavior supervision transfers to real-world tracks with minimal target labels.
+This is historical motivation for the synthetic route. The current study begins with real-source transfer; completed CARLA geometry exports remain useful side work rather than a commitment to synthetic training.
 
 ## Open questions raised
 
-Which raw states appear in the full release, and can they support LOKI adaptation without forced labels? The [paper's data availability statement](https://arxiv.org/pdf/2605.24950) says full PedSynth++ data is available from the corresponding author upon reasonable request; the Zenodo package is a demo subset.
+Whether a future, versioned release could support an independently validated auxiliary role. The current plan must not depend on promised unavailable code. The paper's author-request distribution and the Zenodo demo are distinct from the inspected local copy; see the dataset note for provenance gaps.

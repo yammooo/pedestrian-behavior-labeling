@@ -1,55 +1,49 @@
 # Label ontology
 
-Status: Draft  
-Last updated: 2026-09-24
+Status: Native semantic audit in progress; cross-dataset mappings unaccepted
+
+Last updated: 2026-10-01
 
 ## Purpose and ownership
 
-- Contains: target-state meanings, source labels, candidate mappings, ambiguous cases, and evidence needed to accept a mapping.
-- Links out: raw release fields and counts to `DATASETS/`, and training-objective comparisons to [EVALUATION_PLAN.md](EVALUATION_PLAN.md).
+- Contains: native annotation meanings, target-state semantics, temporal granularity, possible shared concepts, and evidence needed for evaluation mappings.
+- Links out: release fields/counts to [dataset notes](DATASETS/DATASET_MATRIX.md), audit work to [DATASET_INSPECTION_PLAN.md](DATASET_INSPECTION_PLAN.md), and experiments to [EVALUATION_PLAN.md](EVALUATION_PLAN.md).
 
 ## LOKI target actions
 
-The [LOKI paper](https://openaccess.thecvf.com/content/ICCV2021/papers/Girase_LOKI_Long_Term_and_Key_Intentions_for_Trajectory_Prediction_ICCV_2021_paper.pdf) reports four frame-wise pedestrian actions. Its prediction experiments turn a later action into an intention target; this project needs the original current-frame actions. A first local release scan confirms the four raw `intended_actions` values and counts in the [LOKI note](DATASETS/LOKI.md); annotation boundaries and semantics still need visual inspection.
+The [LOKI paper](https://openaccess.thecvf.com/content/ICCV2021/papers/Girase_LOKI_Long_Term_and_Key_Intentions_for_Trajectory_Prediction_ICCV_2021_paper.pdf) reports four current-frame actions. Its prediction experiments shift an action four frames into the future; the offline target here is the original current-frame action. The [local note](DATASETS/LOKI.md) records raw `intended_actions` values and selected observations.
 
-| Candidate state | Intended meaning | Known source terminology |
+| Raw action | Candidate output name | Semantic uncertainty |
 |---|---|---|
-| `MOVING` | Pedestrian is moving, without asserting road crossing. | LOKI: Moving; EMT: Walking (compatibility unverified) |
-| `STOPPED` | Pedestrian is not moving. | LOKI: Stopped; EMT: Stopping (compatibility unverified) |
-| `WAITING_TO_CROSS` | Pedestrian waits in a crossing-relevant situation. | LOKI/EMT reported label; observability and semantics open |
-| `CROSSING` | Pedestrian crosses the road. | LOKI/EMT reported label |
+| Moving | `MOVING` | Movement alone does not assert road crossing. |
+| Stopped | `STOPPED` | Stationarity can coexist with gestures, road occupancy, or another activity. |
+| Waiting to cross | `WAITING_TO_CROSS` | Includes crossing-related context or inferred intention; may be poorly identifiable. |
+| Crossing the road | `CROSSING` | Requires scene relation, not velocity alone; boundaries need audit. |
 
-The proposed canonical names mirror these reported actions, but operational definitions remain open. In particular, `WAITING_TO_CROSS` may depend on context, future outcome, or annotation convention rather than motion alone.
+These names are candidate target output names, not a universal taxonomy for source datasets.
 
-## PedSynth++ source ontology (paper-reported; mapping unaccepted)
+## Native annotation audit
 
-The [ARCANE-PedSynth paper, Table 4](https://arxiv.org/pdf/2605.24950) lists `WALKING_SIDEWALK`, `LOOKING_AROUND`, `CHECKING_TRAFFIC`, `HESITATING`, `CROSSING_ROAD`, `SUDDEN_CROSSING`, `JAYWALKING`, `RUNNING_ACROSS`, `PAUSING_MID_CROSS`, `DISTRACTED_BEHAVIOR`, `FINISHED_CROSSING`, and `RETREAT`. The post-checkpoint review of the [public generator repository](https://github.com/wielgosz-info/carla-pedestrians) instead found `NORMAL_CROSSING` in its 12-value enum and no `RETREAT` enum member, while retreat logic exists elsewhere. This code observation must be rechecked against the precise tagged version and released CSV. **Neither list is yet verified as the set of released annotation values.**
+This is the initial audit structure, not a completed ontology comparison. Read the linked notes for sources and verification status.
 
-| PedSynth++ raw state | Candidate LOKI-style state | Status / risk |
-|---|---|---|
-| `WALKING_SIDEWALK` | `MOVING` | Strong candidate; verify movement in released examples. |
-| `CHECKING_TRAFFIC`, `HESITATING` | `WAITING_TO_CROSS` | Strong candidates, but compare onset and episode semantics. |
-| `LOOKING_AROUND` | Conditional or exclude | Looking may accompany moving, stopping, or waiting; later crossing may clarify an offline episode. |
-| `CROSSING_ROAD`, `JAYWALKING`, `RUNNING_ACROSS` | `CROSSING` | Strong candidates while on the road. |
-| `SUDDEN_CROSSING` | Conditional `MOVING`/`CROSSING` | Road entry may occur after the FSM state begins. |
-| `PAUSING_MID_CROSS` | `CROSSING` | An active crossing can have near-zero speed. |
-| `DISTRACTED_BEHAVIOR` | Conditional or exclude | Distraction is orthogonal to movement/crossing. |
-| `FINISHED_CROSSING` | Conditional `MOVING`/`STOPPED` | Depends on post-crossing motion. |
-| `RETREAT` (paper), `NORMAL_CROSSING` (code) | Unresolved | Confirm whether either appears in the released labels before mapping. |
-| No obvious source state | `STOPPED` | Generic non-crossing stationary pedestrians may be missing. |
+| Dataset | Annotation / semantic meaning | Temporal granularity | Available modalities | Possible shared concept | Uncertainties |
+|---|---|---|---|---|---|
+| [ROAD-Waymo](DATASETS/ROAD_WAYMO.md) | Agent action and location labels; checkpoint suggests move, stop, waiting, crossing and direction variants | Frame/box labels and tubes documented; actual cadence unknown | Frontal RGB/2D labels; original Waymo 3D/LiDAR/ego/map correspondence conditional | Motion, scene relation, crossing behaviour | Exact released vocabulary, definitions, overlap, timing, and 3D linkage unverified |
+| [nuScenes](DATASETS/NUSCENES.md) | `pedestrian.moving`, `pedestrian.standing`, `pedestrian.sitting_lying_down`; separate scene/map annotations | Native box keyframes at 2 Hz; no dense behaviour GT assumed | RGB, LiDAR, 3D boxes, calibration, ego pose, scene expansions | Motion and 3D scene grounding | Attribute coverage, scene-target derivation, package alignment, and supervision feasibility |
+| [ROAD](DATASETS/ROAD.md) | Native action/location annotations | Frame/box labels and tubes documented; release coverage to inspect | Video/2D tracks; no convenient 3D supervision assumed | Visual behaviour and scene relation | Exact pedestrian subset, semantic agreement with ROAD-Waymo, temporal coverage |
+| [IDD-PeD](DATASETS/IDD_PED.md) | Separate crossing, interaction, activity, attention, social and stationary attributes | Frame-level attributes documented | Video/2D tracks and contextual annotations; 3D correspondence unverified | Visual behaviour/context | Multi-attribute semantics, applicability, annotation coverage, domain-selection differences |
+| [LOKI](DATASETS/LOKI.md) | Four actions above, attached to 3D rows in inspected release | 5 Hz annotation; labelled coverage varies per track | RGB/2D when available, point clouds, 3D boxes, odometry/map files | Target behaviour evaluation | Stopped/waiting identifiability, boundaries, coordinates, visibility populations |
 
-This table is an investigation plan, not a training-label mapping. A pure 12→4 dictionary is not defensible for all states. Some assignments need motion, road occupancy, and temporal context. Ambiguous frames may need exclusion or `UNKNOWN`/`OTHER`; none of these policies is decided. The `STOPPED` coverage gap is a specific early suitability test for PedSynth++.
+## Comparison policy
 
-## Implication for training targets
+Do not equate nuScenes standing, ROAD stop, and LOKI Stopped solely because their names look similar. Waiting-to-cross semantics and crossing-direction variants also require definitions and timelines.
 
-Native PedSynth++ states can supervise pretraining without forcing every source frame into four LOKI classes. A direct zero-shot four-state evaluation requires a defensible source-to-target projection; ambiguous source frames may need exclusion. The [evaluation plan](EVALUATION_PLAN.md) owns the proposed comparison with binary and collapsed-state pretraining.
+Preserve each source's native semantics. Dataset-specific supervision heads are a candidate way to share representations without forcing all annotations into LOKI's four states. Missing labels remain missing; neither a universal `OTHER` class nor forced mappings are accepted.
 
-## Candidate derived labels
+A zero-shot ROAD-Waymo-to-LOKI test requires a documented projection supported by definitions and examples, fixed before target performance is inspected. Specify conditional/excluded cases and evaluated population. If semantics do not support a projection, report that limitation rather than inventing compatible labels.
 
-- Binary crossing/non-crossing.
-- Crossing onset and end.
-- Waiting duration.
-- Transition sequence.
-- Future-crossing labels, only when deliberately defined as prediction targets.
+The candidate motion/scene/crossing factorization helps organize questions; it does not define accepted shared losses or latent axes. Optional derived segments, onset/end, and waiting duration also require explicit definitions.
 
-The source-label discrepancy and mapping decision are tracked in [open questions Q1 and Q3](OPEN_QUESTIONS.md). The [inspection plan](DATASET_INSPECTION_PLAN.md) defines the release checks needed before accepting a mapping. EMT's `Stopping` remains a separate possible external-test question.
+## Superseded synthetic mapping
+
+The former PedSynth++ mapping investigation is preserved in [research history](DATASETS/PED_SYNTH_PLUS_PLUS.md#research-history). It is not active training supervision. The unavailable rich implementation invalidates using its advertised states as the present foundation, without ruling out future synthetic augmentation.

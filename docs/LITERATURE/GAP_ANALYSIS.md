@@ -1,21 +1,26 @@
 # Gap analysis
 
-Status: Draft; not a novelty claim.  
-Last updated: 2026-09-24
+Status: Working comparison; no novelty claim
+
+Last updated: 2026-10-01
 
 ## Purpose and ownership
 
-- Contains: evidence-backed comparisons with prior work and the current limits of any novelty claim.
-- Links out: source details to paper notes and the working contribution hypothesis to [RESEARCH_DIRECTION.md](../RESEARCH_DIRECTION.md).
+- Contains: evidence-backed comparisons and limits of possible contribution claims.
+- Links out: primary sources through [INDEX.md](INDEX.md), reviewed details to paper notes, and current hypotheses to [RESEARCH_DIRECTION.md](../RESEARCH_DIRECTION.md).
 
-| Topic | Current evidence | Project implication | Verification needed |
+| Topic | Existing evidence / boundary | Current research implication | Review still required |
 |---|---|---|---|
-| Synth→real binary C/NC self-labeling and pseudo-labeling | [Riaz et al. 2025](https://ddd.uab.cat/record/313066) trains on PedSynth, self-labels real PIE, retains synthetic training data, and uses real validation for stopping. | Established predecessor; synthetic→real labeling alone is not a novelty claim. | Preserve distinction between their binary prediction target and our offline multi-state target. |
-| Automatic crossing labels and temporal smoothing | Existing C/NC work includes generated labels and temporal post-processing. | Neither automatic crossing nor smoothing alone is a contribution. | Compare closest geometry and self-labeling protocols in full review. |
-| Synthetic rich behavior states | [ARCANE-PedSynth](https://arxiv.org/pdf/2605.24950) reports a 12-state FSM and PedSynth++; paper/code state lists differ per post-checkpoint review. | Candidate source for richer supervision. | Inspect actual released CSV and source version. |
-| LOKI behavior labels | [LOKI](https://openaccess.thecvf.com/content/ICCV2021/papers/Girase_LOKI_Long_Term_and_Key_Intentions_for_Trajectory_Prediction_ICCV_2021_paper.pdf) reports frame-wise actions and derives future-action intention for an experiment. | Use original actions for offline target GT. | Inspect release and annotation rules. |
-| Synth→real multi-state offline annotation and target-label efficiency | We have not yet identified a direct counterpart in the reviewed core papers. | Candidate gap: compare native rich, binary, and defensible collapsed source supervision at equal real-track budgets. | Complete focused primary-source review before claiming novelty. |
-| Transfer of `WAITING_TO_CROSS` and generic `STOPPED` | PedSynth++ is crossing-centered; direct generic stop supervision is unclear. | Specific hypothesis and possible failure mode. | Released class counts, timelines, `R→R` and few-shot results. |
-| Human cost and enrichment | ECP2.0 has dense tracks but no comparable behavior ontology reported. | Later test should count adaptation plus independent audit/review and quality versus coverage. | Define validation protocol before deployment. |
+| Automatic crossing pseudo-labeling | [Riaz et al. 2025](paper_notes/minimizing_human_labeling.md) reports synthetic-to-real binary labeling and temporal smoothing | Automatic labels or smoothing alone are not a contribution | Compare target-data access, label budgets, temporal semantics, and independent audits |
+| Native actions versus future intention | [LOKI](paper_notes/loki.md) transforms current actions for prediction | Use native frame actions; analyze inferred Waiting semantics and weak evidence | Annotation definitions and ROAD-Waymo projection |
+| Rich synthetic supervision | [ARCANE-PedSynth](paper_notes/arcane_pedsynth.md) reports rich labels, while local findings limit current usability | Historical route, not evidence for the current foundation | Only revisit if suitable versioned supervision becomes available |
+| Heterogeneous modalities and incomplete annotations | Current source candidates expose different observations/tasks; their suitability is conditional | Test useful transfer without fabricated labels | Closest multi-dataset, partial-supervision and missing-modality methods |
+| Non-identical behaviour taxonomies | Native labels need not be equivalent across datasets | Dataset-specific heads are a hypothesis, not automatically a novel method | Existing multi-task/native-head approaches and precise semantic audit |
+| Scene grounding beyond kinematics | LOKI inspection suggests road relation and accessibility can matter | Test scene value against trajectory-only baselines | Prior road-relative/3D scene representations and task-matched baselines |
+| Camera-visible source → 3D-only target | ROAD-Waymo frontal annotation and LOKI 3D-first labels imply a population mismatch | Separate selection shift from sensor/geographic effects | Closest cross-modal transfer/distillation work and population-aware evaluation |
+| Zero-shot and low-shot annotation efficiency | Proposed comparisons require verified semantics and equal label access | Generalization and target-label savings must be measured | Comparable held-out protocols, label-cost accounting, and uncertainty in learning curves |
+| Negative transfer and selective labeling | More sources may hurt; reliable coverage is an eventual objective | Retain negative ablations; add abstention only after error evidence | Prior negative-transfer diagnostics, calibration, and independent quality/coverage audit |
 
-The working claim is limited to: **multi-state label efficiency from rich synthetic behavior may be underexplored**. The experiment must show a meaningful reduction in real labeled tracks; a small full-supervision F1 increase would support a narrower conclusion.
+The potential contribution is a validated experimental result about transferable offline behaviour labeling under heterogeneous supervision and a 3D-first target population. The exact contribution depends on results and a focused primary-source review. Shared heads, fusion, or a temporal architecture alone do not establish novelty.
+
+The former rich-synthetic label-efficiency hypothesis remains in [PedSynth++ history](../DATASETS/PED_SYNTH_PLUS_PLUS.md#research-history). Do not carry its gap claim into the current study without new evidence.

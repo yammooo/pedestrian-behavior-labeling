@@ -1,7 +1,10 @@
 # EMT: A Visual Multi-Task Benchmark Dataset for Autonomous Driving in the Arab Gulf Region
 
-Citation: Abdel Madjid et al., 2025.  
+Citation: Abdel Madjid et al., 2025.
+
 Link: <https://arxiv.org/abs/2502.19260>
+
+Project relevance updated: 2026-10-01. Background reference; no current EMT experiment is selected.
 
 ## Problem
 
@@ -21,7 +24,7 @@ The reported intention benchmark is prediction-oriented; suitability of labels f
 
 ## Evaluation / relevance
 
-Potential domain-shift test against LOKI, and a direct test of whether similarly named labels are compatible.
+Historically considered for domain-shift comparison. It remains a reminder that similarly named labels require a semantic audit; the active source/target experiment does not depend on EMT.
 
 ## Dataset(s)
 

@@ -1,30 +1,37 @@
 # Research documentation
 
-Status: Active guide  
-Last updated: 2026-09-24
+Status: Active ownership guide
 
-Read [RESEARCH_DIRECTION.md](RESEARCH_DIRECTION.md) for the current question and why it matters, then [PROBLEM_DEFINITION.md](PROBLEM_DEFINITION.md) for the exact task. The [dataset inspection plan](DATASET_INSPECTION_PLAN.md) is the immediate work gate. Each main document starts with a **Purpose and ownership** section; update the owner of a fact and link to it elsewhere.
+Last updated: 2026-10-01
+
+Read [RESEARCH_DIRECTION.md](RESEARCH_DIRECTION.md) for the current question, then [PROBLEM_DEFINITION.md](PROBLEM_DEFINITION.md) for task scope. The [dataset inspection plan](DATASET_INSPECTION_PLAN.md) owns immediate feasibility gates. Current methods are hypotheses, not architecture decisions.
 
 | Document | Owns |
 |---|---|
-| [Research direction](RESEARCH_DIRECTION.md) | Motivation, central question, hypotheses, and reasons to continue or pivot. |
-| [Problem definition](PROBLEM_DEFINITION.md) | Task boundary: annotation unit, available temporal context, inputs, outputs, and exclusions. |
-| [Label ontology](LABEL_ONTOLOGY.md) | State meanings and evidence for source-to-target mappings. |
-| [Dataset contract](DATASET_CONTRACT.md) | Shared input fields, availability, coordinate conventions, and leakage rules. |
-| [Dataset inspection plan](DATASET_INSPECTION_PLAN.md) | Checks and outputs for the current source/target suitability gate. |
-| [Pipeline design](PIPELINE_DESIGN.md) | Current conceptual processing flow and candidate modeling choices. |
-| [Evaluation plan](EVALUATION_PLAN.md) | Splits, label budgets, baselines, metrics, and comparison protocol. |
-| [Roadmap](ROADMAP.md) | Order of work and the next gate; detailed checklists live in specific plans. |
-| [Open questions](OPEN_QUESTIONS.md) | Unresolved decisions, grouped by when they need answers. |
-| [Ideas backlog](IDEAS_BACKLOG.md) | Optional techniques to consider if evidence reveals a need. |
+| [Research direction](RESEARCH_DIRECTION.md) | Motivation, central question, hypotheses, and pivot criteria. |
+| [Problem definition](PROBLEM_DEFINITION.md) | Annotation unit, temporal evidence, inputs/outputs, observability, and exclusions. |
+| [Label ontology](LABEL_ONTOLOGY.md) | Native meanings/granularity, candidate shared concepts, and justified evaluation mappings. |
+| [Dataset contract](DATASET_CONTRACT.md) | Identity/time/coordinates, heterogeneous availability, provenance, and leakage rules. |
+| [Dataset inspection plan](DATASET_INSPECTION_PLAN.md) | ROAD-Waymo linkage, ontology, LOKI population, and baseline/protocol gates. |
+| [Pipeline design](PIPELINE_DESIGN.md) | Baseline progression and candidate representations, heads, and training procedures. |
+| [Evaluation plan](EVALUATION_PLAN.md) | Access regimes, splits, budgets, candidate metrics, comparisons, and audit protocol. |
+| [Roadmap](ROADMAP.md) | Conditional work order and schedule through 17 December, with protected buffer. |
+| [Open questions](OPEN_QUESTIONS.md) | Unresolved decisions and brief superseded-question pointers. |
+| [Ideas backlog](IDEAS_BACKLOG.md) | Optional methods justified only by a measured gap. |
+| [Experiments](EXPERIMENTS/README.md) | Run/comparison index and reproducible observed results; not the global protocol. |
 
 ## Evidence and chronology
 
-- [Dataset matrix](DATASETS/DATASET_MATRIX.md) gives a short comparison; `DATASETS/` notes own release-specific facts, access, and schema findings.
-- [Literature index](LITERATURE/INDEX.md) and [gap analysis](LITERATURE/GAP_ANALYSIS.md) point to paper notes and qualified prior-work claims.
-- `DECISIONS/` records why an important choice was accepted. Do not create a record for an open question.
-- `LOG/` records dated activity with links to changed documents, not repeated conclusions.
+- [Dataset matrix](DATASETS/DATASET_MATRIX.md) compares current roles; individual notes own release facts, primary references, and local findings.
+- [Literature index](LITERATURE/INDEX.md) and [gap analysis](LITERATURE/GAP_ANALYSIS.md) navigate prior work and qualify contribution claims.
+- [Decision records](DECISIONS/README.md) explain settled material choices. Do not create architecture decisions for unresolved hypotheses.
+- `LOG/` records chronology with pointers to the owners; preserve past entries.
+- Superseded synthetic reasoning and completed CARLA side work live in [PedSynth++ research history](DATASETS/PED_SYNTH_PLUS_PLUS.md#research-history). Git retains former full plans.
 
-## When experiments begin
+## Scientific method and provenance
 
-Keep versioned configurations in `configs/` and large outputs outside Git. Add `docs/EXPERIMENTS/` with a compact comparison index and a record for each meaningful experiment or tightly related run group. A record should identify dataset/release, split, ontology mapping, input representation, real-label budget, configuration and seed, metrics, result, and interpretation. The evaluation plan defines the protocol; experiment records contain observed results. Update canonical conclusions and open questions only when results change the current understanding.
+The user-provided 2026-10-01 checkpoint and subsequent planning clarifications establish current priorities. They are project context, not independent verification of every dataset claim. Label facts as paper-reported, official-format-documented, locally observed, or checkpoint-reported; keep source URLs, versions, and unknowns explicit.
+
+Predeclare each comparison before its run. Keep configurations in `configs/`, data and large artifacts outside Git, and results once in [experiment records](EXPERIMENTS/README.md). Document failures and deviations. Update canonical conclusions only when evidence changes understanding.
+
+The intended artifact is a working offline research labeler. Baseline evidence precedes heterogeneous training; metrics, budget units, source additions, and architecture remain open until their gates.

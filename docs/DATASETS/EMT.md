@@ -1,11 +1,12 @@
 # EMT
 
-Status: Draft  
-Last updated: 2026-09-22
+Status: Background dataset; no current experiment selected
+
+Last updated: 2026-10-01
 
 ## Why it matters to this project
 
-EMT is a potential ontology-harmonization and cross-domain evaluation dataset: its reported pedestrian behavior categories overlap substantially with LOKI while its Arab Gulf driving domain differs from the likely LOKI domain.
+EMT was considered as a cross-domain comparison under the earlier direction. Its similar action terminology remains useful background, but no EMT experiment is selected in the current ROAD-Waymo-to-LOKI plan. Preserve the facts below for deliberate later reconsideration.
 
 ## Available modalities
 
@@ -21,7 +22,7 @@ Observed trajectories are a potential input, and behavior/intention annotations 
 
 ## Possible role and portability concerns
 
-Candidate cross-domain test; domain shift in road topology, traffic, clothing, and weather may be scientifically useful. Its camera-centric representation may constrain direct reuse of 3D/geometry-dependent methods.
+A possible future cross-domain test would require new justification and an ontology/input audit. Its camera-centric representation may constrain direct reuse of 3D/geometry-dependent methods.
 
 ## Temporal structure / sampling frequency
 

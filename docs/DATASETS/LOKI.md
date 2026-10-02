@@ -1,11 +1,13 @@
 # LOKI — Long Term and Key Intentions
 
 Status: Paper and official dataset page verified; local release layout and first action counts inspected
-Last updated: 2026-09-28
+Last updated: 2026-10-01
 
 ## Role and scope
 
-Main candidate real-world benchmark for zero-/few-shot evaluation and a fully supervised diagnostic reference. Recorded from an instrumented Honda SHUTTLE in the Tokyo area: 644 scenarios (mean 12.6 s), more than 28,000 agents across eight traffic classes, and 886,000 linked 2D/3D boxes across all classes. These are **not pedestrian-track counts**. [Paper, §3](https://arxiv.org/pdf/2108.08236); [official dataset page](https://usa.honda-ri.com/loki).
+Main 3D-first target for strict zero-shot and low-shot evaluation, with separate scratch diagnostics. Strict zero-shot excludes LOKI from training and model selection; source/target semantic compatibility must be established first. Existing qualitative inspection is disclosed below; the treatment of inspected scenarios in the final split remains open. See [evaluation access rules](../EVALUATION_PLAN.md).
+
+Recorded from an instrumented Honda SHUTTLE in the Tokyo area: 644 scenarios (mean 12.6 s), more than 28,000 agents across eight traffic classes, and 886,000 linked 2D/3D boxes across all classes. These are **not pedestrian-track counts**. [Paper, §3](https://arxiv.org/pdf/2108.08236); [official dataset page](https://usa.honda-ri.com/loki).
 
 ## Sensors and timing
 
@@ -63,6 +65,28 @@ A read-only full scan with `python -m pedestrian_behavior.inspection summary --r
 | `Stopped` | 31,009 | 1,270 |
 | `Waiting to cross` | 52,595 | 1,634 |
 
+### Unique pedestrian population (2026-10-01)
+
+A fresh annotation-only scan of the local copy, using the existing reader and `(scenario, track_id)` identity, found:
+
+| Quantity | Count |
+|---|---:|
+| Scenarios with any 3D pedestrian | 616 of 644 |
+| Pedestrian tracks with 2D and/or 3D observations | 13,365 |
+| Tracks with at least one 3D observation and action label | **12,364** |
+| Tracks with 2D observations only | 1,001 |
+| 3D tracks with no 2D box anywhere in the scenario | **4,139 (33.5%)** |
+| 3D tracks with a 2D box at some point | 8,225 |
+| Tracks with at least one same-frame 2D+3D pair | 8,203 |
+| Tracks with at least 10 3D observations | 9,854 |
+| Pedestrian 3D observation/action rows | 391,569 |
+
+Per-track 3D observation counts: **minimum 1, lower quartile 11, median 23, upper quartile 43, maximum 102** (sorted empirical order statistics). At nominal 5 Hz, 23 consecutive observations span 4.4 s; actual gaps and timestamp units were not checked here. Track counts do not establish distinct physical people across scenarios, uninterrupted trajectories, or action episodes. Missing 2D boxes do not alone establish why RGB evidence is absent.
+
+All observed 3D pedestrian rows have one of the four actions in the preceding table. Per-action track counts overlap and must not be added to obtain the 12,364 total. The 1,001 2D-only tracks have no behaviour label through this reader.
+
+Reproduction: `conda run --no-capture-output -n pedestrian-behavior python outputs/inspection/population/loki_counts.py`; the one-off script and `loki_counts.json` remain under ignored `outputs/`. No images or point clouds were decoded. Release checksum and identity-fragmentation audit remain open.
+
 ## Selected clip observations (2026-09-28)
 
 These seven tracks were chosen as informative examples. The raw behavior value is in the 3D label row: it is present when the selected pedestrian has a 3D box but no 2D box, and absent in 2D-only frames. `Waiting to cross` often looked consistent with someone held back by traffic or signals, but the examples below show limits of the available view and a possible boundary with `Stopped`.
@@ -77,4 +101,6 @@ These seven tracks were chosen as informative examples. The raw behavior value i
 
 ## Access and remaining checks
 
-Non-commercial use requires a request using a university email, per the [official page](https://usa.honda-ri.com/loki). The first inspection does not yet establish independent episode counts/durations, transitions, timing units, missing pedestrian labels, calibration, or viable scene-level splits. See the [inspection plan](../DATASET_INSPECTION_PLAN.md) and [ontology](../LABEL_ONTOLOGY.md).
+Non-commercial use requires a request using a university email, per the [official page](https://usa.honda-ri.com/loki). The first inspection does not yet establish independent episode counts/durations, transitions, timing units, missing pedestrian labels, calibration, or viable scene-level splits.
+
+The [population gate](../DATASET_INSPECTION_PLAN.md#gate-3--loki-population) must extend the population count with label/scene distributions, track gaps/durations, 2D+3D versus 3D-only/2D-only coverage, missing behaviour GT, and verified distance/point sparsity. Define RGB-visible and 3D-only cohorts at frame and/or track level before scoring; missing 2D boxes do not establish a single visibility cause. The seven selected examples are informative observations, not representative population statistics or corrections to GT. [Ontology](../LABEL_ONTOLOGY.md) owns the remaining semantic comparison.

@@ -1,7 +1,10 @@
 # LOKI: Long Term and Key Intentions for Trajectory Prediction
 
-Citation: Girase et al., ICCV 2021, pp. 9803–9812.  
+Citation: Girase et al., ICCV 2021, pp. 9803–9812.
+
 Link: <https://arxiv.org/abs/2108.08236>
+
+Project relevance updated: 2026-10-01; [local observations](../../DATASETS/LOKI.md) are recorded separately from paper findings.
 
 ## Problem
 
@@ -21,7 +24,7 @@ The published task is prediction-oriented. The source frame-wise actions can pot
 
 ## Evaluation / relevance
 
-LOKI provides a core supervised candidate and establishes that future-action “intention” must not be conflated with observable action.
+LOKI is the current 3D-first target, with strict zero-shot and separate low-shot/scratch regimes. Its future-action transformation must not be conflated with current-frame action; Waiting to cross can itself contain inferred intention.
 
 ## Dataset(s)
 
@@ -45,4 +48,4 @@ It benchmarks multimodal intention-aware trajectory prediction; it does not esta
 
 ## Open questions raised
 
-Which annotations are released, and whether action semantics transfer to EMT.
+Whether native actions support a defensible ROAD-Waymo evaluation projection, how RGB-visible and 3D-only populations differ, and which states are identifiable from sparse evidence. Release observations and remaining coordinate/split questions belong in the dataset note.

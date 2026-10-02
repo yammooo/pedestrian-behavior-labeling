@@ -2,6 +2,8 @@
 
 Citation: Riaz, Wielgosz, López Peña, IEEE T-ITS, 2025. [Published article record](https://ddd.uab.cat/record/313066); [PDF](https://ddd.uab.cat/pub/artpub/2025/313066/Minimizing_Human_Labeling_in_Training_Deep_Models_for_Pedestrian_Intention_Prediction.pdf).
 
+Project relevance updated: 2026-10-01.
+
 ## Problem
 
 Reduce real human labels for crossing-intention prediction using S2R-UDA-CP: synthetic labeled training data, real unlabeled tracks, iterative pseudo-labeling, and a small labeled real validation set.
@@ -40,8 +42,8 @@ Failure-driven treatment of segments, temporal smoothing as a baseline candidate
 
 ## What it already solves / does not solve
 
-It addresses synthetic-to-real binary C/NC pseudo-labeling, including temporal smoothing (10 frames in its reported protocol), but not the effect of native fine-grained PedSynth++ pretraining on a four-state real annotation task.
+It addresses synthetic-to-real binary C/NC pseudo-labeling, including temporal smoothing (10 frames in its reported protocol). This note does not establish coverage of heterogeneous real supervision, native dataset heads, or transfer to a 3D-only target population. Its unlabeled-target training and labeled-target model selection differ from the current strict zero-shot access rules.
 
 ## Open questions raised
 
-How to avoid causal confusion when human labels use future knowledge, and whether its segment assumptions transfer to LOKI/EMT.
+How to distinguish offline labels from future prediction, account for all target-label access, and audit generated labels independently. Do not present the current study as novel merely because it automatically generates crossing labels.

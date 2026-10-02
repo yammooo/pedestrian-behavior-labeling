@@ -1,35 +1,47 @@
 # Conceptual pipeline
 
-Status: Working design  
-Last updated: 2026-09-25
+Status: Working hypotheses; no model architecture selected
+
+Last updated: 2026-10-01
 
 ## Purpose and ownership
 
-- Contains: current conceptual processing flow and modeling choices worth testing.
-- Links out: fields to the [contract](DATASET_CONTRACT.md), states to the [ontology](LABEL_ONTOLOGY.md), comparisons to the [evaluation plan](EVALUATION_PLAN.md), and unselected techniques to the [ideas backlog](IDEAS_BACKLOG.md).
+- Contains: conceptual processing flow and candidate modeling choices.
+- Links out: fields to [DATASET_CONTRACT.md](DATASET_CONTRACT.md), semantics to [LABEL_ONTOLOGY.md](LABEL_ONTOLOGY.md), comparisons to [EVALUATION_PLAN.md](EVALUATION_PLAN.md), and optional techniques to [IDEAS_BACKLOG.md](IDEAS_BACKLOG.md).
+
+## Baseline progression
+
+Verify ROAD-Waymo linkage and native semantics first. Establish LOKI trajectory-only diagnostics, a trajectory-plus-scene diagnostic if feasible, a ROAD-Waymo source baseline, and basic source-to-target transfer before extending the method.
+
+The baseline source is ROAD-Waymo alone. The next source may be nuScenes or ROAD; inclusion and order remain undecided. IDD-PeD is a later option. Source additions must address a named gap and improve a controlled comparison, or be reported as negative results.
+
+## Candidate learned flow
 
 ```text
-PedSynth++ / LOKI inspection and adapters (if compatible)
-  -> common temporal track sample
-  -> optional representations: motion | pose | visual crop/context | road/scene
-  -> one modular learned temporal labeler with a replaceable output head
-  -> per-frame canonical state sequence
-  -> derived segments/events and, later, confidence/export
+existing pedestrian track + available observations
+  -> native readers and verified associations
+  -> candidate visual | 3D/scene | kinematic representations
+  -> fusion, if justified
+  -> offline temporal representation
+  -> native dataset supervision heads / target output head
+  -> dense framewise behaviour labels
+  -> later: uncertainty, selective acceptance, review/export
 ```
 
-The intended model set is deliberately small:
+Candidate inputs include pedestrian crops with local context, pedestrian-centered point-cloud/BEV context, trajectory/bbox/orientation information, and ego/map context. Their necessity and availability are experimental questions. A temporal encoder may use past and future observations; bidirectional recurrent models, temporal convolutions, Transformers, or ASFormer-like models remain candidates.
 
-| Model | Purpose |
-|---|---|
-| Physical sanity baseline | Establish what velocity, trajectory, and optional road geometry solve without learning. |
-| Shared structured learned model | Test motion alone, motion+pose, and motion+pose+visual through modality masks/ablations. |
+A shared temporal representation with dataset-specific heads is a methodological hypothesis. It could allow source annotations to supervise their own concepts without asserting a universal taxonomy. The tentative `z_motion / z_scene / z_crossing` factorization is only a candidate interpretation, not a required latent structure.
 
-The learned model's final state decision remains learned. Motion is the first candidate representation; pose and visual/context branches are conditional on measured failures. A small bidirectional temporal model is plausible because the annotation task permits future context, but no architecture is selected. Native PedSynth++ pretraining with a replaceable LOKI head is a working option; its value is tested in the [evaluation plan](EVALUATION_PLAN.md).
+## Candidate multi-source procedure
 
-The model processes a sequence into a state sequence rather than independently classifying only a window center. Because annotation is offline, its temporal encoder may use past and future context.
+If source additions are justified, ordinary joint training is the preferred starting hypothesis: dataset-balanced sampling, losses masked by native annotation availability, and explicit missing-modality support. Loss weights and balancing policies remain open. Avoid assuming that an arbitrary sequential source curriculum will retain earlier knowledge.
 
-## Code boundaries for dataset inspection
+Paired RGB/3D observations may support modality dropout, consistency, or distillation into a 3D pathway. Raw embeddings need not be identical because modalities contain complementary evidence. Compare 3D-only performance before adding such objectives.
 
-Start with **LOKI**. A native reader (`src/pedestrian_behavior/datasets/loki.py`) should expose its files, raw annotations, frames, and calibration without changing label meanings. Inspection code uses that reader to filter tracks, report counts, and visualize RGB/boxes; a small `inspection/render.py` can render the selected frames and, when alignment is verified, LiDAR/3D overlays. PedSynth++ gets its own native reader after its files are inspected.
+Measure negative transfer through controlled source/task ablations. Gradient diagnostics and conflict-handling methods belong in the backlog until ordinary joint training exhibits a problem. No fusion or optimization method is fixed.
 
-Later, dataset adapters may reuse the native readers to produce a common 3D-track representation. Inspection should show native labels and coordinates; adapters handle shared observation conventions; ontology mapping remains explicit and separate. Do not add an adapter base class, model, or viewer framework before the release schemas and first visualization justify them.
+## Implementation boundaries
+
+The existing LOKI reader and RGB/BEV gallery remain native inspection tools. Keep native annotation meanings and coordinates intact. ROAD-Waymo inspection and association utilities are the next justified additions after seeing released files.
+
+Later adapters may produce comparable observations with provenance and masks. Do not build a model, rigid shared schema, adapter hierarchy, or viewer framework during this documentation migration. [Experiment records](EXPERIMENTS/README.md) will tie any later implementation to its hypothesis, configuration, and observed result.

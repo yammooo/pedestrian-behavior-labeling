@@ -1,56 +1,57 @@
 # Dataset inspection plan
 
-Status: Draft; execute against released annotations when available.  
-Last updated: 2026-09-24
+Status: Immediate feasibility and protocol gates
+
+Last updated: 2026-10-01
 
 ## Purpose and ownership
 
-- Contains: checks and required outputs for the current PedSynth++/LOKI suitability gate.
-- Links out: observed fields and counts to `DATASETS/`, mapping conclusions to [LABEL_ONTOLOGY.md](LABEL_ONTOLOGY.md), and shared fields to [DATASET_CONTRACT.md](DATASET_CONTRACT.md).
+- Contains: checks and required evidence before source selection, shared losses, or model implementation.
+- Links out: findings to [dataset notes](DATASETS/DATASET_MATRIX.md), native semantics to [LABEL_ONTOLOGY.md](LABEL_ONTOLOGY.md), field requirements to [DATASET_CONTRACT.md](DATASET_CONTRACT.md), and protocol to [EVALUATION_PLAN.md](EVALUATION_PLAN.md).
 
-## Gate
+## Record provenance first
 
-Decide whether PedSynth++ can serve as useful pretraining for label-efficient LOKI annotation. The paper and generator code do not establish the contents of the released labels. Full PedSynth++ data access must be confirmed; its [paper](https://arxiv.org/pdf/2605.24950) says the dataset is available from the corresponding author upon reasonable request. The [Zenodo demo subset](https://zenodo.org/records/20444839) may validate a parser but cannot establish full-dataset frequencies.
+For every inspected asset, record source URL, acquisition date, release/version or commit, checksum where available, files, schema, timing, units, IDs, and missing/duplicate rows. Distinguish paper descriptions, official format documentation, local observations, and checkpoint-reported evidence. Keep raw data and generated media outside Git.
 
-## Record provenance before counting
+ROAD-Waymo has not been acquired and no linkage implementation exists in this workspace. The new gates must not inherit a claim that its behaviour annotations are already 3D supervision.
 
-For each inspected source, record release/version or code commit, access date, annotation files, schema, units, time base, scene/track identifiers, and any missing or duplicated rows. Keep data and generated plots outside Git; commit only summarized findings and inspection scripts when the schema is known.
+## Gate 1 — ROAD-Waymo ↔ Waymo linkage
 
-## PedSynth++ report
+| Check | Evidence required |
+|---|---|
+| Clip ↔ original segment | Reproducible segment mapping, release compatibility, and unmatched/ambiguous cases. |
+| Frame alignment | Camera identity, timestamps/frame indices, resampling and offset checks; filenames alone are insufficient. |
+| ROAD object ↔ Waymo object | Match tubes/2D observations to native object identities; record ambiguity, occlusion, fragmentation, and confidence. |
+| Waymo object ↔ 3D track | Verify camera-to-LiDAR associations and track continuity; do not assume camera and 3D IDs coincide. |
+| Manual validation | Visual checks on varied tracks/frames, including crowded, small, occluded, and failed associations; record selection and observed mismatches. |
+| Population/coverage | Matched, unmatched, ambiguous, and excluded counts; determine which behaviour-labeled pedestrians actually obtain usable 3D observations. |
 
-| Check | Output | Why |
-|---|---|---|
-| Behavior fields | Raw column names, unique values, missing-value counts, per-state frame counts | Resolve paper `RETREAT` versus code `NORMAL_CROSSING` against the released CSV. |
-| Tracks | Number of unique `(clip, pedestrian ID)` tracks; class-bearing tracks per state | Estimate independent source examples; avoid counting frames as tracks. |
-| Time | Timestamp/frame-step distribution, track durations, per-state contiguous episode durations | Verify dense labels and available temporal context. |
-| Transitions | Raw-state transition count matrix within each track, excluding discontinuities | Identify actual FSM paths and rare/absent states. |
-| Crossing | Crossing/non-crossing frame, episode, and track counts; relation to behavior state | Check whether crossing flags and FSM states agree. |
-| Stationary cases | Generic non-crossing stops versus hesitating and mid-cross pauses, using motion and clips | Test the suspected `STOPPED` supervision gap. |
-| Modalities | Per-track presence and fields for RGB, boxes/positions, pose, ego motion, calibration | Test the shared input contract without using simulator-private inputs. |
+Start with a small matched subset before broader processing. The manual sample size, acceptable matching quality, and acceptance rule are open and must be declared before calling the gate passed. Preserve mismatch examples and the mapping evidence.
 
-Inspect several short labeled timelines and trajectory/road overlays for ambiguous states (`LOOKING_AROUND`, `DISTRACTED_BEHAVIOR`, `FINISHED_CROSSING`, `NORMAL_CROSSING`/`RETREAT`) and waiting-like sequences. Choose examples from observed transitions, including rare ones; do not present them as representative frequencies.
+If robust linkage is not supported, reconsider the source-training plan before building the proposed multimodal method. A visual ROAD-Waymo release alone does not pass this gate.
 
-## LOKI report
+## Gate 2 — native annotation ontology
 
-| Check | Output | Why |
-|---|---|---|
-| Action values | Exact raw names/codes, missing labels, per-class frame counts | Verify the four target actions in the released data. |
-| Tracks and episodes | Unique tracks containing each class, unique tracks overall, contiguous episode counts/durations | Determine feasible track budgets and class coverage. |
-| Time and transitions | Frame/timestamp steps, track lengths, four-state transition matrix | Define temporal context and leakage-safe splits. |
-| Inputs | Per-track availability of 2D boxes, 3D positions, RGB, orientation, ego motion, pose, calibration | Find the actual intersection with PedSynth++. |
-| Ambiguity | Clips of `STOPPED` versus `WAITING_TO_CROSS`, and action changes near road entry | Check annotation semantics and plausible source mapping. |
+Audit ROAD-Waymo, nuScenes, ROAD, IDD-PeD, and LOKI using the table in [LABEL_ONTOLOGY.md](LABEL_ONTOLOGY.md). Extract exact native names/IDs, pedestrian applicability, definitions, temporal cadence, missingness, multi-label behavior, annotation population, and available modalities. Inspect representative labeled timelines and boundary cases.
 
-Track totals by class may overlap because one track can contain several states. The budget report must also count distinct selected tracks and scene/sequence coverage.
+Verify ROAD-Waymo/LOKI semantic compatibility before any zero-shot projection. Keep source-native supervision distinct from a target evaluation mapping. Do not design shared losses or equate standing/stopping/waiting labels until their definitions are clear.
 
-## EMT scope
+## Gate 3 — LOKI population
 
-Inspect official definitions and examples for `Stopping`, `Walking`, `Waiting to cross`, and `Crossing`; establish whether they are frame-wise actions or future targets, and whether an evaluation subset can share the chosen inputs. EMT is an optional external test and does not determine the initial input contract.
+Measure distinct pedestrian tracks overall and by action, action episodes/transitions, track lengths/gaps, and class/scene coverage. Count per-frame and per-track 2D+3D, 3D-only, and 2D-only observations, including missing behaviour labels.
 
-## Deliverables and decision
+Define RGB-visible versus 3D-only cohorts with evidence rather than treating all missing boxes as outside FOV. Characterize distance and LiDAR sparsity only after verifying coordinates and point-association conventions. Review hard Stopped/Waiting pairs and the weak evidence cases already recorded in the dataset note.
 
-1. Add observed counts and precise provenance to the dataset notes and matrix; preserve `unknown` for inaccessible fields.
-2. Update [LABEL_ONTOLOGY.md](LABEL_ONTOLOGY.md) with a source→target mapping marked accepted, conditional, or excluded, and examples supporting each choice.
-3. Update [DATASET_CONTRACT.md](DATASET_CONTRACT.md) from the actual field intersection and [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md) with resolved/new questions.
-4. Decide whether PedSynth++ has enough relevant states and common observations for a fair pretraining test. If not, document the reason and pursue the LOKI-first fallback in [RESEARCH_DIRECTION.md](RESEARCH_DIRECTION.md).
+Resolve release provenance, timing, ego compensation, map/context usability, and split-safe grouping. Identify previously inspected scenarios so their evaluation treatment can be declared.
 
-Write the smallest inspection scripts only after seeing sample files and their schema. They should print deterministic summary tables and, if useful, save a few behavior timelines/trajectory plots. No training code is needed for this gate.
+## Gate 4 — baseline readiness and protocol freeze
+
+Define usable trajectory features and scene inputs, if feasible, before introducing complex models. Specify the LOKI scratch diagnostics, ROAD-Waymo source baseline, and conditional zero-shot comparison. The evaluation plan owns split/access rules, metrics, and budget accounting.
+
+Before a run, settle its applicable metric definitions, label-budget unit, sampling/seed policy, association acceptance rule, missing-GT handling, and model-selection access. Keep future source additions open rather than freezing an untested architecture.
+
+## Outputs
+
+Update the relevant dataset note once with measured evidence; link it from the matrix and ontology. Record unresolved questions and gate outcomes, then add a short log pointer. Use [experiment records](EXPERIMENTS/README.md) for reproducible feasibility runs and later comparisons.
+
+Write small native inspection/association utilities only after inspecting sample files. This documentation update does not implement the model, acquire large datasets, or pass these gates.

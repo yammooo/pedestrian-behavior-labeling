@@ -1,27 +1,36 @@
 # Ideas backlog
 
-Status: Uncommitted  
-Last updated: 2026-09-24
+Status: Uncommitted methods; promote only after evidence
+
+Last updated: 2026-10-01
 
 ## Purpose and ownership
 
-- Contains: optional **methods** to try if a question or observed failure calls for them.
-- Links out: unresolved decisions to [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md) and current design choices to [PIPELINE_DESIGN.md](PIPELINE_DESIGN.md).
+- Contains: optional techniques linked to a specific observed gap.
+- Links out: open decisions to [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md), active hypotheses to [PIPELINE_DESIGN.md](PIPELINE_DESIGN.md), and comparisons to [EVALUATION_PLAN.md](EVALUATION_PLAN.md).
 
-These are not architecture commitments. Promote an idea only after naming the result or failure that motivates it.
+## Representation and temporal context
 
-## Temporal modeling
+- Motion/scene/crossing factorization if native annotation analysis supports distinguishable factors.
+- Pedestrian crop versus local visual context; derived pose only if error analysis identifies missing posture/activity evidence.
+- Semantic BEV, road-relative features, barriers/accessibility, or scene encoders if kinematics cannot explain road-related states.
+- Whole-track processing versus fixed chunks; recurrent, convolutional, Transformer, or ASFormer-like temporal encoders after a minimal baseline.
 
-- Several encoder branches, transformed into embedding, fed into ASFormer (or some similar architecture).
-- Fixed chunks versus whole tracks if release lengths or memory demand it.
+## Missing RGB and sensor shift
 
-## Representations
+- Modality dropout, paired consistency, or teacher/student distillation if multimodal supervision demonstrably helps a 3D-only pathway. Complementary embeddings need not be identical.
+- LiDAR ring/beam subsampling, angular/range-dependent sparsification, point dropout, FOV restrictions, noise, sweep variation, or intensity removal for a diagnosed sensor shift.
+- RGB resolution, blur, crop, lighting/weather, and FOV perturbations where source shortcuts are observed.
+- Canonical coordinates and verified road-relative quantities to reduce sensor-specific dependence.
 
-- Consistent 2D pose extraction and a pose branch if motion leaves posture-related errors.
-- Frozen pretrained visual embeddings; consider separate crop and scene context only if their contributions differ.
-- Road-relative features, semantic segmentation, or crosswalk recognition if crossing/waiting errors need road context.
+## Multi-source conflict and reliability
 
-## Transfer and label quality
+- Gradient-similarity diagnostics if source ablations reveal negative transfer.
+- PCGrad, GradNorm, CAGrad, or task/source adapters only if ordinary joint training exhibits a problem and simpler changes fail.
+- Calibration, abstention, selective acceptance, and human review after errors and reliable evidence are characterized.
+- Unlabeled target adaptation only as a separately specified future regime; it is excluded from current strict zero-shot.
 
-- Domain adaptation or modality dropout if `S→S` and `R→R` work but `S→R` fails for a diagnosed representation shift.
-- Track-quality-aware labeling, confidence calibration, abstention, or active review if generated labels must meet a measured quality/coverage target.
+## Optional future data
+
+- Synthetic controlled scene/road supervision, sensor stress tests, or rare configurations if real-source experiments expose a gap. No new CARLA behaviour FSM is planned.
+- ECP2.0 application if data availability and independent audit permit it; not required before 17 December.

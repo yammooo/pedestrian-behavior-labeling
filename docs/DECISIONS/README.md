@@ -16,4 +16,9 @@ Status: Proposed | Accepted | Superseded
 ## Revisit if
 ```
 
-The accepted project scope is recorded in [0001-offline-annotation-primary-task.md](0001-offline-annotation-primary-task.md). The ontology, source-target mapping, input contract, and architecture remain open.
+Accepted records:
+
+- [0001: Offline annotation is the primary task](0001-offline-annotation-primary-task.md).
+- [0002: Prioritize real-source feasibility and baseline evidence](0002-real-source-feasibility-first.md).
+
+The second record settles investigation priority, not a model design or source combination. Native semantics, source-target mapping, minimum input contract, metrics, budgets, and architecture remain open.

@@ -1,11 +1,12 @@
 # EuroCity Persons 2.0 (ECP2.0)
 
-Status: Draft  
-Last updated: 2026-09-25
+Status: Possible later application; no internship dependency
+
+Last updated: 2026-10-01
 
 ## Why it matters to this project
 
-ECP2.0 is a strong candidate deployment/enrichment target because it reports more than 250K unique person trajectories over more than two million images, across 29 cities in 11 European countries.
+ECP2.0 is a possible later deployment/enrichment target. The [paper](https://doi.org/10.1109/TPAMI.2024.3471170) reports more than 250K unique person trajectories over more than two million images, across 29 cities in 11 European countries. Additional usable 3D information and access timing remain unverified. It does not determine the current minimum contract and is not a required experiment before the traineeship ends on 17 December 2026.
 
 ## Pedestrian tracking and 2D / 3D information
 

@@ -104,6 +104,21 @@ Ignored inspection evidence: `outputs/inspection/road_waymo_handoff/` (remote do
 
 Remaining work: document acquisition/release history, preserve runnable mapping/checker code in version control, characterize lengths/gaps/action episodes and physical-ID overlap, audit semantic disagreements and varied associations visually, and declare the training acceptance rule. The merger currently hardcodes Waymo `training` paths; this matches the inspected subset but must be changed before processing another split. No model or data adapter is implemented by this inspection.
 
+## RGB + LiDAR BEV inspection gallery (2026-10-02)
+
+The repository now provides a small native [inspection reader](../../src/pedestrian_behavior/datasets/road_waymo.py) and [gallery command](../../src/pedestrian_behavior/inspection/README.md#road-waymo-rgb--bev). They consume the unchanged index and manifest, support Waymo-root relocation, and stream native component arrays. They do not define a final training adapter or rebuild the association stage.
+
+The gallery retains every original FRONT frame and highlights only the selected ROAD track's available 2D box and native 3D footprint. Its 40 m BEV uses both returns from available sensors, including TOP per-pixel ego compensation following the linked official Waymo conversion conventions. Missing boxes remain missing. Only view focus is interpolated in world coordinates and transformed back to the current vehicle frame. Missing sensor data, absent labels, class disagreements and empty focused views have explicit markers. All frames play at 5 FPS, approximately half speed for native 10 Hz footage.
+
+Real inspection runs on `aalto`:
+
+- `train_00015`, track `05204f5c-2029-48f7-820a-8f5714de4f2d`, selected with `Wait2X`: frames inspected with missing 3D, missing both boxes and paired crossing observations. Early held focus is about 96 m ahead of ego; a blank view there is outside available LiDAR returns, not a missing cloud file.
+- `train_00019`, track `140a5e3c-7603-4fdd-ac52-f6fb556d2a44`, selected with `Stop`: inspected frame 61 preserves the original Cyclist geometry and marks the disagreement; frames outside ROAD labels have no inferred boxes.
+
+Both videos contain 198 frames at **1564×604, 5 FPS** (39.6 s). Decoded video frames were inspected for overlays, markers and qualitative point/footprint alignment. This is a small visual sample, not an exhaustive association-quality audit. Six unit tests pass locally in `pedestrian-behavior` and remotely in the existing `zod-iac` environment; synthetic checks cover decoding/motion correction, mask semantics, repeated-observation handling, timestamp-based focus and ordered component streams.
+
+Ignored local artifacts and HTML indexes: `outputs/inspection/road_waymo/waiting-001/` and `outputs/inspection/road_waymo/class-conflict-000/`. Remote counterparts are under `/home/user20/road_waymo_mapping/inspection_code_20261002/outputs/inspection/road_waymo/`; a source snapshot is staged in that directory with `src/` on `PYTHONPATH`. The first waiting render (`waiting-000`) preceded the empty-view marker and array-reader improvement; `waiting-001` uses the updated implementation. Original datasets and the merged index were not modified.
+
 ## Pedestrian population and sequence scale (2026-10-01)
 
 The [official release README](https://github.com/salmank255/Road-waymo-dataset) reports **1,000 videos**, approximately **20 s** each, and 198k annotated frames. Its 54k agent tracks include all classes.

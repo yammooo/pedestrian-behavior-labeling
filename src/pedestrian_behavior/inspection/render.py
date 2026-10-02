@@ -156,7 +156,7 @@ def render_track(scenario: Path, track_id: str, output: Path) -> None:
         raise
 
 
-def write_index(output: Path, action: str, matches: list[tuple[str, str]]) -> None:
+def write_index(output: Path, action: str, matches: list[tuple[str, str]], dataset: str = "LOKI") -> None:
     rows = "\n".join(
         f'<li><a href="{escape(scenario + "_" + track_id + ".mp4", quote=True)}">'
         f'{escape(scenario)} — {escape(track_id)}</a></li>'
@@ -164,6 +164,6 @@ def write_index(output: Path, action: str, matches: list[tuple[str, str]]) -> No
     )
     (output / "index.html").write_text(
         '<!doctype html><html lang="en"><meta charset="utf-8">'
-        f'<title>LOKI: {escape(action)}</title><h1>LOKI: {escape(action)}</h1>'
+        f'<title>{escape(dataset)}: {escape(action)}</title><h1>{escape(dataset)}: {escape(action)}</h1>'
         f'<p>{len(matches)} tracks</p><ol>{rows}</ol></html>\n'
     )

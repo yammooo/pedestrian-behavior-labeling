@@ -15,6 +15,8 @@ Last updated: 2026-10-02
 
 Partially resolved. The [acquired remote index](DATASETS/ROAD_WAYMO.md#acquired-index-and-access-2026-10-02) has verified official same-frame associations, explicit missingness and a full-export consistency audit. ROAD-authoritative population/class policy is accepted. Remaining work is varied visual validation, disagreement review, release/code provenance and a predeclared training acceptance rule. [Gate 1](DATASET_INSPECTION_PLAN.md#gate-1--road-waymo--waymo-linkage) owns the checks. Failure requires reconsidering source supervision.
 
+The [RGB + BEV gallery](DATASETS/ROAD_WAYMO.md#rgb--lidar-bev-inspection-gallery-2026-10-02) now supports that audit. Two real tracks were inspected, including one Cyclist-class disagreement; this small sample does not resolve population-wide matching quality.
+
 ### Q17. How much usable pedestrian sequence supervision does each source provide?
 
 Open. [Population comparison](DATASETS/DATASET_MATRIX.md#pedestrian-sequence-scale) separates pedestrian tubes from all-agent/frame counts. Verify acquired-release counts by split, native identity, action, length and gaps. ROAD-Waymo's acquired train/validation subset has 9,573 pedestrian tracks: 6,540 with any paired 3D frame and 4,606 fully paired. Characterize paired lengths/gaps and action episodes; the paper's 516 waiting action tubes are a different count from current labeled rows. Reconcile IDD-PeD's 4,916 split total with the paper's >5,000, and recount nuScenes's externally reported 8,143 with explicit category/split scope. Scene diversity and non-overlapping identities matter alongside frame volume.

@@ -1,137 +1,40 @@
 # AGENTS.md
 
-## Project state
+## Before work
 
-This repository is currently a research workspace for an Aalto University
-project on automatic pedestrian-behavior annotation across driving datasets.
+Read `docs/README.md`, then only the owners relevant to the task. This Aalto pedestrian-behavior workspace is in the research-definition stage: problem, ontology, minimum inputs and final architecture remain provisional. Do not present hypotheses as decisions.
 
-The scientific problem, label ontology, minimum input contract, and final
-model architecture are still being refined.
+## Document responsibilities
 
-Do not treat working hypotheses as settled decisions.
+- `README.md`: setup and runnable commands.
+- `docs/README.md`: approximately one-screen dashboard, status, next work and navigation.
+- `docs/research.md`: current task, provisional questions/methods, priorities and schedule.
+- `docs/datasets/README.md`: shared conventions/comparison; individual notes own native labels, schema, counts, access, provenance, sources and limitations.
+- `docs/literature/README.md`: literature/reference overview and qualified contribution comparison; separate reviews only for substantial detail.
+- `experiments/README.md`: shared evaluation safeguards and comparison index; each `E###-topic/README.md` owns its question, design, settings, variants/seeds/failures/results and reproducibility references. IDs stay stable; dates stay inside records. Comparison-specific configs live beside the record; shared configs in `configs/`.
+- `docs/archive/`: dated investigations and former decision reasoning; historical context, not current instructions.
+- `docs/log/`: short monthly chronology with pointers, not repeated conclusions.
 
-## Before starting work
+Use concise, simple language, lowercase hyphenated names except standard `README.md` and `AGENTS.md`, and links instead of repeated explanations. Update only affected owners when evidence changes understanding; put concrete unset settings there as `TBD` or `unknown`. Update the dashboard when priorities/status change and log meaningful milestones. No separate decisions ledger, question catalogue or ideas backlog. Preserve evidence, qualifiers, uncertainty and external artifact paths; do not discard evidence to shorten a document.
 
-Read `docs/README.md` for document ownership, then read the canonical documents
-relevant to the task.
+## Research and implementation
 
-Primary sources of truth:
+Prefer evidence-driven choices and the simplest meaningful baseline. Inspect failures before adding modalities, sources or learned models. Do not assume multimodal fusion helps. Separate observable behavior from latent intention and offline full-record annotation from causal prediction. Treat cross-dataset generalization seriously; claim novelty only after literature comparison.
 
-- `docs/RESEARCH_DIRECTION.md`
-- `docs/PROBLEM_DEFINITION.md`
-- `docs/LABEL_ONTOLOGY.md`
-- `docs/DATASET_CONTRACT.md`
-- `docs/PIPELINE_DESIGN.md`
-- `docs/EVALUATION_PLAN.md`
-- `docs/ROADMAP.md`
-- `docs/OPEN_QUESTIONS.md`
+No substantial model implementation or rigid abstraction before problem/input and feasibility/protocol gates are sufficiently settled and implementation is authorized. Small native inspection utilities are encouraged: reusable code in `src/`, one-off tools in `scripts/`, exploration in `notebooks/`.
 
-Use `docs/DATASETS/` for dataset-specific facts and
-`docs/LITERATURE/` for literature evidence.
+Predeclare comparisons, native/output semantics, releases/associations, populations/splits, missing-input/GT policy, metrics, model-selection access, budgets and seeds. Strict zero-shot excludes target training (including unlabeled adaptation) and target-based selection; disclose prior inspection and target-informed changes. Keep correlated frames/tracks together. Compare low-shot/scratch with equal labels/access and report denominators/compute. Retain failures and negative transfer. Generated labels need independent validation. Details belong in `experiments/README.md` and the affected comparison.
 
-## Documentation model
+The old `zod-ped`/ZOD-IAC is a reference, not the foundation. Generic trajectories, temporal/event utilities, provenance, confidence/abstention and evaluation ideas may be deliberately reused. Do not copy its detection, frustum lifting, GOLD/SILVER, cut/stitch, ego-road/keyframe assumptions or PV-LSTM committee without explicit later justification.
 
-There are three different forms of project documentation.
+## Environment and hygiene
 
-### Canonical documents
-Contain the current project understanding.
-Edit them when the understanding changes.
+Run project Python commands in Conda `pedestrian-behavior` (Python 3.11): `conda activate pedestrian-behavior`. Inspection also requires `ffmpeg` on `PATH`.
 
-### Decision records
-`docs/DECISIONS/` records important settled choices and why they were made.
+Local compute: ThinkPad T14 Gen 4, Intel i7, integrated graphics. Training may use the MSI Raider GE78 HX 13V with RTX 4080 through SSH host `aalto`; never commit credentials.
 
-Do not create a decision record for unresolved questions.
-
-### Research log
-`docs/LOG/` records what happened chronologically.
-
-Do not duplicate detailed research conclusions in the log.
-Instead, reference the canonical document that was updated.
-
-### Experiments
-When experiments begin, use `docs/EXPERIMENTS/` for reproducible run records and
-a compact results index. Keep the protocol in `EVALUATION_PLAN.md`; record
-observed results once in experiment records and link to them elsewhere.
-
-## Research rules
-
-- Prefer evidence-driven decisions.
-- Start from the simplest meaningful baseline.
-- Inspect failures before selecting more complex methods.
-- Add modalities or learned models only when they address an identified gap.
-- Do not assume multimodal fusion is necessary.
-- Distinguish observable pedestrian behavior from latent intention.
-- Treat cross-dataset generalization as an important design consideration.
-- Preserve uncertainty where evidence is incomplete.
-- Do not claim novelty until supported by literature comparison.
-
-## Current project boundary
-
-The old `zod-ped` / ZOD-IAC project is a reference, not the foundation of
-this repository.
-
-Do not copy its architecture wholesale.
-
-Potentially reusable ideas include:
-- trajectory representations;
-- temporal utilities;
-- event/onset derivation;
-- provenance;
-- confidence/abstention concepts;
-- evaluation patterns.
-
-ZOD-specific detection, frustum lifting, GOLD/SILVER logic, ego-road
-assumptions, and the PV-LSTM committee are not part of the new foundation
-unless explicitly justified later.
-
-## Implementation policy
-
-The project is currently in the research-definition stage.
-
-Do not introduce substantial model implementations or rigid software
-abstractions before the relevant problem definition and dataset contract
-are sufficiently settled.
-
-Small utilities for inspecting datasets and annotations are encouraged.
-
-Keep reusable code in `src/`.
-Keep one-off inspection tools in `scripts/`.
-Keep exploratory notebooks in `notebooks/`.
-Keep configuration in `configs/`.
-
-## Python environment
-
-Run project Python commands in the `pedestrian-behavior` Conda environment
-(Python 3.11). Activate it with `conda activate pedestrian-behavior`.
-The inspection commands also require `ffmpeg` on `PATH`.
-
-## Compute resources
-
-- Local laptop: ThinkPad T14 Gen 4, Intel i7, integrated graphics.
-- Training can also run on an MSI Raider GE78 HX 13V laptop with an RTX 4080,
-  reachable through the `aalto` SSH host. Do not put SSH credentials in this repository.
-
-## Repository hygiene
-
-- Never commit datasets or large generated artifacts.
-- Do not place temporary files in the repository root.
-- Avoid duplicate documentation.
-- Do not create files such as `final_v2_latest.md`; update canonical files
-  and rely on Git history.
-- Keep literature sources/URLs attached to factual claims.
-- Mark unverified information explicitly.
-- Prefer `unknown` over guessing.
-
-## When completing research work
-
-If a task changes our understanding:
-
-1. update the relevant canonical document;
-2. update `OPEN_QUESTIONS.md` if a question was resolved or created;
-3. create a decision record only if an important choice became settled;
-4. add a short entry to the current research log describing what changed.
+Never commit datasets or large generated artifacts. Use ignored `outputs/experiments/E###/` or documented external storage for experiment outputs. Keep temporary files out of the repository root. Avoid duplicate documents/version-suffixed files; update owners and rely on Git history. Attach literature sources/URLs to factual claims; mark unverified information and prefer `unknown` over guessing.
 
 ## Validation
 
-Run `python -m unittest discover -s tests` from the repository root in the
-project Conda environment.
+Run `python -m unittest discover -s tests` from the repository root in `pedestrian-behavior`. For documentation changes, check local links/anchors and `git diff --check`.

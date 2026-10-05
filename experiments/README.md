@@ -38,6 +38,16 @@ Examine class-wise errors, especially Stopped versus Waiting to cross, and failu
 
 Test source additions individually before combinations. Keep splits, target labels, and evaluation rules fixed; record training exposure, compute, parameter counts, and tuning access so extra data/compute is not mistaken for a methodological effect. Negative transfer is a valid result. Modality, scene, and sensor-perturbation ablations require a named hypothesis.
 
+## Recoverability and complementary supervision
+
+Separate physical timing/horizon changes from dataset shift before interpreting transfer. Audit all pretraining data exposure for the declared access regime, including auxiliary tasks. Any context-removal invariance test needs a justified intervention and label policy: individually irrelevant elements can have a joint effect, and informative context should not be forced out of a representation. [Evidence](../docs/literature/transferable-motion-representations.md).
+
+For RQ1, compare kinematics, added scene/LiDAR evidence and added RGB/context using matched evaluated frames/cohorts, GT semantics, splits and selection access. Report modality gains by class and observation condition (RGB availability, verified range, duration, occlusion and LiDAR sparsity); predeclare thresholds, metadata quality, support and exclusions. Natural missingness and controlled modality removal answer different questions. A weak model does not establish that sensing is insufficient; inspect data, labels, optimization and alternative explanations before attributing failure to ambiguity.
+
+If a human-evidence comparison becomes useful, predeclare sample selection, annotator access to exactly the model's evidence and temporal extent, label definitions, blinding to benchmark/model labels, uncertainty/disagreement recording and effort. Human judgments are an independent diagnostic, not automatic replacement GT or proof of intrinsic ambiguity. Keep a target-informed audit separate from strict zero-shot model selection.
+
+For RQ2, compare single-dataset end-task training with individually justified complementary sources and progressive combinations. Preserve native semantics/heads and independent supervision masks. To attribute gains to complementary supervision rather than extra data or compute, include appropriate matched data/exposure/tuning controls and, where feasible, supervision/task and shared-head/factorization ablations. Settings depend on the observed gap; no new comparison or dataset order is frozen. Report native label coverage, source/task conflicts, shortcuts, negative transfer and each target's access regime. Shared representation/native heads are candidates, not assumed solutions.
+
 ## Metrics still to define
 
 | Evaluation aspect | Candidates / definition needed |

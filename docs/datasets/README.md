@@ -1,6 +1,6 @@
 # Datasets and shared conventions
 
-Current minimum target input is unresolved. Existing pedestrian 3D tracks are the deployment assumption; visual-only sources may supervise a suitable branch. A source need not expose every target modality. PedSynth++/LOKI/ECP2.0 no longer define a three-way input intersection.
+The current study contract is **RGB + 2D pedestrian tracks + LiDAR/3D point clouds + 3D pedestrian tracks + ego motion + timestamps/calibration** for a general offline labeler. This specifies the evidence setting, not guaranteed visibility at every timestep: 3D-only, occluded or missing observations remain part of the problem. Exact fields, timing/transforms, partial-feature validity and minimum usable observations remain unresolved. A partial-supervision source need not expose every contract modality; image-only sources may supervise a compatible branch without inventing 3D correspondence. PedSynth++/LOKI/ECP2.0 no longer define a three-way input intersection.
 
 **Documented** means official paper/format evidence; **observed** means local inspection; **checkpoint-reported** means project context not independently revalidated. An available sensor does not imply behaviour GT for its full tracked population.
 

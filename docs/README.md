@@ -1,6 +1,6 @@
 # Research dashboard
 
-Updated 2026-10-05. Research-definition stage; no labeling model or trained-model results. Questions, shared inputs, mapping, cohorts and final architecture remain provisional. Traineeship ends **17 December 2026**, with **7–17 December** protected for buffer and handover.
+Updated 2026-10-05. Research-definition stage; no labeling model or trained-model results. The [current framing](research.md#research-questions) asks about offline recoverability/modality contribution (RQ1) and heterogeneous-supervision transfer (RQ2) under the stated multimodal contract. Mapping, cohorts and final architecture remain open. Traineeship ends **17 December 2026**, with **7–17 December** protected for buffer and handover.
 
 ## Next work
 
@@ -12,7 +12,7 @@ Updated 2026-10-05. Research-definition stage; no labeling model or trained-mode
 
 | Owner | Contents |
 |---|---|
-| [Research](research.md) | Task, provisional RQs/hypotheses, priorities and schedule |
+| [Research](research.md) | Task, RQs, provisional methods, priorities and schedule |
 | [Datasets](datasets/README.md) | Shared conventions/comparison; native notes own labels, schema, counts, sources and limitations |
 | [Experiments](../experiments/README.md) | Shared evaluation/recording rules; each comparison owns its design, settings and observed results |
 | [Literature](literature/README.md) | Prior work, references and qualified contribution comparison |

@@ -1,10 +1,10 @@
 # E001 — Kinematic transfer
 
-Status: **Planned**. Created 2026-10-05 from the 2026-10-02 proposal. No training, model implementation or results.
+Status: **Planned**. Created 2026-10-05 from the 2026-10-02 proposal. Updated 2026-10-05 for the latest RQ framing. No training, model implementation or results.
 
 ## Question and controls
 
-Does full-track learned temporal context improve kinematic frame-state labeling within ROAD-Waymo and LOKI and in both transfer directions? This diagnostic measures learnability and transfer before choosing a larger method; it does not settle the final architecture or contribution. Follow [shared evaluation rules](../README.md), [research questions](../../docs/research.md) and [dataset conventions](../../docs/datasets/README.md).
+Does full-track learned temporal context improve kinematic frame-state labeling within ROAD-Waymo and LOKI and in both transfer directions? This is the first RQ1 recoverability/temporal-context diagnostic and establishes the single-dataset end-task reference for RQ2 transfer comparisons. It uses a kinematic subset of the full study contract; it cannot determine the value of omitted modalities or settle the final architecture/contribution. Follow [shared evaluation rules](../README.md), [research questions](../../docs/research.md) and [dataset conventions](../../docs/datasets/README.md).
 
 ## First two-dataset diagnostic
 
@@ -23,7 +23,7 @@ Begin with ROAD behaviour-labeled tracks that have official 3D pairs. Required p
 
 No RGB, raw LiDAR, scene encoders, factorized heads, extra datasets, distillation, modality dropout or domain adaptation enters this first comparison.
 
-Poor within-dataset performance suggests insufficient kinematic evidence, label ambiguity or a data/model problem. A BiLSTM gain supports the value of learned temporal context under the chosen features. Strong within-dataset performance with poor transfer suggests dataset/ontology/domain mismatch. Better LOKI → ROAD-Waymo transfer is consistent with a selection-asymmetry hypothesis, but different class frequencies, ontology, geography, sensors and scene structure also change; directional scores alone cannot establish causality. Strong transfer motivates examination of difficult subsets and Stopped/Waiting failures.
+Poor within-dataset performance is compatible with limited kinematic evidence, annotation ambiguity or a data/model/protocol problem; it does not prove sensor insufficiency or intrinsic ambiguity. A BiLSTM gain supports the value of learned temporal context under the chosen features. Strong within-dataset performance with poor transfer suggests dataset/ontology/domain mismatch. Better LOKI → ROAD-Waymo transfer is consistent with a selection-asymmetry hypothesis, but different class frequencies, ontology, geography, sensors and scene structure also change; directional scores alone cannot establish causality. Analyze class-wise errors and RGB availability, verified range, track duration, occlusion and LiDAR sparsity even though RGB/clouds are not model inputs. Declare cohort definitions, thresholds, exclusions and denominators before scoring; unavailable condition metadata remains unknown. Strong transfer still warrants difficult-subset and Stopped/Waiting analysis.
 
 ## First diagnostic baseline
 
@@ -67,7 +67,7 @@ Verify feature units, axes, timestamps and ego/world transforms in both datasets
 
 ## Tentative first-baseline projection
 
-The latest handoff proposes using LOKI's four states for the small kinematic diagnostic only. This is an experiment-specific mapping to audit manually, not an accepted equivalence of native ontologies or a replacement for later dataset-specific heads.
+The 2026-10-02 baseline proposal uses LOKI's four states for this kinematic diagnostic. This is an experiment-specific mapping to audit manually, not an accepted equivalence of native ontologies or a replacement for later dataset-specific heads.
 
 | Concept in handoff | Observed ROAD-Waymo action strings to inspect | Candidate four-state output |
 |---|---|---|
@@ -96,6 +96,7 @@ All applicable gates must pass before implementation/training: varied ROAD-Waymo
 | Splits, inspected-scene treatment, manifests | TBD; scene/identity overlap audit required |
 | Widths/capacity, optimizer, training schedule, batch size | TBD; same encoders/head design, added recurrent capacity reported |
 | Primary/secondary metrics, aggregation/temporal thresholds | TBD; shared candidate metrics are not accepted settings |
+| Observation-condition strata and metadata validity | TBD; RGB availability, range, duration, occlusion and LiDAR sparsity |
 | Source-only model selection, seeds/repeated runs | TBD; freeze before cross-dataset scores |
 | Empty-GT skip policy, minimum usable observation | TBD; distinguish padding, missing input and missing label |
 | Label budgets | No low-shot E001 comparison specified; any extension must declare units/counts/access |

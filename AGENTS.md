@@ -2,7 +2,7 @@
 
 ## Before work
 
-Read `docs/README.md`, then only the owners relevant to the task. This Aalto pedestrian-behavior workspace is in the research-definition stage: problem, ontology, minimum inputs and final architecture remain provisional. Do not present hypotheses as decisions.
+Read `docs/README.md`, then only the owners relevant to the task. This Aalto pedestrian-behavior workspace is in the research-definition stage: the study sensor contract is stated in `docs/datasets/README.md`, while empirical recoverability, usable-observation rules, ontology mappings and final architecture remain open. Do not present hypotheses as decisions.
 
 ## Document responsibilities
 

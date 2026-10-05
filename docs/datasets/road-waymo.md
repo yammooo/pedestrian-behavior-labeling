@@ -14,6 +14,8 @@ The [official repository](https://github.com/salmank255/Road-waymo-dataset) desc
 
 Observed pedestrian action strings are `Mov`, `MovAway`, `MovTow`, `PushObj`, `Stop`, `Wait2X`, `Xing`, `XingFmLft`, and `XingFmRht`. Decode original IDs using `road_label_definitions.json` (the exporter uses `all_*_labels`). Action `Xing` and location `xing` are distinct. Definitions, overlap, boundaries and correspondence to LOKI remain to be audited; no cross-dataset mapping or loss is accepted. Frame-level AV actions remain in the original ROAD JSON and are not pedestrian targets.
 
+The [ROAD-Waymo paper, v3](https://arxiv.org/abs/2411.01683v3) describes action/location/event understanding and compatibility with UK ROAD for real-country domain adaptation (ROAD++). This is paper-level motivation, not evidence that acquired 3D associations or ROAD/LOKI taxonomies are accepted. Existing population figures below remain explicitly sourced to paper v1 or the inspected release.
+
 ## Waymo correspondence and selection
 
 Original Waymo is the intended source of sensor/3D observations. Its [labeling specifications](https://github.com/waymo-research/waymo-open-dataset/blob/master/docs/labeling_specifications.md) describe camera and 3D labeling. Compatible release, timestamps, associations, ego data, and map coverage must be checked rather than inferred from the ROAD tube ID.

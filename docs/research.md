@@ -1,28 +1,34 @@
 # Research definition and direction
 
-Status: research-definition stage; questions and final method provisional. Updated 2026-10-05; scientific direction from the 2026-10-02 handoff.
+Status: research-definition stage. Updated 2026-10-05 from the latest research-question handoff; empirical answers, ontology mappings and final method remain open.
 
 ## Task and scope
 
 Given an existing pedestrian track over a recorded sequence, assign a dense per-frame behavior-state sequence. A tracked temporal segment may contain several states. This is offline annotation: complete past and future observations, bidirectional processing and non-causal post-processing are permitted. Online future-action/intention prediction is a separate causal task. The [tracking pivot](archive/2026-09-22-tracking-pivot.md) records why detection, lifting and association reconstruction are excluded.
 
-The intended artifact is a working offline research labeler with reproducible experiments and traceable results. Reliable automatic coverage and minimal human review are end goals; no numeric target or human-label quota is accepted. Outputs may later include derived segments/transitions/crossing onset and end, plus uncertainty for acceptance/review, only with explicit definitions and quality evidence.
+The intended artifact is a general offline pedestrian-behavior labeler for autonomous-driving datasets, supported by reproducible experiments and traceable results. Reliable automatic coverage and minimal human review are end goals; no numeric target or human-label quota is accepted. Outputs may later include derived segments/transitions/crossing onset and end, plus uncertainty for acceptance/review, only with explicit definitions and quality evidence.
 
-Recorded inputs may include identity/time, 3D boxes/trajectory, point clouds, ego pose, RGB/2D and scene/maps where available. RGB is not universally required. Source modalities and taxonomies differ; the minimum usable target sensing contract remains open in [dataset conventions](datasets/README.md). Missing RGB or GT never implies a behavior class. Synthetic private state and behavior labels are supervision, not deployable observations.
+The study is framed under a concrete contract: **RGB + 2D pedestrian tracks + LiDAR/3D point clouds + 3D pedestrian tracks + ego motion + timestamps/calibration**. [Dataset conventions](datasets/README.md) distinguish this contract from per-observation availability and heterogeneous source supervision; exact alignment, fields and usable-observation rules still need verification. Missing RGB or GT never implies a behavior class. Synthetic private state and behavior labels are supervision, not deployable observations.
 
-Moving and stopping are largely observable; crossing needs road relation. Waiting to cross may contain inferred intention that limited sensing cannot identify uniquely. Future context can help without guaranteeing identifiability. [LOKI](datasets/loki.md) supplies the tentative four-state output ontology for [E001](../experiments/E001-kinematic-transfer/README.md), subject to a defensible ROAD-Waymo projection. Native semantics stay in dataset notes.
+The current target ontology is motivated by [LOKI](datasets/loki.md): Moving, Stopped, Waiting to cross and Crossing. [E001](../experiments/E001-kinematic-transfer/README.md) uses a tentative four-state projection requiring ROAD-Waymo semantic acceptance. The longer-term endpoint may be a transferable shared representation with lightweight dataset-specific behavior heads; no universal hard-coded ontology is required. Native semantics stay in dataset notes.
 
-## Provisional questions
+## Research questions
 
-**RQ1: Can behavior supervision available only for camera-visible pedestrians be transferred into a 3D-centric temporal representation that can label pedestrians without visual observations?**
+**RQ1: Given RGB, LiDAR, 2D/3D pedestrian tracks, and ego motion, which pedestrian behaviors can be reliably labeled offline, what does each modality contribute, and under which observation conditions do the labels become ambiguous?**
 
-ROAD-Waymo's front-camera annotation selects a different population from LOKI's broader 3D-first tracks. ROAD-Waymo → LOKI also changes geography, sensors, scene structure, annotation conventions and class frequencies. These shifts are confounded; this question does not isolate generic sensor/geographic generalization.
+RQ1 characterizes empirical recoverability, rather than asking whether the data is sufficient. Moving/Stopped may be strongly observable from kinematics; Stopped/Waiting may need road geometry, orientation, barriers, traffic context or the complete future trajectory. Distant, occluded, short or 3D-only observations may make labels weakly identifiable. Poor classification alone cannot prove sensor insufficiency or intrinsic ambiguity: model, protocol and annotation failures remain alternatives.
 
-**RQ2: Does factorizing pedestrian behavior into transferable motion, scene-relation, and crossing representations improve transfer to the 3D-only setting?**
+Start with [E001](../experiments/E001-kinematic-transfer/README.md): pedestrian/ego encoders → classifier versus the same encoders → BiLSTM → the same classifier design. Progressively test scene/LiDAR evidence and RGB/context after inspecting failures. Analyze class-wise performance and observation conditions, not just one global score. A later comparison with human judgments from exactly the same evidence may help distinguish model limitations from ambiguity; it needs a predeclared protocol and is not conclusive by itself. Future observations are limited to the complete observed track, not unknown future behavior.
 
-Candidate `z_motion / z_scene / z_crossing` factors could accommodate complementary supervision without equating taxonomies. Motion may explain Moving/Stopped; Crossing requires road relation and Waiting may depend on future trajectory, orientation, context or latent intent. Necessity, separability, supervision and improvement over a simpler shared representation are untested.
+**RQ2: Can heterogeneous partial supervision across datasets be used to learn representations that improve cross-dataset pedestrian behavior labeling compared with single-dataset end-task training?**
 
-Neither direction is permanently primary (former Q18). E001 compares ROAD-Waymo → LOKI and LOKI → ROAD-Waymo plus both within-dataset evaluations. Better reverse transfer would be consistent with selection asymmetry, but would not establish its cause. Class-wise errors and within-dataset performance are needed. Zero-shot is important where semantics permit; excellent zero-shot performance is not required for useful label-efficiency results. Existing target inspection and later target-informed development must be disclosed under the [access rules](../experiments/README.md).
+RQ2 tests whether complementary supervision teaches a more transferable representation, rather than assuming that more datasets help. ROAD-Waymo supplies real action/location labels with partial verified Waymo correspondence; nuScenes offers another multimodal setting with motion attributes and scene/maps; ROAD or IDD-PeD may add visual action/context without corresponding 3D state; LOKI supplies a 3D-first behavior setting with missing RGB evidence. [Dataset notes](datasets/README.md) own release-specific evidence and limitations.
+
+A shared representation with partly separable motion, scene-relation and crossing factors (candidate `z_motion / z_scene / z_crossing`), plus native heads where semantics differ, is a likely direction, not a fixed architecture. Compare single-source end-task training with progressively justified combinations, preserving partial-label masks and reporting conflicting signals, dataset shortcuts and negative transfer. Factorization, source order and loss balancing remain methodological choices under RQ2.
+
+The progression is **characterize recoverability → identify useful evidence → learn transferable representations from complementary supervision**. Kinematics, temporal context, visible/3D-only cohorts, factorization and extra datasets are experiments under these questions, not separate research themes. The proposed contribution is understanding recoverable offline behavior, evidence limits and whether heterogeneous supervision improves transfer beyond dataset-specific training. Higher F1 or cross-dataset evaluation alone is not a novelty claim; see the [literature comparison](literature/README.md).
+
+Neither transfer direction is permanently primary (former Q18). E001 compares ROAD-Waymo ↔ LOKI and both within-dataset evaluations. Camera-visible-first versus 3D-track-first annotation is useful to study, but geography, sensors, scene structure, semantics and class frequencies also change. Directional asymmetry cannot isolate any one cause. Strict zero-shot and target-informed characterization are separate [access regimes](../experiments/README.md); disclose existing inspection and later target-informed changes. Excellent zero-shot performance is not required for useful label-efficiency results.
 
 ## Priorities and gates
 
@@ -31,24 +37,26 @@ Neither direction is permanently primary (former Q18). E001 compares ROAD-Waymo 
 3. Freeze minimal comparable kinematics/ego features, missingness, temporal grid, cohort/split and model-selection rules for [E001](../experiments/E001-kinematic-transfer/README.md). A visibility-comparable subset remains under discussion and cannot test the full 3D-only problem.
 4. Once implementation is authorized and gates pass, run the small framewise MLP versus whole-track BiLSTM diagnostic in both directions. Inspect failures before selecting an extension.
 
-The 2026-10-02 handoff authorized documentation, not model implementation. This migration changes organization only. Existing readers/galleries remain native inspection tools; no rigid schema, adapter hierarchy, viewer framework or substantial model implementation is warranted yet.
+The current handoff updates framing, not implementation readiness. Existing readers/galleries remain native inspection tools; substantial models and rigid abstractions wait for feasibility/protocol gates and implementation authorization.
 
 ## Later hypotheses and unresolved direction
 
-The primary formulation and contribution need advisor alignment and a [closest-work comparison](literature/README.md) (former Q9). E001 is diagnostic, not the final contribution. Neither shared heads, fusion nor a temporal encoder alone establishes novelty.
+The empirical answers and contribution require results, advisor alignment and a [closest-work comparison](literature/README.md) (former Q9). E001 is diagnostic, not the final contribution.
 
 | Provisional hypothesis | Evidence needed before adoption |
 |---|---|
 | H1: heterogeneous real sources improve transfer | Single-source versus individually justified additions; nuScenes/ROAD order undecided, IDD-PeD later (Q15) |
 | H2: native supervision heads support a shared representation | Audit incompatible taxonomies/missing labels; compare without a forced universal mapping |
 | H3: 3D road/scene understanding adds value | Kinematics versus scene evidence for an identified road-relation failure |
-| H4: paired multimodal supervision helps without target RGB | Matched RGB-visible/3D-only populations and validated pairing; RGB as input/privileged supervision/full modality is open (Q7) |
+| H4: paired multimodal evidence contributes under incomplete observations | Matched RGB-visible/3D-only populations and validated pairing; inference versus privileged-training use remains open (Q7) |
 | H5: pretraining saves target annotations | Pretrained versus scratch at exactly equal target-label budgets and selection access |
 | H6: source additions can hurt | Keep negative source/task ablations and report exposure/compute |
 
-If justified, candidate flow is verified native observations → kinematic/visual/3D-scene representations → fusion if useful → offline temporal representation → native supervision/target heads → dense states → later uncertainty/review/export. Crops versus local context, derived pose, pedestrian-centered clouds/BEV, bbox/orientation, road-relative features, barriers/accessibility and ego/maps are options, not required modalities. Bidirectional recurrence, temporal convolutions, Transformers or ASFormer-like encoders/chunking remain alternatives after E001.
+If justified, candidate flow is verified native observations → kinematic/visual/3D-scene representations → fusion if useful → offline temporal representation → native supervision/target heads → dense states → later uncertainty/review/export. Crops versus local context, derived pose, pedestrian-centered clouds/BEV, bbox/orientation, road-relative features, barriers/accessibility and ego/maps are candidate representations; the study contract does not require every model to consume every modality. Bidirectional recurrence, temporal convolutions, Transformers or ASFormer-like encoders/chunking remain alternatives after E001.
 
 For justified multi-source work, start with ordinary joint training, dataset-balanced sampling, native-label loss masks and explicit missing modalities; balancing/loss weights remain open. Do not assume a sequential curriculum retains knowledge. Paired dropout, consistency or teacher/student distillation need a demonstrated 3D-only benefit; complementary embeddings need not be identical. Gradient-similarity diagnostics, PCGrad, GradNorm, CAGrad or task/source adapters require observed conflict and failure of simpler changes (Q16).
+
+[Motion-representation evidence](literature/transferable-motion-representations.md) motivates separating temporal setup from domain shift and, after E001 if justified, testing auxiliary motion/scene supervision with frozen-encoder behavior probes before more complex adaptation. These are candidate comparisons, not selected models.
 
 Sensor stress tests require a diagnosed shift: LiDAR ring/beam subsampling, angular/range sparsification, point dropout, FOV/noise/sweep/intensity changes; RGB resolution/blur/crop/lighting/weather/FOV perturbations for observed shortcuts. Canonical coordinates and verified road-relative quantities may reduce sensor dependence. Do not assume multimodal fusion is necessary.
 

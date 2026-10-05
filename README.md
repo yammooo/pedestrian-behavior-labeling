@@ -1,6 +1,6 @@
 # Pedestrian Behavior Labeling
 
-Aalto research workspace for offline pedestrian-behavior annotation from existing tracks. No labeling model yet. Start with the [research dashboard](docs/README.md); the first kinematic transfer comparison is [E001, Planned](experiments/E001-kinematic-transfer/README.md).
+Aalto research workspace for a general offline pedestrian-behavior labeler from existing tracks under the [multimodal study contract](docs/datasets/README.md). No labeling model yet. Start with the [research dashboard](docs/README.md); the first kinematic transfer comparison is [E001, Planned](experiments/E001-kinematic-transfer/README.md).
 
 ## Layout
 

@@ -20,7 +20,7 @@ The [LOKI paper](https://openaccess.thecvf.com/content/ICCV2021/papers/Girase_LO
 | Waiting to cross | `WAITING_TO_CROSS` | Includes crossing-related context or inferred intention; may be poorly identifiable. |
 | Crossing the road | `CROSSING` | Requires scene relation, not velocity alone; boundaries need audit. |
 
-These names are candidate target output names, not a universal taxonomy for source datasets.
+These names define the tentative four-state output space for the first ROAD-Waymo/LOKI diagnostic, not a universal taxonomy for source datasets.
 
 ## Native annotation audit
 
@@ -40,9 +40,24 @@ Do not equate nuScenes standing, ROAD stop, and LOKI Stopped solely because thei
 
 Preserve each source's native semantics. Dataset-specific supervision heads are a candidate way to share representations without forcing all annotations into LOKI's four states. Missing labels remain missing; neither a universal `OTHER` class nor forced mappings are accepted.
 
-A zero-shot ROAD-Waymo-to-LOKI test requires a documented projection supported by definitions and examples, fixed before target performance is inspected. Specify conditional/excluded cases and evaluated population. If semantics do not support a projection, report that limitation rather than inventing compatible labels.
+A transfer test in either direction requires a documented projection supported by definitions and examples, fixed before target performance is inspected. Specify conditional/excluded cases and evaluated population. If semantics do not support a projection, report that limitation rather than inventing compatible labels.
 
 The candidate motion/scene/crossing factorization helps organize questions; it does not define accepted shared losses or latent axes. Optional derived segments, onset/end, and waiting duration also require explicit definitions.
+
+## Tentative first-baseline projection
+
+The latest handoff proposes using LOKI's four states for the small kinematic diagnostic only. This is an experiment-specific mapping to audit manually, not an accepted equivalence of native ontologies or a replacement for later dataset-specific heads.
+
+| Concept in handoff | Observed ROAD-Waymo action strings to inspect | Candidate four-state output |
+|---|---|---|
+| Move | `Mov`, `MovAway`, `MovTow` | Moving |
+| Stop | `Stop` | Stopped |
+| Wait-to-cross | `Wait2X` | Waiting to cross |
+| Crossing variants | `Xing`, `XingFmLft`, `XingFmRht` | Crossing the road |
+
+Direction variants are candidate collapses, not yet validated. `PushObj` and any other action without a defensible mapping must not be forcibly assigned. ROAD actions can overlap: define treatment of unmapped co-labels and conflicts between mapped states before applying a single-state loss. No arbitrary class priority is accepted. Keep source-native action lists and mapping provenance; report excluded frames/tracks and class support.
+
+Inspect definitions, representative timelines and transition boundaries, especially Stop versus Wait2X and movement versus crossing. A missing or ambiguous projected label has no four-state supervision, even if a native action or a 3D box exists. Use the same accepted projection in within-dataset and cross-dataset comparisons; score LOKI's native current-frame actions without shifting them to future targets.
 
 ## Superseded synthetic mapping
 

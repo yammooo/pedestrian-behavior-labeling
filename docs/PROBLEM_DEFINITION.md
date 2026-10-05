@@ -2,7 +2,7 @@
 
 Status: Accepted offline scope; provisional formulation
 
-Last updated: 2026-10-01
+Last updated: 2026-10-02
 
 ## Purpose and ownership
 
@@ -21,11 +21,15 @@ Ideal target inputs include pedestrian identity and time, 3D boxes/trajectory, p
 
 Source datasets may provide complementary subsets of these inputs and different annotations. Their usable fields, coordinates, and minimum requirements remain unresolved in the dataset contract. Neither absent RGB nor absent ground truth implies a behaviour class.
 
+The first proposed diagnostic uses only comparable pedestrian kinematics and ego information. It preserves whole tracks and internal observation gaps on a regular temporal grid, with modality-specific missingness and independent supervision masks. This smaller experiment does not define the final minimum sensing contract or settle which visibility population is included.
+
 ## Outputs and observability
 
 - Primary: a per-frame state sequence using an explicitly documented output ontology.
 - Derived, if meaningful: segments, transitions, and crossing onset/end.
 - End goal: confidence or uncertainty supporting automatic acceptance and optional human review; method and coverage targets remain open.
+
+LOKI's Moving, Stopped, Waiting to cross and Crossing the road are the tentative four-state output space for the initial two-dataset diagnostic. A defensible ROAD-Waymo mapping is still subject to semantic/manual inspection; native labels remain preserved.
 
 Moving and stopping are largely observable. Crossing also depends on road relation. Waiting to cross can include inferred intention that limited observations cannot uniquely identify. Future context may help but cannot guarantee identifiability. Preserve uncertainty rather than describing every target label as a directly observable physical state.
 

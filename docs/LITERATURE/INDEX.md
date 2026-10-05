@@ -2,7 +2,7 @@
 
 Status: Living index; contribution claims unverified
 
-Last updated: 2026-10-01
+Last updated: 2026-10-02
 
 ## Purpose and ownership
 
@@ -15,7 +15,7 @@ These are primary documentation entry points, not completed method reviews or ve
 
 | Reference | Current relevance | Evidence owner |
 |---|---|---|
-| [ROAD-Waymo repository](https://github.com/salmank255/Road-waymo-dataset) and [Waymo labeling specifications](https://github.com/waymo-research/waymo-open-dataset/blob/master/docs/labeling_specifications.md) | Baseline source candidate; native behaviour/3D association must be established | [ROAD-Waymo note](../DATASETS/ROAD_WAYMO.md) |
+| [ROAD-Waymo repository](https://github.com/salmank255/Road-waymo-dataset) and [Waymo labeling specifications](https://github.com/waymo-research/waymo-open-dataset/blob/master/docs/labeling_specifications.md) | Camera-selected dataset in the initial bidirectional diagnostic; partial 3D linkage verified, semantic/visual acceptance open | [ROAD-Waymo note](../DATASETS/ROAD_WAYMO.md) |
 | [nuScenes schema](https://github.com/nutonomy/nuscenes-devkit/blob/master/docs/schema_nuscenes.md) and [map tutorial](https://www.nuscenes.org/tutorials/map_expansion_tutorial.html) | Candidate motion/scene grounding and sensor diversity | [nuScenes note](../DATASETS/NUSCENES.md) |
 | [ROAD paper](https://doi.org/10.1109/TPAMI.2022.3150906) and [repository](https://github.com/gurkirt/road-dataset) | Candidate visual action/location supervision | [ROAD note](../DATASETS/ROAD.md) |
 | [IDD-PeD project](https://cvit.iiit.ac.in/research/projects/cvit-projects/iddped) and [repository](https://github.com/Ruthvik9/IDD-PeD) | Later optional visual/context supervision | [IDD-PeD note](../DATASETS/IDD_PED.md) |
@@ -24,7 +24,7 @@ These are primary documentation entry points, not completed method reviews or ve
 
 | Paper | Relevance to current study | Scope already addressed |
 |---|---|---|
-| [LOKI](paper_notes/loki.md) | Main target; separate native actions, inferred intention, and future-action targets | Multimodal trajectory/intention benchmark |
+| [LOKI](paper_notes/loki.md) | 3D-first dataset in both transfer directions; separate native actions, inferred intention, and future-action targets | Multimodal trajectory/intention benchmark |
 | [Minimizing Human Labeling](paper_notes/minimizing_human_labeling.md) | Prior automatic labels, target access and independent validation | Synthetic-to-real binary prediction/self-labeling |
 | [ARCANE-PedSynth](paper_notes/arcane_pedsynth.md) | Historical synthetic hypothesis; distinguish claims from inspected code/data | Reported synthetic generation and rich labels |
 | [Stop and Go Forecasting](paper_notes/stop_go.md) | Transition quality and temporal context | Future stop/go benchmark and fusion |

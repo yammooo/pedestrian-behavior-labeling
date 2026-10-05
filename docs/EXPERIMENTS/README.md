@@ -2,7 +2,7 @@
 
 Status: Recording convention; no model runs registered
 
-Last updated: 2026-10-01
+Last updated: 2026-10-02
 
 ## Purpose and ownership
 
@@ -13,7 +13,7 @@ The scientific method is central to the research artifact. Declare the question,
 
 ## Index
 
-No experiments are registered yet. Existing LOKI galleries are inspection media, not trained-model results.
+No experiments are registered yet. Existing LOKI/ROAD-Waymo galleries are inspection media, not trained-model results. The proposed first bidirectional kinematic diagnostic is defined in [EVALUATION_PLAN.md](../EVALUATION_PLAN.md#first-two-dataset-diagnostic); no run record or implementation is created by the handoff.
 
 Add one row per meaningful experiment or tightly related run group. Link its record and any baseline/prerequisite record.
 
@@ -78,4 +78,4 @@ Use `unknown` or explain non-applicability rather than inventing fields for feas
 
 The evaluation plan owns protocol, experiment records own observed results, dataset notes own measured release facts, and the research log contains short pointers. Store detailed metrics once and link them. Record configurations that did not help; do not silently drop failed seeds or tune against a held-out target result.
 
-Report target-label/model-selection access and compute alongside improvements. If LOKI evidence changes a source design, disclose target-informed development instead of relabeling it strict zero-shot. Generated labels do not replace independent validation.
+Report transfer direction, target-label/model-selection access and compute alongside improvements. If that run's target evidence changes its source design, disclose target-informed development instead of relabeling it strict zero-shot. Generated labels do not replace independent validation.

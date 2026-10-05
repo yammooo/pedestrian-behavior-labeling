@@ -6,7 +6,7 @@ Last updated: 2026-10-02
 
 ## Candidate role
 
-Baseline real behaviour source with verified partial multimodal correspondence in the acquired train/validation subset. Neither this linkage nor similar class names establishes LOKI compatibility. [Gate 1](../DATASET_INSPECTION_PLAN.md#gate-1--road-waymo--waymo-linkage) owns remaining acceptance checks.
+Initial real behaviour dataset with verified partial multimodal correspondence in the acquired train/validation subset. The proposed kinematic diagnostic uses it as both source and target in separate comparisons with LOKI. Neither linkage nor similar class names establishes LOKI compatibility; the tentative four-state projection requires manual audit. [Gate 1](../DATASET_INSPECTION_PLAN.md#gate-1--road-waymo--waymo-linkage) owns remaining acceptance checks.
 
 ## Documented annotation form
 

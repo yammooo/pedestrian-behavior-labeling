@@ -24,7 +24,7 @@ The published task is prediction-oriented. The source frame-wise actions can pot
 
 ## Evaluation / relevance
 
-LOKI is the current 3D-first target, with strict zero-shot and separate low-shot/scratch regimes. Its future-action transformation must not be conflated with current-frame action; Waiting to cross can itself contain inferred intention.
+LOKI is the 3D-first dataset in the initial bidirectional diagnostic with ROAD-Waymo; each direction has separate source/target access rules. Its future-action transformation must not be conflated with current-frame action; Waiting to cross can itself contain inferred intention.
 
 ## Dataset(s)
 

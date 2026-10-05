@@ -1,11 +1,11 @@
 # LOKI — Long Term and Key Intentions
 
 Status: Paper and official dataset page verified; local release layout and first action counts inspected
-Last updated: 2026-10-01
+Last updated: 2026-10-02
 
 ## Role and scope
 
-Main 3D-first target for strict zero-shot and low-shot evaluation, with separate scratch diagnostics. Strict zero-shot excludes LOKI from training and model selection; source/target semantic compatibility must be established first. Existing qualitative inspection is disclosed below; the treatment of inspected scenarios in the final split remains open. See [evaluation access rules](../EVALUATION_PLAN.md).
+3D-first dataset in the first kinematic diagnostic, evaluated both within-dataset and in both transfer directions with ROAD-Waymo. LOKI supplies the tentative four-state output ontology; its initial visibility-comparable cohort and the eventual primary transfer direction remain open. LOKI-source training is separate from ROAD-Waymo → LOKI strict zero-shot, which excludes LOKI from training/model selection. Existing qualitative inspection is disclosed below; its final split treatment remains open. See [evaluation access rules](../EVALUATION_PLAN.md).
 
 Recorded from an instrumented Honda SHUTTLE in the Tokyo area: 644 scenarios (mean 12.6 s), more than 28,000 agents across eight traffic classes, and 886,000 linked 2D/3D boxes across all classes. These are **not pedestrian-track counts**. [Paper, §3](https://arxiv.org/pdf/2108.08236); [official dataset page](https://usa.honda-ri.com/loki).
 

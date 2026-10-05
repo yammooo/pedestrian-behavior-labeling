@@ -1,8 +1,8 @@
 # Pedestrian Behavior Labeling
 
-Research workspace for **transferable offline pedestrian-behaviour annotation** in autonomous-driving datasets. We start from existing pedestrian tracks and investigate how to produce reliable dense labels in a new 3D-first domain with minimal target-specific supervision.
+Research workspace for **offline pedestrian-behaviour labeling** in autonomous-driving datasets. We start from existing pedestrian tracks and investigate behavior supervision that remains useful without visual observations.
 
-ROAD-Waymo is the baseline source candidate, subject to verifying its connection to original Waymo 3D tracks. Heterogeneous real supervision is an approach to test against that baseline; adding nuScenes or ROAD, and later possibly IDD-PeD, remains conditional.
+The first proposed diagnostic compares kinematics-only framewise MLP and whole-track BiLSTM baselines within ROAD-Waymo and LOKI and in both transfer directions. The four-state mapping, comparable features and initial subsets still need validation. Factorization, multimodal methods and extra datasets are later hypotheses.
 
 The intended artifact is a working offline research labeler supported by reproducible experiments and traceable results. There is no labeling model yet. Start with the [research documentation guide](docs/README.md).
 
@@ -15,7 +15,7 @@ The intended artifact is a working offline research labeler supported by reprodu
 
 ## Status
 
-Checkpoint: 2026-10-01. The prior ZOD-IAC and synthetic-pretraining work is preserved as research history. Architecture, source additions, metrics, and label-budget units remain open. The traineeship ends 2026-12-17.
+Checkpoint: 2026-10-02. The latest handoff authorizes documentation updates only; no model implementation yet. The two research questions and final method remain provisional. Prior ZOD-IAC and synthetic work are preserved as history. The traineeship ends 2026-12-17.
 
 ## Inspect LOKI
 

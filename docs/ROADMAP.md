@@ -15,16 +15,16 @@ The traineeship ends **17 December 2026**. These windows express priorities, not
 
 | Window | Intended work / gate |
 |---|---|
-| 1–9 October | Complete visual/reproducibility acceptance of the acquired ROAD-Waymo/Waymo index; native ontology audit; LOKI population/visibility characterization; define the first source/target protocol. |
-| 12–23 October | Small verified data layer and simple baselines: LOKI trajectory-only, scene diagnostic if feasible, ROAD-Waymo source baseline, basic transfer. Assess the next source; do not assume nuScenes must precede ROAD. |
-| 26 October–13 November | If baselines justify it, test shared representations and a first complementary source. Compare with ROAD-Waymo alone; architecture and native heads remain hypotheses. |
+| 1–9 October | Complete visual/reproducibility acceptance of the acquired index; audit the tentative ROAD-Waymo/LOKI four-state mapping; verify common coordinates, ego/velocity semantics, timing and population/cohort rules; freeze the first diagnostic protocol. |
+| 12–23 October | Once implementation is authorized, build the minimal data representation and kinematic framewise MLP/BiLSTM baselines; evaluate within both datasets and transfer in both directions; inspect failures before selecting an extension. |
+| 26 October–13 November | If baseline failures justify it, test scene evidence, missing-visual-evidence methods, factorization or a complementary source. No requirement to add all of them; final architecture and direction remain open. |
 | 16–27 November | Conditional generalization experiments: missing RGB, justified sensor perturbations/alignment, source additions, and negative transfer. IDD-PeD is a later option. |
 | 30 November–4 December | Main supported comparisons: strict zero-shot where semantics permit, low-shot versus scratch at equal budgets, source/cohort ablations, class-wise failures; uncertainty/coverage only if feasible. |
 | 7–17 December | Protected buffer and consolidation: delayed runs, essential ablations, report, documentation, cleanup, handover, and presentation. |
 
 ## Priority and fallback rules
 
-ROAD-Waymo is the baseline source candidate only if linkage passes. A failed gate triggers reconsideration of source supervision; no substitute source is silently selected. Simple baseline evidence comes before complex heterogeneous training.
+ROAD-Waymo participates in the first two-dataset matrix only after linkage/semantic acceptance. A failed gate triggers reconsideration; no substitute source is silently selected. Both datasets can be source or target in separate runs. Simple baseline evidence comes before complex heterogeneous training. The current handoff authorizes documentation only, not model implementation.
 
 Adding nuScenes, ROAD, or IDD-PeD requires a specific hypothesis and feasibility evidence. Adding all sources is not a deliverable. Synthetic generation and ECP2.0 deployment are not dependencies.
 

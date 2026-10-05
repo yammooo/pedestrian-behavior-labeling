@@ -34,9 +34,9 @@ If robust linkage is not supported, reconsider the source-training plan before b
 
 ## Gate 2 — native annotation ontology
 
-Audit ROAD-Waymo, nuScenes, ROAD, IDD-PeD, and LOKI using the table in [LABEL_ONTOLOGY.md](LABEL_ONTOLOGY.md). Extract exact native names/IDs, pedestrian applicability, definitions, temporal cadence, missingness, multi-label behavior, annotation population, and available modalities. Inspect representative labeled timelines and boundary cases.
+Prioritize ROAD-Waymo and LOKI for the first two-dataset diagnostic using [LABEL_ONTOLOGY.md](LABEL_ONTOLOGY.md). Extract exact native names/IDs, pedestrian applicability, definitions, temporal cadence, missingness, multi-label behavior, annotation population, and available modalities. Inspect representative labeled timelines and boundary cases. Audit nuScenes, ROAD and IDD-PeD before any later inclusion; their complete audits are not prerequisites for this kinematics-only comparison.
 
-Verify ROAD-Waymo/LOKI semantic compatibility before any zero-shot projection. Keep source-native supervision distinct from a target evaluation mapping. Do not design shared losses or equate standing/stopping/waiting labels until their definitions are clear.
+Verify the tentative ROAD-Waymo/LOKI four-state projection before training or scoring the first diagnostic in either direction. Preserve native labels separately from this experiment-specific projection. Define exclusions, overlapping labels and transition boundaries; do not design later shared losses or equate standing/stopping/waiting labels until their definitions are clear.
 
 ## Gate 3 — LOKI population
 
@@ -48,7 +48,9 @@ Resolve release provenance, timing, ego compensation, map/context usability, and
 
 ## Gate 4 — baseline readiness and protocol freeze
 
-Define usable trajectory features and scene inputs, if feasible, before introducing complex models. Specify the LOKI scratch diagnostics, ROAD-Waymo source baseline, and conditional zero-shot comparison. The evaluation plan owns split/access rules, metrics, and budget accounting.
+Define minimal comparable pedestrian and ego features, verified coordinate/velocity semantics, regular grid rate/alignment, track extent, internal-gap policy, partial-feature validity and padding/GT masks. The proposed first comparison is framewise MLP versus whole-track BiLSTM in the full ROAD-Waymo/LOKI within- and cross-dataset matrix. Scene inputs and extra datasets are later conditional work. The evaluation plan owns split/access rules, metrics, and budget accounting.
+
+Decide the initial ROAD paired-coverage rule and LOKI visibility cohort without aggressively excluding short/difficult tracks. Specify compatible latent/head widths and fair training controls, including source-only normalization and model selection for each transfer direction. Missing 3D observations use the proposed post-encoder learned embedding; valid ego input continues independently. No implementation is authorized by this documentation update.
 
 Before a run, settle its applicable metric definitions, label-budget unit, sampling/seed policy, association acceptance rule, missing-GT handling, and model-selection access. Keep future source additions open rather than freezing an untested architecture.
 

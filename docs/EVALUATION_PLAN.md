@@ -2,7 +2,7 @@
 
 Status: Working protocol; metrics, splits, and budget units remain open
 
-Last updated: 2026-10-01
+Last updated: 2026-10-02
 
 ## Purpose and ownership
 
@@ -15,28 +15,42 @@ Fix and version the applicable dataset releases, association provenance, native 
 
 Predeclare the hypothesis and baseline for each experiment. Record deviations and failures. Keep configs in `configs/`, results once in experiment records, and large artifacts under ignored `outputs/`. A performance change alone does not establish its cause or a novelty claim.
 
-## Baselines and transfer regimes
+## First two-dataset diagnostic
 
-ROAD-Waymo is the baseline source candidate, conditional on validated 3D linkage. LOKI is the main target.
+Run both the framewise MLP and whole-track BiLSTM proposed in [PIPELINE_DESIGN.md](PIPELINE_DESIGN.md#first-diagnostic-baseline) for the following matrix, after the protocol gate. This is a proposed first experiment, not a completed run or a frozen final method.
 
-| Comparison | Purpose / condition |
-|---|---|
-| LOKI trajectory-only scratch baseline | Diagnose what verified kinematics can explain with target supervision. |
-| LOKI trajectory + scene scratch baseline, if feasible | Measure scene value beyond kinematics. |
-| ROAD-Waymo source baseline with held-out source evaluation | Establish source learnability and source-based model selection. |
-| ROAD-Waymo → LOKI strict zero-shot | Test transfer with no target training or model selection, only after semantic projection is defensible. |
-| Source-pretrained → LOKI versus LOKI scratch | Measure adaptation gains at exactly the same target-label budget and comparable architecture/inputs. |
-| ROAD-Waymo plus one justified source versus ROAD-Waymo alone | Test heterogeneous supervision; nuScenes/ROAD order is undecided. IDD-PeD is later optional. |
+| Train dataset | Evaluate dataset | Purpose |
+|---|---|---|
+| ROAD-Waymo | Held-out ROAD-Waymo | Within-dataset learnability and source validation. |
+| LOKI | Held-out LOKI | Within-dataset learnability and source validation for the reverse direction. |
+| ROAD-Waymo | LOKI | Transfer from camera-selected supervision toward a 3D-first population. |
+| LOKI | ROAD-Waymo | Reverse transfer and possible asymmetry. |
 
-Good source performance with poor transfer may indicate sensor, geography, scene, selection, or semantic shift. Poor target scratch performance may indicate insufficient evidence or ambiguous labels. These are diagnostics, not proofs.
+Keep pedestrian/ego features, encoders and classifier design identical across the model comparison; only the BiLSTM adds learned full-track temporal context. Use a consistent coordinate/temporal convention and the tentative four-state mapping from [LABEL_ONTOLOGY.md](LABEL_ONTOLOGY.md#tentative-first-baseline-projection). Each source-trained model can support its within-dataset and cross-dataset evaluation; these are eight model/evaluation cells, not necessarily eight independent training runs.
+
+Begin with ROAD behaviour-labeled tracks that have official 3D pairs. Required paired coverage and the initial LOKI cohort remain open: a visibility-comparable subset is reasonable for a clean diagnostic but cannot establish performance on the full 3D-only population. Predeclare cohort criteria and excluded denominators. Preserve whole tracks, missing observations and independent label masks rather than retaining only consecutive labeled/paired frames.
+
+No RGB, raw LiDAR, scene encoders, factorized heads, extra datasets, distillation, modality dropout or domain adaptation enters this first comparison. No aggressive short-track filter is intended; settle only the minimal feature-validity criterion.
+
+Poor within-dataset performance suggests insufficient kinematic evidence, label ambiguity or a data/model problem. A BiLSTM gain supports the value of learned temporal context under the chosen features. Strong within-dataset performance with poor transfer suggests dataset/ontology/domain mismatch. Better LOKI → ROAD-Waymo transfer is consistent with a selection-asymmetry hypothesis, but different class frequencies, ontology, geography, sensors and scene structure also change; directional scores alone cannot establish causality. Strong transfer motivates examination of difficult subsets and Stopped/Waiting failures.
+
+## Later comparisons, conditional on baseline failures
+
+- Kinematics plus scene versus kinematics alone, if road relation is an identified gap.
+- Optional RGB/3D supervision and missing-visual-evidence comparisons for provisional RQ1.
+- Factorized versus shared temporal representation for provisional RQ2.
+- A single source versus one justified complementary dataset; inclusion/order remain open.
+- Source-pretrained versus target scratch at equal target-label budgets.
+
+These additions are not required to run the first diagnostic. The eventual primary transfer direction, and zero-shot versus low-shot emphasis, remain open.
 
 ## Strict zero-shot access
 
-No LOKI observations are used for representation training, including unlabeled adaptation. No LOKI behaviour labels or evaluation scores select checkpoints, hyperparameters, architectures, or source additions. Source validation determines the selected source model.
+For ROAD-Waymo → LOKI, no LOKI observations are used for representation training, including unlabeled adaptation. For LOKI → ROAD-Waymo, apply the same exclusion to ROAD-Waymo. No target behaviour labels or evaluation scores select checkpoints, hyperparameters, architectures, features or source additions. Source validation determines the selected source model; feature normalization also uses source training data only.
 
 Native annotation definitions may be compared to establish a predeclared evaluation projection. Existing qualitative LOKI inspection is disclosed in the [dataset note](DATASETS/LOKI.md#selected-clip-observations-2026-09-28); do not claim the target dataset was entirely unknown. Decide treatment of inspected scenarios at the split gate.
 
-LOKI-supervised diagnostics and later low-shot experiments are separate access regimes. If target diagnostics or errors motivate a design change, disclose that target-informed development; it cannot be used to select the strict zero-shot model. Retain the original frozen comparison and separate any subsequent target-informed result.
+Within-dataset diagnostics and later low-shot experiments are separate access regimes. Freeze the baseline design and source-only selection rules before inspecting cross-dataset scores. Because both datasets are studied, do not call either corpus entirely unseen by the researcher. If target diagnostics or errors motivate a design change, disclose target-informed development; it cannot select a strict zero-shot model. Retain the original frozen comparison and separate any subsequent target-informed result.
 
 Zero-shot must be tested when compatible semantics support it. Excellent zero-shot performance is not required for useful annotation-efficiency results.
 

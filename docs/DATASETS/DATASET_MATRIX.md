@@ -13,11 +13,11 @@ Last updated: 2026-10-02
 
 | Dataset | Current role | Candidate observations | Native supervision / population | Main unresolved gate |
 |---|---|---|---|---|
-| [ROAD-Waymo](ROAD_WAYMO.md) | Baseline source candidate | Acquired FRONT RGB/2D labels with partial official same-frame Waymo 3D associations; LiDAR/ego components referenced; map coverage unknown | Native action/location labels; frontal annotation population | Visual association acceptance, native semantics, paired lengths/gaps and versioned reproduction code |
+| [ROAD-Waymo](ROAD_WAYMO.md) | Initial diagnostic dataset; source and target in separate directions | Acquired FRONT RGB/2D labels with partial official same-frame Waymo 3D associations; LiDAR/ego components referenced; map coverage unknown | Native action/location labels; frontal annotation population | Visual association acceptance, tentative four-state mapping, paired lengths/gaps and versioned reproduction code |
 | [nuScenes](NUSCENES.md) | Possible next source; order open | RGB, LiDAR, calibrated 3D annotations/ego and scene expansions documented | Limited pedestrian motion attributes; scene labels at native cadence, not dense behaviour GT | Local packages and usable scene supervision unverified |
 | [ROAD](ROAD.md) | Possible next visual source; order open | Video/2D tubes documented; no convenient 3D supervision assumed | Native agent/action/location annotations | Pedestrian semantics, temporal coverage and source benefit |
 | [IDD-PeD](IDD_PED.md) | Later optional visual/context source | Tracked video/2D/context annotations documented; 3D correspondence unverified | Multiple frame-level behavioural/context attributes; selection needs audit | Native applicability, release coverage, and justification for inclusion |
-| [LOKI](LOKI.md) | Main 3D-first target; strict zero-shot and low-shot/scratch regimes kept separate | Local RGB, 2D/3D rows, point clouds, odometry and map files; transforms remain partly unverified | Four actions in 3D label rows; GT can exist without a 2D observation | Complete population/cohort characterization, semantics, coordinates, splits |
+| [LOKI](LOKI.md) | Initial 3D-first diagnostic dataset; source and target in separate directions | Local RGB, 2D/3D rows, point clouds, odometry and map files; transforms remain partly unverified | Four actions in 3D label rows; GT can exist without a 2D observation | Initial cohort, semantics, coordinates/ego motion, temporal representation and splits |
 | [PedSynth++](PED_SYNTH_PLUS_PLUS.md) | Historical route; optional future synthetic augmentation | Local RGB/2D release; metadata disables LiDAR/DVS; generator export work separate | Required rich FSM not available in inspected active generator | Not the current foundation; retain provenance and prior findings |
 | [ECP2.0](ECP2.md) | Possible later application; no internship dependency | Dense person trajectories and metric locations paper-reported; released fields to verify | No matching rich behaviour GT established | Access, suitable 3D/context fields, independent audit |
 | [EMT](EMT.md) | Background; no current experiment selected | Dash-camera tracking paper-reported; other modalities unknown | Similar action terminology, compatibility unverified | Reinspect only if deliberately selected later |
@@ -40,8 +40,8 @@ The headline 54k ROAD-Waymo / 7k ROAD / >28k LOKI agent counts include other cla
 
 ## Comparison boundaries
 
-ROAD-Waymo alone comes first if linkage passes. Whether nuScenes or ROAD is added next is undecided; IDD-PeD is optional later. More sources may hurt and must be tested.
+The first diagnostic trains separately on ROAD-Waymo and LOKI, evaluating both within-dataset and both transfer directions with kinematics-only MLP/BiLSTM baselines. The primary direction and initial visibility cohort remain open. Extra sources enter only after an identified gap; inclusion/order are undecided and more sources may hurt.
 
-Do not map all sources into LOKI's four classes. [LABEL_ONTOLOGY.md](../LABEL_ONTOLOGY.md) owns the native semantic audit; [DATASET_CONTRACT.md](../DATASET_CONTRACT.md) owns heterogeneous availability and leakage rules.
+Do not map all sources into LOKI's four classes. The first ROAD-Waymo/LOKI diagnostic proposes a limited manually audited four-state projection, with ambiguous actions excluded. [LABEL_ONTOLOGY.md](../LABEL_ONTOLOGY.md) owns that tentative mapping and the native audit; [DATASET_CONTRACT.md](../DATASET_CONTRACT.md) owns heterogeneous availability and leakage rules.
 
 Detailed counts and sensor specifications remain in their dataset notes. Partial ROAD-Waymo correspondence is measured; training acceptance and LOKI compatibility remain open. This matrix does not declare nuScenes behaviour-equivalent or ECP data available before the traineeship ends.

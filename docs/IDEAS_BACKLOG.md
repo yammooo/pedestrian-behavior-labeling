@@ -2,7 +2,7 @@
 
 Status: Uncommitted methods; promote only after evidence
 
-Last updated: 2026-10-01
+Last updated: 2026-10-02
 
 ## Purpose and ownership
 
@@ -14,7 +14,7 @@ Last updated: 2026-10-01
 - Motion/scene/crossing factorization if native annotation analysis supports distinguishable factors.
 - Pedestrian crop versus local visual context; derived pose only if error analysis identifies missing posture/activity evidence.
 - Semantic BEV, road-relative features, barriers/accessibility, or scene encoders if kinematics cannot explain road-related states.
-- Whole-track processing versus fixed chunks; recurrent, convolutional, Transformer, or ASFormer-like temporal encoders after a minimal baseline.
+- Alternative temporal encoders or chunking only after the proposed whole-track framewise MLP/BiLSTM diagnostic; no final temporal architecture is selected.
 
 ## Missing RGB and sensor shift
 

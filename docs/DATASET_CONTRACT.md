@@ -42,8 +42,20 @@ For the acquired ROAD-Waymo index, retain complete ROAD sequences and their miss
 
 A projected 3D box and an annotated 2D observation have different provenance. Any resampling or derived geometry must record its method and uncertainty. Exact missing-input behavior is chosen after the inspection gates.
 
+## First-baseline temporal representation
+
+The latest handoff proposes whole variable-length pedestrian tracks on a common regular temporal grid, possibly 5 Hz. Preserve internal same-identity gaps and elapsed time; a list containing only valid detections is insufficient. Track start/end rules, grid alignment, resampling tolerances and GT assignment at grid times remain open. Resampling must not invent a behaviour label or conceal missing evidence.
+
+Preserve separate metadata such as `has_3d`, `has_2d`, `has_rgb` and `has_behavior`, plus provenance and quality. An available RGB image does not imply a usable pedestrian crop or 2D observation. ROAD-Waymo's `has_3d_box` remains the native paired-box mask; applicable four-state supervision also depends on the accepted semantic mapping.
+
+The proposed learned missing embedding belongs after the pedestrian encoder, while valid ego data remains available to its branch. This does not discard availability masks in the data. Missing input, missing label and sequence padding must remain distinguishable. Define partial-feature validity, missing ego handling and a minimum usable observation criterion before implementation; avoid a large short-track threshold that removes the hard population.
+
+Candidate position/velocity features require verified units, axes, timing and transforms in both datasets. An ego-centric feature frame does not justify interpreting ego-relative displacement as pedestrian world velocity. Specify velocity semantics, derivative support near gaps/endpoints, and normalization using only the permitted training data. Yaw/dimensions/acceleration are optional later ablations.
+
+For ROAD-Waymo, the initial eligible population is behaviour-labeled ROAD tracks with successful official 3D pairs; the required paired coverage and track start/end remain open. Preserve internal unpaired timesteps as gaps within accepted tracks. A visibility-comparable initial LOKI subset is under discussion, not selected. Retain all population metadata so later 2D-visible versus 3D-only evaluation remains possible.
+
 ## Leakage rules
 
 Behaviour labels, future-derived prediction targets, and simulator-private route/intention fields stay outside inference inputs. Complete recorded observations are permitted because the task is offline.
 
-Strict zero-shot uses no LOKI training or model selection, including unlabeled representation adaptation. Source/target semantic comparison is documented separately from training. Splits, inspected-scene handling, and low-shot access belong in [EVALUATION_PLAN.md](EVALUATION_PLAN.md).
+For each strict zero-shot direction, its target dataset is excluded from training and model selection, including unlabeled representation adaptation. LOKI supervision is permitted in the separately declared LOKI-source and LOKI within-dataset runs. Source/target semantic comparison is documented separately from training. Splits, inspected-scene handling, and low-shot access belong in [EVALUATION_PLAN.md](EVALUATION_PLAN.md).

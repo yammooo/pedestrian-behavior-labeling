@@ -2,7 +2,7 @@
 
 Status: Active ownership guide
 
-Last updated: 2026-10-01
+Last updated: 2026-10-02
 
 Read [RESEARCH_DIRECTION.md](RESEARCH_DIRECTION.md) for the current question, then [PROBLEM_DEFINITION.md](PROBLEM_DEFINITION.md) for task scope. The [dataset inspection plan](DATASET_INSPECTION_PLAN.md) owns immediate feasibility gates. Current methods are hypotheses, not architecture decisions.
 
@@ -30,7 +30,7 @@ Read [RESEARCH_DIRECTION.md](RESEARCH_DIRECTION.md) for the current question, th
 
 ## Scientific method and provenance
 
-The user-provided 2026-10-01 checkpoint and subsequent planning clarifications establish current priorities. They are project context, not independent verification of every dataset claim. Label facts as paper-reported, official-format-documented, locally observed, or checkpoint-reported; keep source URLs, versions, and unknowns explicit.
+The latest user-provided 2026-10-02 research-question/baseline handoff updates the 2026-10-01 checkpoint: two provisional RQs and a first kinematics-only MLP/BiLSTM diagnostic in both ROAD-Waymo/LOKI transfer directions. It authorizes documentation updates, not implementation. These handoffs are project context, not independent verification of every dataset claim. Label facts as paper-reported, official-format-documented, locally observed, or checkpoint-reported; keep source URLs, versions, and unknowns explicit.
 
 Predeclare each comparison before its run. Keep configurations in `configs/`, data and large artifacts outside Git, and results once in [experiment records](EXPERIMENTS/README.md). Document failures and deviations. Update canonical conclusions only when evidence changes understanding.
 

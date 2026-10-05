@@ -4,6 +4,8 @@ Date: 2026-10-01
 
 Status: Accepted investigation priority; methods remain provisional
 
+2026-10-02 scope update: the real-data/baseline-first priority remains accepted. The latest [research direction](../RESEARCH_DIRECTION.md) now considers both ROAD-Waymo → LOKI and LOKI → ROAD-Waymo; the original main-target wording below records the 2026-10-01 context. Primary direction and the small proposed baseline remain provisional, not new settled decisions.
+
 ## Context
 
 The former plan depended on rich synthetic behavioural supervision and usable shared observations. The inspected PedSynth++ release and active generator did not establish those requirements. Promised richer code is unavailable under the October checkpoint's working assumption. Completed CARLA infrastructure work remains valuable history.

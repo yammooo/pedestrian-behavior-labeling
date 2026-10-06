@@ -1,7 +1,7 @@
 # LOKI — Long Term and Key Intentions
 
 Status: Paper and official dataset page verified; local release layout and first action counts inspected
-Last updated: 2026-10-02
+Last updated: 2026-10-05
 
 ## Role and scope
 
@@ -77,11 +77,26 @@ A fresh annotation-only scan of the local copy, using the existing reader and `(
 | Tracks with at least 10 3D observations | 9,854 |
 | Pedestrian 3D observation/action rows | 391,569 |
 
-Per-track 3D observation counts: **minimum 1, lower quartile 11, median 23, upper quartile 43, maximum 102** (sorted empirical order statistics). At nominal 5 Hz, 23 consecutive observations span 4.4 s; actual gaps and timestamp units were not checked here. Track counts do not establish distinct physical people across scenarios, uninterrupted trajectories, or action episodes. Missing 2D boxes do not alone establish why RGB evidence is absent.
+Per-track 3D observation counts: **minimum 1, lower quartile 11, median 23, upper quartile 43, maximum 102** (sorted empirical order statistics). At nominal 5 Hz, 23 consecutive observations span 4.4 s; the subsequent extent scan below checks annotation gaps. Physical timestamp units remain unverified. Track counts do not establish distinct physical people across scenarios, uninterrupted trajectories, or action episodes. Missing 2D boxes do not alone establish why RGB evidence is absent.
 
 All observed 3D pedestrian rows have one of the four actions in the preceding table. Per-action track counts overlap and must not be added to obtain the 12,364 total. The 1,001 2D-only tracks have no behaviour label through this reader.
 
 Reproduction: `conda run --no-capture-output -n pedestrian-behavior python outputs/inspection/population/loki_counts.py`; the one-off script and `loki_counts.json` remain under ignored `outputs/`. No images or point clouds were decoded. Release checksum and identity-fragmentation audit remain open.
+
+## Track extents and gaps (2026-10-05)
+
+Annotation-only scan of all 644 scenarios: identity remains `(scenario, track_id)`, and context spans the first to last **2D or 3D** pedestrian observation, including empty frames in between. Every within-scenario filename increment is two (40,185 increments); `suffix / 2` is the ordinal at the documented nominal 5 Hz. Physical timestamps remain unverified. One-frame tracks span zero elapsed seconds but need one context position.
+
+| Population | Tracks | Mean s | Median s | P90 s | P95 s | P99 s | Max s |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| All 2D-or-3D tracks | 13,365 | 6.07 | 4.4 | 15.8 | 19.0 | 20.0 | 20.2 |
+| At least one 3D observation, full union extent | 12,364 | 6.33 | 4.6 | 16.4 | 19.2 | 20.0 | 20.2 |
+
+702 union tracks (5.25%) have internal empty frames; these account for 1.14% of all first-to-last frame positions. The longest empty run is 65 frames (13.0 s at nominal cadence; adjacent observation boundaries are 13.2 s apart). All 3D annotation sequences are contiguous between their first and last 3D row; this does not establish uninterrupted sensor visibility or independently observed rather than source-interpolated annotations. Full union extents can include 2D-only extensions/gaps. No missing observation or GT was filled.
+
+Conservative 5 Hz capacity `ceil(duration × 5) + 1` has median **23**, P95 **96**, maximum **102** positions across all tracks. Whole tracks containing crossing have median 11.0 s; waiting tracks 7.4 s. These overlapping action cohorts measure whole-track context, not action episodes. Durations are clip bounded; IDs are not stitched.
+
+Local report: `outputs/inspection/track-statistics/README.md`; `loki/tracks.csv` contains every pedestrian, and `loki/summary.json` contains quantiles, cohort/action window coverage, masks and source annotation digest. The scan reconciles the population and 391,569 3D rows above. [Reproduction commands](../../README.md#inspect-track-lengths-and-gaps). Window/resampling policy remains provisional; this scan does not settle identity fragmentation, behavior episodes or physical timing.
 
 ## Prior qualitative inspection
 

@@ -1,6 +1,6 @@
 # E001 — Kinematic transfer
 
-Status: **Planned**. Created 2026-10-05 from the 2026-10-02 proposal. Updated 2026-10-05 for the latest RQ framing. No training, model implementation or results.
+Status: **Planned**. Created 2026-10-05 from the 2026-10-02 proposal. Updated 2026-10-05 for the RQ framing and agreed initial batching policy. No training, model implementation or results.
 
 ## Question and controls
 
@@ -37,7 +37,7 @@ Both encoders are small MLPs: `h_ped = E_ped(k_t)` and `h_ego = E_ego(e_t)`. Con
 
 When the relevant pedestrian 3D observation is entirely missing, replace its encoded output with a learned vector `m_ped` of the same width. This vector is inserted **after** the pedestrian encoder; it is not an invented raw position or velocity. Valid ego observations continue through the ego encoder. A separate binary availability feature is probably unnecessary for this branch but remains an open choice. Partial feature availability, especially unavailable velocity despite a valid box, and missing ego handling still need definition.
 
-Use whole variable-length tracks on a regular temporal grid, with **5 Hz a candidate**, not a frozen rate. Keep internal same-identity gaps as missing positions; do not compress valid detections together or split solely because of an occlusion. Padding to the longest sequence in a minibatch must be excluded from temporal processing and loss. Padding, missing input and missing GT are separate conditions.
+Use whole variable-length tracks on a regular temporal grid, with **5 Hz a candidate**, not a frozen rate. Keep internal same-identity gaps as missing positions; do not compress valid detections together or split solely because of an occlusion. Padding, missing input and missing GT are separate conditions; [batch construction](#batch-construction) owns padding and sampling.
 
 Predict a state at every grid position, with supervised loss only where applicable behaviour GT exists: `sum(label_mask * loss) / sum(label_mask)` over non-padding positions. A batch with no usable GT needs an explicit skip policy. Do not aggressively filter short tracks; determine minimal validity for the chosen features and later analyze performance by duration. [Temporal data details](#first-baseline-temporal-representation) remain open.
 
@@ -64,6 +64,14 @@ Track start/end, grid alignment, resampling tolerance and GT assignment at grid 
 Keep `has_3d`, `has_2d`, `has_rgb` and `has_behavior`, provenance and quality independently of the learned missing embedding. An image does not imply a usable crop or 2D observation. ROAD-Waymo's `has_3d_box` masks native paired geometry; four-state supervision separately requires an accepted projection. Retain internal unpaired positions and population metadata for later 2D-visible/3D-only evaluation.
 
 Verify feature units, axes, timestamps and ego/world transforms in both datasets. Ego-relative displacement is not pedestrian world velocity. Declare derivative support near gaps/endpoints and normalize only from permitted source training data. Partial-feature validity, missing ego and minimum usable observations need definition before implementation.
+
+## Batch construction
+
+Agreed initial policy (2026-10-05): **random batches with dynamic padding** for both baseline variants. Shuffle eligible whole tracks each training epoch and form minibatches without length bucketing. Each track remains a separate sample; pad only to the longest temporal extent in that minibatch. Retain internal gaps as sequence positions. Do not crop tracks, concatenate different tracks into one temporal sequence, or pad every batch to a fixed 128-position length.
+
+Padding must be excluded from recurrent processing as well as supervised loss; masking the loss alone is insufficient for the backward BiLSTM. Recurrent state must not carry between independent tracks. Internal missing-input positions remain inside each track's temporal context, with supervision controlled by the separate label mask defined above.
+
+Sampler seed, tracks per batch and incomplete-final-batch handling remain TBD. Record these settings and actual track/labeled-frame exposure for each run. Length bucketing or sequence packing can be reconsidered after measuring padding overhead; any change must preserve the declared sampling and loss-weighting policy. Future transformer token layout and batching are not settled by this choice. Native [LOKI](../../docs/datasets/loki.md#track-extents-and-gaps-2026-10-05) and [ROAD-Waymo](../../docs/datasets/road-waymo.md#track-extents-and-gaps-2026-10-05) extent statistics provide sizing evidence.
 
 ## Tentative first-baseline projection
 
@@ -94,6 +102,7 @@ All applicable gates must pass before implementation/training: varied ROAD-Waymo
 | Grid, track extent, alignment and GT tolerance | TBD; 5 Hz is a candidate |
 | Feature/velocity semantics; partial validity; missing ego | TBD; verify units/axes/transforms and derivative support |
 | Splits, inspected-scene treatment, manifests | TBD; scene/identity overlap audit required |
+| Training batch construction | Agreed: random whole-track batches with dynamic padding; [details](#batch-construction). Sampler seed and final-batch handling TBD |
 | Widths/capacity, optimizer, training schedule, batch size | TBD; same encoders/head design, added recurrent capacity reported |
 | Primary/secondary metrics, aggregation/temporal thresholds | TBD; shared candidate metrics are not accepted settings |
 | Observation-condition strata and metadata validity | TBD; RGB availability, range, duration, occlusion and LiDAR sparsity |

@@ -2,7 +2,7 @@
 
 Status: Acquired on aalto; ROAD-authoritative same-frame 3D index inspected and rechecked
 
-Last updated: 2026-10-02
+Last updated: 2026-10-05
 
 ## Candidate role
 
@@ -104,7 +104,24 @@ The [full structural recheck](../archive/2026-10-02-road-waymo-linkage.md#struct
 
 
 
-Remaining work: document acquisition/release history, preserve runnable mapping/checker code in version control, characterize lengths/gaps/action episodes and physical-ID overlap, audit semantic disagreements and varied associations visually, and declare the training acceptance rule. The merger currently hardcodes Waymo `training` paths; this matches the inspected subset but must be changed before processing another split. No model or data adapter is implemented by this inspection.
+Remaining work: document acquisition/release history, preserve runnable mapping/checker code in version control, characterize action episodes and physical-ID overlap, investigate timing irregularities below, audit semantic disagreements and varied associations visually, and declare the training acceptance rule. The merger currently hardcodes Waymo `training` paths; this matches the inspected subset but must be changed before processing another split. No model or data adapter is implemented by this inspection.
+
+## Track extents and gaps (2026-10-05)
+
+Full annotation-only index scan, with identity `(road_clip_id, road_tube_uid)`: context spans the first to last ROAD pedestrian observation, including empty intermediate frames. Ten identical repeated observations are counted once, reconciling to 712,630 observations and 426,491 paired observations. Extent durations use exact verified Waymo endpoint timestamps, independently of gallery playback.
+
+| Population | Tracks | Mean s | Median s | P90 s | P95 s | P99 s | Max s |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| All ROAD pedestrians | 9,573 | 7.99 | 6.20 | 19.10 | 19.70 | 19.80 | 19.803223 |
+| At least one paired 3D observation, full ROAD extent | 6,540 | 8.18 | 6.50 | 19.10 | 19.70 | 19.80 | 19.803223 |
+
+3,709 tracks (38.74%) have internal empty ROAD frames, accounting for 7.92% of all first-to-last frame positions. The longest empty run has 181 native frame positions; its adjacent observed boundaries are 18.199996 s apart. Paired 3D is present at 55.11% of full-span positions across all tracks, or 78.84% among tracks with any 3D. These denominators include empty ROAD frames, unlike paired coverage over labeled rows. No missing observation or behavior target was filled.
+
+Median timestamp interval per ROAD index step is 0.099993 s. However, 110 observed intervals exceed 0.15 s per index step (maximum 0.400036 s); causes remain unverified. Do not assume every ROAD index step is exactly 0.1 s or blindly take alternate frames to produce 5 Hz. Conservative capacity `ceil(duration × 5) + 1` has median **33**, P95 **100**, maximum **101** positions. Small timestamp deviations can add a capacity position; actual resampling/grid/tolerance are unset.
+
+Whole tracks containing `Wait2X` have median 13.70 s, longer than the overall median; action cohorts overlap and are not action-episode durations. Durations are bounded by downloaded train/validation clips; no test supervision, additional native LiDAR-only tracks or ID stitching is included.
+
+Local report: `outputs/inspection/track-statistics/README.md`; `road-waymo/tracks.csv` records every pedestrian, and `road-waymo/summary.json` includes quantiles, split/cohort/action window coverage, masks, source CSV checksum and timing outliers. Remote results: `/home/user20/road-waymo-gallery-20261005/track-statistics-road-waymo-final/`. [Reproduction commands](../../README.md#inspect-track-lengths-and-gaps). Full context at 5 Hz fits the inspected population in 101 positions under the stated rule; no architecture/window policy is selected.
 
 ## RGB + LiDAR BEV inspection gallery (2026-10-02)
 
@@ -140,6 +157,12 @@ explicitly. This is an inspection reader, not a frozen training-loader contract.
 
 
 
+## Native action gallery (2026-10-05)
+
+Generated ten examples for each of the nine native pedestrian actions on `aalto`, using the unchanged inspection renderer and index with seed 0. All 90 selected clip-scoped tracks are distinct. Selection requires the action somewhere in the track; it does not require complete 3D pairing or a single-action sequence. This is a browsing sample, not a measured association/semantic acceptance audit.
+
+Local artifacts: `outputs/road_waymo/index.html` (all classes), per-class `index.html` pages, MP4s and action-frame previews. Players start at the first frame carrying the selected action and retain full-scene context. `samples.json` records identities, action start frames and paired coverage; class logs/run JSONs, `SHA256SUMS`, `validation.json` and the artifact README preserve reproduction and verification. Remote workspace: `/home/user20/road-waymo-gallery-20261005/`. Original datasets/index were read in place.
+
 ## Pedestrian population and sequence scale (2026-10-01)
 
 The [official release README](https://github.com/salmank255/Road-waymo-dataset) reports **1,000 videos**, approximately **20 s** each, and 198k annotated frames. Its 54k agent tracks include all classes.
@@ -157,4 +180,4 @@ The [official release README](https://github.com/salmank255/Road-waymo-dataset) 
 | Cross from right | 571 | 81 |
 | Cross from left | 531 | 88 |
 
-Action tubes are label-specific sequences; do not sum them as unique pedestrians or equate them to LOKI's distinct tracks per action. The **516 waiting tubes** are especially relevant to supervision scale. The acquired 9,573 train/validation pedestrian tracks match the paper's non-test total; current paired counts above do not include test supervision. Paired lengths, gaps and action-episode/track counts still need characterization.
+Action tubes are label-specific sequences; do not sum them as unique pedestrians or equate them to LOKI's distinct tracks per action. The **516 waiting tubes** are especially relevant to supervision scale. The acquired 9,573 train/validation pedestrian tracks match the paper's non-test total; current paired counts above do not include test supervision. The extent scan above measures gaps and whole-track lengths; action episodes remain uncharacterized.

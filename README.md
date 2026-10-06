@@ -45,3 +45,18 @@ python -m pedestrian_behavior.inspection.road_waymo \
 ```
 
 Use exact actions (`Stop`, `Wait2X`, `Xing`, `XingFmLft`, etc.). Selection is deterministic with `--seed`; `--clip`/`--track` restrict it. `--waymo-root` relocates original component paths without editing the index. Nonempty output directories are rejected. [ROAD-Waymo notes](docs/datasets/road-waymo.md#rgb--lidar-bev-inspection-gallery-2026-10-02) explain timing, geometry and markers.
+
+## Inspect track lengths and gaps
+
+Annotation-only statistics retain internal gaps inside each pedestrian's first-to-last clip-scoped extent. Run the ROAD command where its index is accessible, using a copy of the utility and the existing readers. Choose a fresh output directory; existing directories are rejected.
+
+```bash
+python scripts/track-statistics.py --self-check
+python scripts/track-statistics.py --dataset loki --input data/loki_data \
+  --output outputs/inspection/track-statistics/loki
+python scripts/track-statistics.py --dataset road-waymo \
+  --input /home/user20/road_waymo_mapping/merged_pedestrians_20261002 \
+  --output outputs/inspection/track-statistics/road-waymo
+```
+
+Each scan writes `tracks.csv` and `summary.json`, including whole-track duration, observed/missing frames, modality masks, overlapping action cohorts and conservative 5 Hz window capacities. [LOKI](docs/datasets/loki.md#track-extents-and-gaps-2026-10-05) and [ROAD-Waymo](docs/datasets/road-waymo.md#track-extents-and-gaps-2026-10-05) own interpretation and limitations.

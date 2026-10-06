@@ -1,6 +1,6 @@
 # Research definition and direction
 
-Status: research-definition stage. Updated 2026-10-06: E001 protocol agreed; empirical answers, broader ontology/head choices and final method remain open.
+Status: research-definition stage. Updated 2026-10-06: E001 protocol agreed; follow-on experiments and timeline are tentative. Empirical answers, broader ontology/head choices and final method remain open.
 
 ## Task and scope
 
@@ -35,24 +35,53 @@ Neither transfer direction is permanently primary (former Q18). E001 compares RO
 1. Complete varied visual acceptance and reproducibility of the acquired ROAD-Waymo/Waymo index. Structural joins and partial 3D coverage are verified; training acceptance remains open. Failed robust linkage requires reconsidering supervision, without silently substituting another source.
 2. Verify native identity/context extensions, physical timing and common world transforms. [Dataset notes](datasets/README.md) own evidence, native semantic limitations and remaining checks.
 3. Materialize and audit E001's final eligible populations and scene-grouped manifests under its agreed features, missingness, 5 Hz grid, projection and selection rules. Include eligible 3D-only tracks; do not substitute a visible-only population. Protocol choices belong in [E001](../experiments/E001-kinematic-transfer/README.md).
-4. Once implementation is authorized and gates pass, run the small framewise MLP versus whole-track BiLSTM diagnostic in both directions. Inspect failures before selecting an extension.
+4. Once implementation is authorized and gates pass, run the small framewise MLP versus whole-track BiLSTM diagnostic in both directions. Inspect failures before executing the tentative extensions below.
 
 The protocol is defined, but native verification still gates execution. Existing readers/galleries remain inspection tools; substantial models wait for the remaining feasibility gates and implementation authorization.
 
-## Later hypotheses and unresolved direction
+## Tentative experiment direction
 
-The empirical answers and contribution require results, advisor alignment and a [closest-work comparison](literature/README.md) (former Q9). E001 is diagnostic, not the final contribution.
+Keep both RQs as core objectives: characterize useful evidence, then test complementary-supervision transfer. Finish E001 as the bounded reference, then use a compact bidirectional Transformer as the preferred backbone for later comparisons. Its higher performance is a hypothesis; switching does not depend on beating every E001 score. Persistent training or resource problems may require revising that choice.
+
+| Comparison | Question / initial design |
+|---|---|
+| [E001](../experiments/E001-kinematic-transfer/README.md) — agreed baseline | Kinematic MLP versus whole-track BiLSTM, within each dataset and in both transfer directions. |
+| E002 — Transformer reference | Use the same kinematic evidence and evaluation reference with a full-track Transformer. Reserve one full-versus-restricted-context comparison with consistent feature construction. |
+| E003 — input evidence | On the Transformer, compare kinematics alone, +RGB, +local 3D scene evidence, and +both. Initial candidates are one pedestrian/context RGB crop and one pedestrian-centered LiDAR BEV; exact encodings remain TBD. |
+| E004 — complementary supervision | Fix inference inputs and compare source behavior training, +one additional source with a generic auxiliary objective, and the same observations +semantic supervision. First candidate: nuScenes scene-relation targets, subject to native feasibility. |
+
+E002–E004 are tentative comparison families, not execution-ready protocols. Retain within-dataset and bidirectional transfer evaluation where applicable. Define each comparison's architecture, preprocessing, availability, objectives, budgets and seeds before execution; detailed records are TBD in the [experiment index](../experiments/README.md). Use a suitable published pipeline as a reference where feasible; the [literature comparison](literature/README.md#closest-neighboring-work) qualifies the contribution.
+
+Hold the temporal backbone fixed during E003, then the inference representation fixed during E004. Keep evaluated populations/GT comparable, including missing-RGB tracks, and report class/condition support. Auxiliary scene labels are supervision, not invented behavior GT or extra inference inputs. Preserve source-only selection and disclose target-informed changes under the [shared safeguards](../experiments/README.md).
+
+The core questions remain worth testing after negative results; execution depends on valid data and functioning training. Prepare representations and verify the additional source alongside E001. Avoid a full architecture × representation × source search; retain failures and reserve repetition for the central comparisons.
+
+### Possible follow-up branches
+
+Choose at most one substantial follow-up after the core comparisons, if time permits:
+
+| Finding | Possible follow-up |
+|---|---|
+| Modalities help within datasets but hurt transfer | One missing-modality or regularization comparison. |
+| Additional supervision hurts | One auxiliary-loss or source-sampling diagnostic. |
+| Stopped/Waiting remains difficult across models | Focused, blinded human judgments from the same evidence; not automatic replacement GT or proof of intrinsic ambiguity. |
+
+If results are consistent, prioritize repeat runs and validation. Cut optional follow-ups first if the schedule slips; revise infeasible data/source plans explicitly rather than searching for a positive score.
+
+## Broader hypotheses and unresolved direction
+
+The empirical answers and contribution require results, advisor alignment and a [closest-work comparison](literature/README.md) (former Q9). The hypotheses below extend beyond the bounded core; they are not additional required deliverables. E001 is diagnostic, not the final contribution.
 
 | Provisional hypothesis | Evidence needed before adoption |
 |---|---|
-| H1: heterogeneous real sources improve transfer | Single-source versus individually justified additions; nuScenes/ROAD order undecided, IDD-PeD later (Q15) |
+| H1: heterogeneous real sources improve transfer | Single-source versus the first feasible addition; further ROAD/IDD-PeD inclusion and order remain open (Q15) |
 | H2: native supervision heads support a shared representation | Audit incompatible taxonomies/missing labels; compare without a forced universal mapping |
 | H3: 3D road/scene understanding adds value | Kinematics versus scene evidence for an identified road-relation failure |
 | H4: paired multimodal evidence contributes under incomplete observations | Matched RGB-visible/3D-only populations and validated pairing; inference versus privileged-training use remains open (Q7) |
 | H5: pretraining saves target annotations | Pretrained versus scratch at exactly equal target-label budgets and selection access |
 | H6: source additions can hurt | Keep negative source/task ablations and report exposure/compute |
 
-If justified, candidate flow is verified native observations → kinematic/visual/3D-scene representations → fusion if useful → offline temporal representation → native supervision/target heads → dense states → later uncertainty/review/export. Crops versus local context, derived pose, pedestrian-centered clouds/BEV, bbox/orientation, road-relative features, barriers/accessibility and ego/maps are candidate representations; the study contract does not require every model to consume every modality. Bidirectional recurrence, temporal convolutions, Transformers or ASFormer-like encoders/chunking remain alternatives after E001.
+If justified, candidate flow is verified native observations → kinematic/visual/3D-scene representations → fusion if useful → offline temporal representation → native supervision/target heads → dense states → later uncertainty/review/export. Derived pose, pedestrian-centered clouds, bbox/orientation, road-relative features, barriers/accessibility and ego/maps remain alternatives to the initial crop/BEV candidates; the study contract does not require every model to consume every modality. Recurrence, temporal convolutions or ASFormer-like encoders/chunking remain alternatives if the preferred Transformer proves impractical.
 
 For justified multi-source work, start with ordinary joint training, dataset-balanced sampling, native-label loss masks and explicit missing modalities; balancing/loss weights remain open. Do not assume a sequential curriculum retains knowledge. Paired dropout, consistency or teacher/student distillation need a demonstrated 3D-only benefit; complementary embeddings need not be identical. Gradient-similarity diagnostics, PCGrad, GradNorm, CAGrad or task/source adapters require observed conflict and failure of simpler changes (Q16).
 
@@ -64,15 +93,16 @@ Confidence, calibration, abstention, selective acceptance, independent audit and
 
 ## Schedule
 
-The traineeship ends **17 December 2026** (`2026-12-17`). Windows are conditional priorities, not guaranteed outcomes or frozen method choices.
+The traineeship ends **17 December 2026** (`2026-12-17`). These are planning windows, not measured runtime estimates or guaranteed outcomes; training throughput is unknown. Write up each comparison as it finishes.
 
 | Window | Work / gate |
 |---|---|
-| 1–9 October | E001 protocol agreed 6 October; finish visual/reproduction acceptance, native timing/transforms and final population/split checks |
-| 12–23 October | After authorization, minimal representation and MLP/BiLSTM; both within-dataset and transfer directions; inspect failures |
-| 26 October–13 November | If justified, scene/missing-visual methods, factorization or one complementary source; no requirement to add all |
-| 16–27 November | Conditional missing-RGB, sensor/alignment, source and negative-transfer comparisons; IDD-PeD optional |
-| 30 November–4 December | Supported zero-shot, equal-budget low-shot/scratch, source/cohort ablations, class-wise failures; uncertainty only if feasible |
+| 6–9 October | Finish E001 native verification and population/split checks; assess remaining work |
+| 12–23 October | After authorization, implement/run E001 and inspect failures; in parallel define RGB/3D representations and check the auxiliary source |
+| 26–30 October | E002: establish the Transformer reference and declare the context comparison |
+| 2–13 November | E003: selected evidence representations and modality comparisons |
+| 16–27 November | E004: complementary-supervision comparison; at most one optional follow-up if ahead of schedule |
+| 30 November–4 December | Repeat central comparisons, finish essential controls/context analysis, consolidate conclusions and freeze scope |
 | 7–17 December | Protected buffer: delayed runs, essential ablations, report, documentation, cleanup, handover and presentation |
 
-Scale claims to evidence and preserve the buffer. Adding every source, synthetic generation and ECP2.0 deployment are not deliverables; do not plan required work beyond the traineeship.
+Scale claims to evidence and preserve the buffer. Low-shot/scratch, uncertainty, additional sources, synthetic generation and ECP2.0 deployment remain possible later work, not required December deliverables. Narrow scope and claims explicitly if core work cannot fit; do not plan required work beyond the traineeship.

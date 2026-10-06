@@ -1,6 +1,6 @@
 # Literature and contribution comparison
 
-Updated 2026-10-05. Working comparison; no novelty claim. Dataset notes own native facts and release findings. Add a separate method review only when its detail changes a hypothesis, baseline, protocol or interpretation.
+Updated 2026-10-06. Working comparison; no novelty claim. Dataset notes own native facts and release findings. Add a separate method review only when its detail changes a hypothesis, baseline, protocol or interpretation.
 
 ## Reference index
 
@@ -25,10 +25,14 @@ Updated 2026-10-05. Working comparison; no novelty claim. Dataset notes own nati
 
 ## Closest neighboring work
 
-Primary-source abstracts/text and the MulCPred cross-dataset results were checked on 2026-10-05. These are focused comparisons, not complete replications or a systematic novelty review.
+Primary-source abstracts/text and the MulCPred cross-dataset results were checked on 2026-10-05; the follow-on overlap check was made on 2026-10-06. These are focused comparisons, not complete replications or a systematic novelty review. The nighttime recognition paper's accessible publisher abstract/introduction were checked; its full temporal/output protocol remains unverified.
 
 | Work | Evidence and boundary | Implication for this study |
 |---|---|---|
+| [A compute-efficient two-stage framework for pedestrian crossing behavior recognition in nighttime traffic scenes (2026)](https://doi.org/10.1016/j.ait.2026.100077) | Monocular roadside recognition with motion/interaction descriptors, DINOv2 crop embeddings and a lightweight temporal Transformer | Close architectural overlap; our distinction must address offline RGB/3D evidence, incomplete observations and supervision transfer, subject to full protocol comparison |
+| [Rasouli et al. (2020), PePScenes](https://arxiv.org/pdf/2012.07773) | Full paper checked: RGB, semantic maps, 3D trajectories and ego state with modality ablations; binary crossing prediction from short pre-event observations | 3D-aware modality comparisons already exist. Our proposed study reconstructs multiple current states across complete observed tracks |
+| [Yi et al. (ICCV 2021), ASFormer](https://arxiv.org/abs/2110.08568) | Abstract checked: Transformer-based framewise video action segmentation | Offline framewise labeling and a Transformer alone do not establish novelty |
+| [ViCross (September 2026 preprint)](https://arxiv.org/html/2609.07420v1) | Spatial/motion auxiliary supervision for future crossing prediction and JAAD→PIE evaluation | Auxiliary supervision and transfer already overlap; E004 instead proposes an additional partially supervised source for offline RGB/3D behavior labeling |
 | [Gesnouin et al. (2022), Assessing Cross-dataset Generalization of Pedestrian Crossing Predictors](https://arxiv.org/abs/2201.12626) | Direct crossing-predictor transfer degrades despite strong ordinary train/test performance; task is future crossing prediction | Cross-dataset evaluation is necessary evidence, not novelty. Does not establish full-track offline frame-state recoverability under RGB/LiDAR/3D tracks |
 | [Feng et al. (2024), MulCPred: Learning Multi-Modal Concepts for Explainable Pedestrian Action Prediction](https://www.mdpi.com/1424-8220/24/20/6742) ([author manuscript](https://arxiv.org/abs/2409.09446); [article mirror, Table 3](https://pmc.ncbi.nlm.nih.gov/articles/PMC11510801/)) | Appearance, skeleton, trajectory, ego motion and local context; TITAN↔PIE crossing prediction drops substantially. Filtering unrecognizable concepts improves some transfer results; gains are metric/direction dependent | Supports testing modality contribution and structured representations. It does not test LiDAR-based offline reconstruction or prove motion/scene/crossing factors are necessary here |
 | [Khan et al., ROAD-Waymo, v3 (2026 revision)](https://arxiv.org/abs/2411.01683v3) | Action/location/event labels and UK ROAD↔US ROAD-Waymo domain-adaptation motivation; [release evidence](../datasets/road-waymo.md) is distinct | Another-dataset evaluation alone is not a contribution. The current question concerns offline multimodal track labeling and partial, mismatched supervision |
@@ -40,7 +44,7 @@ Primary-source abstracts/text and the MulCPred cross-dataset results were checke
 | Topic | Existing evidence / boundary | Current research implication | Review still required |
 |---|---|---|---|
 | Automatic crossing pseudo-labeling | [Riaz et al. 2025](minimizing-human-labeling.md) already reports binary self-labeling and smoothing | Automatic labels/smoothing alone are not a contribution | Target access, label budgets, temporal semantics and independent audits |
-| Native actions versus future intention | [LOKI](../datasets/loki.md) shifts actions for prediction; [neighboring work](#closest-neighboring-work) is largely prediction-oriented | RQ1 uses full observed tracks to reconstruct current states | Annotation definitions, ROAD-Waymo projection and closest offline labeling/segmentation work |
+| Native actions versus future intention | [LOKI](../datasets/loki.md) shifts actions for prediction; neighboring work includes recognition and framewise segmentation as well as prediction | RQ1 reconstructs current states; the offline formulation alone is insufficient novelty | Annotation definitions, ROAD-Waymo projection and full protocol comparison with recognition work |
 | Recoverability and modality contribution | [MulCPred](https://arxiv.org/abs/2409.09446) studies multimodal concepts; local LOKI examples show weak evidence | RQ1 compares evidence, classes and observation conditions; poor classification is not sensor-insufficiency proof | Comparable modality/temporal controls, human-evidence audit and limits of identifiability claims |
 | Heterogeneous partial supervision | [Zhou & Zeng](https://www.sciencedirect.com/science/article/pii/S0921889023002191) uses partial pedestrian annotations across datasets | RQ2 compares complementary supervision against single-dataset end-task training | Closest temporal behavior methods, missing-modality objectives and matched data/compute/access controls |
 | Non-identical taxonomies | [MSeg](https://openaccess.thecvf.com/content_CVPR_2020/html/Lambert_MSeg_A_Composite_Dataset_for_Multi-Domain_Semantic_Segmentation_CVPR_2020_paper.html) establishes risks of naive merging in segmentation | Preserve semantics; lightweight native heads are a candidate | Precise audit and shared/native-head comparisons without assumed equivalence |

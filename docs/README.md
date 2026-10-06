@@ -2,11 +2,14 @@
 
 Updated 2026-10-06. Research-definition stage; no labeling model or trained-model results. The [current framing](research.md#research-questions) asks about offline recoverability/modality contribution (RQ1) and heterogeneous-supervision transfer (RQ2). [E001](../experiments/E001-kinematic-transfer/README.md) is **Planned**, with its initial protocol agreed and native verification pending. Broader methods and the final ontology/architecture remain provisional. Traineeship ends **17 December 2026**, with **7–17 December** protected for buffer and handover.
 
+[Tentative roadmap](research.md#tentative-experiment-direction): E001 baseline → E002 Transformer reference → E003 input evidence → E004 complementary supervision; one optional follow-up. Both RQs remain core objectives.
+
 ## Next work
 
 1. Finish ROAD-Waymo visual association acceptance and reproducible mapping provenance.
 2. Verify native identity extensions, timing/world transforms and final E001 populations/split manifests.
 3. After verification and implementation authorization, run E001's MLP/BiLSTM comparison within both datasets and in both transfer directions; inspect failures.
+4. Alongside E001, define the first RGB/3D representations and verify auxiliary-source feasibility; follow the [tentative schedule](research.md#schedule).
 
 ## Navigation and ownership
 

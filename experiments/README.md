@@ -5,6 +5,11 @@ Shared evaluation safeguards and comparison index. No trained-model results. Ins
 | ID | Question | Status | Result |
 |---|---|---|---|
 | [E001](E001-kinematic-transfer/README.md) | Framewise MLP versus whole-track BiLSTM; within and bidirectional ROAD-Waymo/LOKI transfer | Planned | Not run |
+| [E002](../docs/research.md#tentative-experiment-direction) | Kinematic Transformer reference and temporal-context comparison | Tentative | Not run |
+| [E003](../docs/research.md#tentative-experiment-direction) | RGB/local 3D evidence on the Transformer | Tentative | Not run |
+| [E004](../docs/research.md#tentative-experiment-direction) | One complementary supervision source with an additional-data control | Tentative | Not run |
+
+[Research](../docs/research.md#tentative-experiment-direction) owns the tentative direction, branches and schedule. E002–E004 details/records are TBD; write their protocols before execution. Their IDs are reserved, with no model implementation or results.
 
 ## Before execution
 

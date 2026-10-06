@@ -14,7 +14,7 @@ Predeclare each question, baseline and key controls. Fix/version applicable rele
 
 For ROAD-Waymo → LOKI, no LOKI observations are used for representation training, including unlabeled adaptation. For LOKI → ROAD-Waymo, apply the same exclusion to ROAD-Waymo. No target behaviour labels or evaluation scores select checkpoints, hyperparameters, architectures, features or source additions. Source validation determines the selected source model; feature normalization also uses source training data only.
 
-Native annotation definitions may be compared to establish a predeclared evaluation projection. Existing qualitative LOKI inspection is disclosed in the [inspection archive](../docs/archive/2026-09-28-loki-inspection.md#selected-clip-observations-2026-09-28); do not claim the target dataset was entirely unknown. Decide treatment of inspected scenarios at the split gate.
+Native annotation definitions may be compared to establish a predeclared evaluation projection. Existing qualitative LOKI inspection is preserved in the [inspection archive](../docs/archive/2026-09-28-loki-inspection.md#selected-clip-observations-2026-09-28); do not claim the target dataset was entirely unknown.
 
 Within-dataset diagnostics and later low-shot experiments are separate access regimes. Freeze the baseline design and source-only selection rules before inspecting cross-dataset scores. Because both datasets are studied, do not call either corpus entirely unseen by the researcher. If target diagnostics or errors motivate a design change, disclose target-informed development; it cannot select a strict zero-shot model. Retain the original frozen comparison and separate any subsequent target-informed result.
 
@@ -32,7 +32,7 @@ No human-label quota or performance threshold has been accepted. If selective ex
 
 ## Population and source ablations
 
-Report LOKI all evaluable pedestrians, RGB-visible observations/tracks, and 3D-only observations/tracks. Exact cohort definitions and whether assignment is frame- or track-based remain open. A missing 2D box is an availability signal, not automatically proof of being outside the camera FOV.
+Report evaluated pedestrian populations and modality availability at declared frame/track levels. [E001](E001-kinematic-transfer/README.md#samples-and-eligibility) includes eligible 3D-only LOKI tracks and defines annotated-box availability strata. Later RGB-visible cohorts require verified definitions. A missing 2D box is an availability signal, not automatically proof of being outside the camera FOV.
 
 Examine class-wise errors, especially Stopped versus Waiting to cross, and failure patterns by distance, point sparsity, occlusion, and track length where these quantities are verified. Score only frames with applicable GT; do not fill missing behaviour labels as truth.
 
@@ -48,7 +48,9 @@ If a human-evidence comparison becomes useful, predeclare sample selection, anno
 
 For RQ2, compare single-dataset end-task training with individually justified complementary sources and progressive combinations. Preserve native semantics/heads and independent supervision masks. To attribute gains to complementary supervision rather than extra data or compute, include appropriate matched data/exposure/tuning controls and, where feasible, supervision/task and shared-head/factorization ablations. Settings depend on the observed gap; no new comparison or dataset order is frozen. Report native label coverage, source/task conflicts, shortcuts, negative transfer and each target's access regime. Shared representation/native heads are candidates, not assumed solutions.
 
-## Metrics still to define
+## Metrics for later comparisons
+
+[E001](E001-kinematic-transfer/README.md#evaluation) owns its accepted primary/secondary metrics and strata. The candidates below concern later comparisons; they do not replace that protocol.
 
 | Evaluation aspect | Candidates / definition needed |
 |---|---|
@@ -58,7 +60,7 @@ For RQ2, compare single-dataset end-task training with individually justified co
 | Missing RGB and source value | Matched cohort/modality/source comparisons with denominators and variability. |
 | Conditional confidence experiment | Calibration and reliability versus automatic coverage; confidence definition, acceptance threshold, and independent audit. |
 
-No primary metric, temporal threshold, calibration method, or numeric coverage target is canonical yet.
+No study-wide primary metric, segment/event threshold, calibration method or numeric coverage target is canonical. Declare these per comparison.
 
 ## Split safeguards and later applications
 

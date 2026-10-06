@@ -1,134 +1,207 @@
 # E001 — Kinematic transfer
 
-Status: **Planned**. Created 2026-10-05 from the 2026-10-02 proposal. Updated 2026-10-05 for the RQ framing and agreed initial batching policy. No training, model implementation or results.
+Status: **Planned**. Created 2026-10-05 from the 2026-10-02 proposal. Protocol agreed 2026-10-06; native-data verification remains pending. No model implementation, training or results.
 
 ## Question and controls
 
-Does full-track learned temporal context improve kinematic frame-state labeling within ROAD-Waymo and LOKI and in both transfer directions? This is the first RQ1 recoverability/temporal-context diagnostic and establishes the single-dataset end-task reference for RQ2 transfer comparisons. It uses a kinematic subset of the full study contract; it cannot determine the value of omitted modalities or settle the final architecture/contribution. Follow [shared evaluation rules](../README.md), [research questions](../../docs/research.md) and [dataset conventions](../../docs/datasets/README.md).
+Does full-track learned temporal context improve kinematic frame-state labeling within ROAD-Waymo and LOKI and in both transfer directions? This is the first RQ1 recoverability/temporal-context diagnostic and the single-dataset end-task reference for RQ2. It uses a kinematic subset of the [study contract](../../docs/datasets/README.md), without settling the final architecture or contribution. Follow the [shared evaluation rules](../README.md) and [research questions](../../docs/research.md).
+
+Hold inputs, projection, samples, splits, normalization, classifier design, loss, optimizer, selection rule and budget fixed between A and B. Parameters are independently trained; B adds recurrent capacity. No RGB, raw LiDAR, scene encoder, pedestrian yaw/dimensions, acceleration, factorized heads, extra datasets, distillation, modality dropout or adaptation enters E001.
 
 ## First two-dataset diagnostic
 
-After the protocol gate, evaluate both [baseline variants](#first-diagnostic-baseline) in this matrix.
-
 | Train dataset | Evaluate dataset | Purpose |
 |---|---|---|
-| ROAD-Waymo | Held-out ROAD-Waymo | Within-dataset learnability and source validation. |
-| LOKI | Held-out LOKI | Within-dataset learnability and source validation for the reverse direction. |
-| ROAD-Waymo | LOKI | Transfer from camera-selected supervision toward a 3D-first population. |
-| LOKI | ROAD-Waymo | Reverse transfer and possible asymmetry. |
+| ROAD-Waymo | Held-out ROAD-Waymo test | Within-dataset learnability |
+| LOKI | Held-out LOKI test | Within-dataset learnability in the reverse direction |
+| ROAD-Waymo | Held-out LOKI test | Camera-selected supervision toward a 3D-first population |
+| LOKI | Held-out ROAD-Waymo test | Reverse transfer and possible asymmetry |
 
-Use the same coordinate/temporal convention and [projection](#tentative-first-baseline-projection) in every cell. Training controls are specified below.
+Each source-trained model is selected only on its source validation split, then evaluated in both cells. Two variants × two sources give **four training runs and eight evaluation cells**. Target training data, including unlabeled adaptation, and target-based model selection are excluded. Source normalization is reused unchanged at target inference.
 
-Begin with ROAD behaviour-labeled tracks that have official 3D pairs. Required paired coverage and the initial LOKI cohort remain open: a visibility-comparable subset is reasonable for a clean diagnostic but cannot establish performance on the full 3D-only population. Predeclare cohort criteria and excluded denominators. Preserve whole tracks, missing observations and independent label masks rather than retaining only consecutive labeled/paired frames.
+## Samples and eligibility
 
-No RGB, raw LiDAR, scene encoders, factorized heads, extra datasets, distillation, modality dropout or domain adaptation enters this first comparison.
+One sample is one verified pedestrian identity over its **complete available temporal extent within a scenario**, from its first to last native 2D or 3D observation. Keep internal gaps and unlabeled extensions. Add no context before/after that extent and do not stitch identities across scenarios.
 
-Poor within-dataset performance is compatible with limited kinematic evidence, annotation ambiguity or a data/model/protocol problem; it does not prove sensor insufficiency or intrinsic ambiguity. A BiLSTM gain supports the value of learned temporal context under the chosen features. Strong within-dataset performance with poor transfer suggests dataset/ontology/domain mismatch. Better LOKI → ROAD-Waymo transfer is consistent with a selection-asymmetry hypothesis, but different class frequencies, ontology, geography, sensors and scene structure also change; directional scores alone cannot establish causality. Analyze class-wise errors and RGB availability, verified range, track duration, occlusion and LiDAR sparsity even though RGB/clouds are not model inputs. Declare cohort definitions, thresholds, exclusions and denominators before scoring; unavailable condition metadata remains unknown. Strong transfer still warrants difficult-subset and Stopped/Waiting analysis.
+- **LOKI:** join `(scenario, track_id)` across native 2D and 3D observations.
+- **ROAD-Waymo:** retain the ROAD tube and its original annotations. Extend context with native FRONT camera observations of the same camera ID and native 3D observations of its unique, officially associated LiDAR ID. Require scene-scoped identity consistency; ambiguous/conflicting associations fail verification. No IoU or inferred identity links. Native extensions add observations, never ROAD behavior GT.
 
-## First diagnostic baseline
+Preserve observation timestamps, source/frame/annotation IDs, native geometry/types, identity/association provenance and original same-frame pairing masks. ROAD CSV `has_3d_box` continues to describe export pairs; a separate native-observation mask describes extended geometry. Identical repeated observations become one timestep with all annotation IDs retained; conflicting duplicates fail explicitly. Annotated 2D availability includes native boxes, with ROAD and Waymo geometry/provenance distinguished.
 
-### Minimal inputs and separate encoders
+After the [5 Hz selection](#first-baseline-temporal-representation), an eligible sample has at least one usable pedestrian 3D position, at least one accepted behavior label anywhere in the sample, and a verified ego anchor pose. Position and GT need not occur together. Include 3D-only LOKI, single-observation and single-label tracks; there is no minimum duration or paired-coverage threshold. Exclude tracks lacking usable input, accepted GT or an anchor, and report separate/overlapping reasons and counts. An unexpectedly empty-GT training sample is an error, not a silent skip.
 
-Use common pedestrian kinematics `k_t` and a separate ego vector `e_t`. Candidate pedestrian features are position `[x,y,z]` and velocity `[vx,vy,vz]`; candidate ego features describe ego velocity/motion. The exact features and coordinate convention remain open. Verify a common convention and ego compensation before computing motion; dataset-native position changes alone are not comparable pedestrian velocities.
+## Accepted four-state projection
 
-Both encoders are small MLPs: `h_ped = E_ped(k_t)` and `h_ego = E_ego(e_t)`. Concatenate their outputs as `u_t = [h_ped; h_ego]`. Yaw, box dimensions, accelerations and relative velocity are later controlled ablations, not required first inputs.
+This mapping is accepted for E001, not asserted as a universal equivalence of native taxonomies. Native meanings and limitations remain in [LOKI](../../docs/datasets/loki.md#semantic-limits) and [ROAD-Waymo](../../docs/datasets/road-waymo.md#documented-annotation-form).
 
-### Missing observations and whole tracks
+| ROAD-Waymo native action | LOKI original current-frame action | Output / class index |
+|---|---|---|
+| `Mov`, `MovAway`, `MovTow` | `Moving` | `MOVING` / 0 |
+| `Stop` | `Stopped` | `STOPPED` / 1 |
+| `Wait2X` | `Waiting to cross` | `WAITING_TO_CROSS` / 2 |
+| `Xing`, `XingFmLft`, `XingFmRht` | `Crossing the road` | `CROSSING` / 3 |
 
-When the relevant pedestrian 3D observation is entirely missing, replace its encoded output with a learned vector `m_ped` of the same width. This vector is inserted **after** the pedestrian encoder; it is not an invented raw position or velocity. Valid ego observations continue through the ego encoder. A separate binary availability feature is probably unnecessary for this branch but remains an open choice. Partial feature availability, especially unavailable velocity despite a valid box, and missing ego handling still need definition.
+Discard `PushObj` from the E001 action projection, while retaining the pedestrian, its context and other action labels. Map the remaining native action list to a set of output states: direction variants and simultaneous movement labels collapse to MOVING, and a unique mapped state is retained alongside any unmapped co-label. If the mapped set is exactly `{CROSSING, MOVING}`, use `CROSSING`. Unmapped-only actions (including `PushObj` alone), no native action and missing annotations have no four-state GT. Preserve original action lists and mapping/correction provenance; report exclusions and class/track denominators after resampling. Never use location `xing` as action `Xing`.
 
-Use whole variable-length tracks on a regular temporal grid, with **5 Hz a candidate**, not a frozen rate. Keep internal same-identity gaps as missing positions; do not compress valid detections together or split solely because of an occlusion. Padding, missing input and missing GT are separate conditions; [batch construction](#batch-construction) owns padding and sampling.
+The user requested retaining movement/stop conflicts on 2026-10-06. Resolve `{MOVING, STOPPED}` using explicit, audited observation overrides before resampling, rather than a universal priority or permanent masking. The [two native conflicts](../../docs/datasets/road-waymo.md#movementstop-conflict-inspection-2026-10-06) have proposed corrections: `train_00383` tube `7fc2c418-f760-496a-927c-717d8df6ad06`, frames 81–129 → MOVING; `train_00425` tube `e1dce432-b655-4627-bea9-8f7e0a5f17be`, frames 1–10 → STOPPED. Final visual/identity confirmation and a versioned override artifact are **TBD**, so these candidates are not yet accepted replacement GT. Training readiness requires resolving all 59 native observations; they are not silently dropped. Any additional unresolved mapped-state conflict must also pass an explicit semantic audit before execution. Do not infer corrective GT from an automatic kinematic threshold.
 
-Predict a state at every grid position, with supervised loss only where applicable behaviour GT exists: `sum(label_mask * loss) / sum(label_mask)` over non-padding positions. A batch with no usable GT needs an explicit skip policy. Do not aggressively filter short tracks; determine minimal validity for the chosen features and later analyze performance by duration. [Temporal data details](#first-baseline-temporal-representation) remain open.
-
-### Model A versus Model B
-
-```text
-Model A: Ped MLP --\
-                   +--> concatenate --> classifier --> framewise state
-         Ego MLP --/
-
-Model B: Ped MLP --\
-                   +--> concatenate --> whole-track BiLSTM --> classifier
-         Ego MLP --/                                      --> framewise states
-```
-
-Use the same pedestrian encoder, ego encoder, input features and simple classifier design in both models. Only Model B adds bidirectional temporal processing. Choose compatible latent widths so this comparison does not require a more expressive head for one model; widths, capacity and training settings remain to be specified. The two models have independently trained parameters.
-
-The comparison tests per-timestep kinematic classification versus full-track learned temporal context. Velocity derivation can itself use multiple observations; use the same derivation in both models and disclose its temporal support rather than calling Model A strictly single-observation inference.
+LOKI uses original current-frame actions, without its paper's four-frame/0.8 s future-target shift. Its `intended_actions` column is read only as GT, never as an input. Timeline/boundary inspection remains useful for understanding semantic mismatch, particularly Stop/Wait2X; it does not silently redefine this projection after scores are seen.
 
 ## First-baseline temporal representation
 
-Track start/end, grid alignment, resampling tolerance and GT assignment at grid times remain open. Retain elapsed time through gaps; resampling must not invent behavior GT or conceal missing evidence.
+Use a **track-aligned 5 Hz grid**: `t_j = t_0 + j × 200 ms`, where `t_0` is the first native union observation and the last tick is at or before the native endpoint. A final fractional interval does not add an endpoint tick. Complete extent means retaining the union span rather than cropping to consecutive labeled/paired runs.
 
-Keep `has_3d`, `has_2d`, `has_rgb` and `has_behavior`, provenance and quality independently of the learned missing embedding. An image does not imply a usable crop or 2D observation. ROAD-Waymo's `has_3d_box` masks native paired geometry; four-state supervision separately requires an accepted projection. Retain internal unpaired positions and population metadata for later 2D-visible/3D-only evaluation.
+At each tick choose the timestamp-nearest recorded scene frame within **75 ms**, restricted to the native extent; ties choose the earlier frame. Read available modalities and GT at that selected frame. Do not independently search for a nearby labeled pedestrian observation. With no qualifying scene frame, keep the grid position as missing. No geometry or GT interpolation. Retain nominal grid time, actual selected source time and source frame ID separately.
 
-Verify feature units, axes, timestamps and ego/world transforms in both datasets. Ego-relative displacement is not pedestrian world velocity. Declare derivative support near gaps/endpoints and normalize only from permitted source training data. Partial-feature validity, missing ego and minimum usable observations need definition before implementation.
+ROAD-Waymo uses verified physical timestamps, not alternate frame indices. LOKI uses filename ordinal `suffix / 2` at documented nominal 5 Hz until physical timestamps are verified; its elapsed times and derivatives retain that qualification. [Native extent statistics](../../docs/datasets/README.md#outstanding-dataset-checks) predate this eligibility/grid/projection and are sizing evidence, not final sample counts.
+
+### Velocity derivation
+
+Derive both pedestrian and ego velocity from resampled canonical positions and **actual source timestamps** (nominal for LOKI). For a valid current position, use only immediately adjacent grid positions: both valid neighbors give the time-weighted centered derivative, one valid neighbor gives a one-sided derivative, and neither gives missing velocity. A missing current position has missing velocity. Do not bridge invalid positions, search farther neighbors or use observations outside the extent.
+
+With `h_minus = t - t_prev` and `h_plus = t_next - t`:
+
+```text
+v = h_plus / (h_minus + h_plus) * (p - p_prev) / h_minus
+  + h_minus / (h_minus + h_plus) * (p_next - p) / h_plus
+```
+
+On a uniform grid this is the centered secant. Positive, ordered source times are required. This identical preprocessing gives Model A short temporal support; it is frame-independent learned processing, not strictly single-observation inference. Model B additionally learns from the whole available track.
+
+## Coordinates, features and missing inputs
+
+First apply the verified **full native 3D-to-world transform**. Then express horizontal positions in one fixed frame per track: origin at the ego world position at the first timestep, +x along initial ego heading and +y left. Rotate world xy by negative initial ego yaw. Pedestrian/ego positions and world-motion velocities use this same frame; it does not rotate with the moving ego. Ego heading is `delta_ego_yaw = yaw(t) - yaw(t_0)`.
+
+Use native z/roll/pitch where required by the transform, then retain xy model features. Transform in float64, normalize, and cast model inputs to float32. Units are metres, seconds and radians after verification. A pedestrian position is usable only when the required geometry, pose and transforms are valid; ego pose validity covers position and heading. An invalid initial anchor excludes the track.
+
+The **14 input features**, in order, are:
+
+```text
+[ped_x, ped_y, ped_vx, ped_vy, ped_position_valid, ped_velocity_valid,
+ ego_x, ego_y, ego_vx, ego_vy, sin(delta_ego_yaw), cos(delta_ego_yaw),
+ ego_pose_valid, ego_velocity_valid]
+```
+
+Compute each position/velocity feature's mean and population standard deviation over its valid source-training timesteps only; use the same statistics for A/B, validation, test and target. Flags and sine/cosine are unscaled. Use mean 0/scale 1 if a feature has no valid training values and scale 1 for a zero/near-zero standard deviation; record the condition and numerical threshold in the effective config (threshold **TBD**). Fill missing numeric values with **0 after normalization**; missing ego heading has both sine/cosine zero. Validity flags preserve partial missingness. There are no learned missing vectors or separate position/velocity encoders.
+
+Keep padding, 2D/3D/RGB availability, GT and provenance masks separately as metadata. GT validity is not an input. RGB files do not imply an annotated box or a usable crop. Dataset-native `stationary`, behavior/intention fields, vehicle-state labels, destinations and other semantic annotations are excluded from input; velocity is derived by the common rule, not supplied by native semantic fields.
+
+## First diagnostic baseline
+
+```text
+Model A: 14 features → joint MLP → classifier → framewise states
+Model B: 14 features → joint MLP → whole-track BiLSTM → classifier → states
+```
+
+| Component | Agreed architecture |
+|---|---|
+| Joint encoder, A and B | Linear 14→64, ReLU, dropout 0.1, linear 64→64, ReLU |
+| BiLSTM, B only | One layer, input 64, hidden 32 **per direction**; concatenate outputs to 64 |
+| Classifier, A and B | Linear 64→32, ReLU, dropout 0.1, linear 32→4 |
+
+Each recurrent direction receives the complete 64-feature embedding; it is not split into two input halves. No extra recurrent layers, internal recurrent dropout or hidden-state carry between tracks. Record actual parameter counts at implementation. Future Transformers/token layouts are not fixed by E001.
 
 ## Batch construction
 
-Agreed initial policy (2026-10-05): **random batches with dynamic padding** for both baseline variants. Shuffle eligible whole tracks each training epoch and form minibatches without length bucketing. Each track remains a separate sample; pad only to the longest temporal extent in that minibatch. Retain internal gaps as sequence positions. Do not crop tracks, concatenate different tracks into one temporal sequence, or pad every batch to a fixed 128-position length.
+**Random batches with dynamic padding**, batch size **64 tracks**, for A and B. Shuffle eligible whole tracks each epoch with training seed 0, retain the incomplete final batch, and pad only to that batch's longest sequence. No length bucketing, cropping, fixed context limit or concatenation of independent tracks. Internal missing-input slots remain sequence positions.
 
-Padding must be excluded from recurrent processing as well as supervised loss; masking the loss alone is insufficient for the backward BiLSTM. Recurrent state must not carry between independent tracks. Internal missing-input positions remain inside each track's temporal context, with supervision controlled by the separate label mask defined above.
+Exclude padding from recurrent processing as well as loss: loss masking alone would let backward recurrence consume padded timesteps. Length-based recurrent packing is compatible with this rule; packing independent tracks into one context is not. Prediction is argmax over four states at every non-padding slot, including missing-input slots; missing-GT slots are unscored. Measure padding/exposure before reconsidering batching or a later model.
 
-Sampler seed, tracks per batch and incomplete-final-batch handling remain TBD. Record these settings and actual track/labeled-frame exposure for each run. Length bucketing or sequence packing can be reconsidered after measuring padding overhead; any change must preserve the declared sampling and loss-weighting policy. Future transformer token layout and batching are not settled by this choice. Native [LOKI](../../docs/datasets/loki.md#track-extents-and-gaps-2026-10-05) and [ROAD-Waymo](../../docs/datasets/road-waymo.md#track-extents-and-gaps-2026-10-05) extent statistics provide sizing evidence.
+## Loss and training
 
-## Tentative first-baseline projection
+For each track, average cross-entropy over its accepted GT frames; average those track losses over the actual minibatch. Thus each track has equal total loss weight regardless of duration/GT count. Apply no class weights, oversampling or label smoothing. Validation CE likewise averages per-track losses over the whole validation set, not equally over unequal minibatches.
 
-The 2026-10-02 baseline proposal uses LOKI's four states for this kinematic diagnostic. This is an experiment-specific mapping to audit manually, not an accepted equivalence of native ontologies or a replacement for later dataset-specific heads.
-
-| Concept in handoff | Observed ROAD-Waymo action strings to inspect | Candidate four-state output |
-|---|---|---|
-| Move | `Mov`, `MovAway`, `MovTow` | Moving (`MOVING`) |
-| Stop | `Stop` | Stopped (`STOPPED`) |
-| Wait-to-cross | `Wait2X` | Waiting to cross (`WAITING_TO_CROSS`) |
-| Crossing variants | `Xing`, `XingFmLft`, `XingFmRht` | Crossing the road (`CROSSING`) |
-
-Direction variants are candidate collapses, not yet validated. `PushObj` and any other action without a defensible mapping must not be forcibly assigned. ROAD actions can overlap: define treatment of unmapped co-labels and conflicts between mapped states before applying a single-state loss. No arbitrary class priority is accepted. Keep source-native action lists and mapping provenance; report excluded frames/tracks and class support.
-
-Inspect definitions, representative timelines and transition boundaries, especially Stop versus Wait2X and movement versus crossing. A missing or ambiguous projected label has no four-state supervision, even if a native action or a 3D box exists. Use the same accepted projection in within-dataset and cross-dataset comparisons; score LOKI's native current-frame actions without shifting them to future targets.
-
-## Unresolved settings and readiness
-
-These settings carry former Q14 (comparable inputs), Q8 (temporal/sampling protocol), Q19 (initial population), Q20 (model controls) and the kinematics/observability test in Q5.
-
-All applicable gates must pass before implementation/training: varied ROAD-Waymo visual association acceptance and reproducible mapping provenance; native semantic audit; LOKI population/cohort and scene grouping; verified common timing/coordinates/ego motion; then protocol freeze. Other datasets are not prerequisites for E001.
-
-| Setting | Current value / needed evidence |
+| Setting | Value |
 |---|---|
-| Releases, association revision, acquisition/checksums | Native notes record acquired artifacts; complete provenance TBD |
-| Semantic projection, co-label/conflict exclusions | Tentative above; manual definitions/timelines/boundaries audit TBD |
-| ROAD paired coverage; initial LOKI cohort | TBD; a visible-only cohort cannot test the full 3D-only population |
-| Grid, track extent, alignment and GT tolerance | TBD; 5 Hz is a candidate |
-| Feature/velocity semantics; partial validity; missing ego | TBD; verify units/axes/transforms and derivative support |
-| Splits, inspected-scene treatment, manifests | TBD; scene/identity overlap audit required |
-| Training batch construction | Agreed: random whole-track batches with dynamic padding; [details](#batch-construction). Sampler seed and final-batch handling TBD |
-| Widths/capacity, optimizer, training schedule, batch size | TBD; same encoders/head design, added recurrent capacity reported |
-| Primary/secondary metrics, aggregation/temporal thresholds | TBD; shared candidate metrics are not accepted settings |
-| Observation-condition strata and metadata validity | TBD; RGB availability, range, duration, occlusion and LiDAR sparsity |
-| Source-only model selection, seeds/repeated runs | TBD; freeze before cross-dataset scores |
-| Empty-GT skip policy, minimum usable observation | TBD; distinguish padding, missing input and missing label |
-| Label budgets | No low-shot E001 comparison specified; any extension must declare units/counts/access |
+| Optimizer | AdamW, learning rate 0.001, weight decay 0.0001, betas (0.9, 0.999), epsilon 1e-8 |
+| Schedule / precision | Constant learning rate; float32 |
+| Gradient clipping | Global gradient norm 1.0 |
+| Budget | At most 30 epochs; stop after 5 consecutive epochs without an improvement in the primary source-validation metric |
+| Checkpoint selection | Highest source-validation track-weighted macro-F1; ties use lower track-averaged validation CE, then earlier epoch |
+| Training seed | **0 only**, shared across the four planned training runs |
+
+Patience resets only for a strict primary-metric improvement; tie-breaking can change the selected checkpoint without resetting patience. Record exact RNG/determinism settings and versions when implemented. A run still improving at epoch 30 is budget-limited; do not silently extend it. Retain failed attempts, selected epoch and stopping reason. No seed sweep, repeated runs, bootstrap or confidence intervals are planned; training variability is not estimated.
+
+## Splits and access
+
+Apply the same **70/15/15 group split** separately to both datasets, using all available clips/scenarios. Keep every track and frame from a clip together. Merge verified shared-recording/temporally overlapping clips into one group where needed; native ID uniqueness or filenames alone do not establish physical independence.
+
+Sort group IDs, shuffle independently within each dataset with **split seed 0**, allocate `ceil(0.15 × N_groups)` to validation and the same number to test, and the remainder to training. Record the shuffle implementation/version and resulting manifests. Preserve ROAD and Waymo native split names as provenance rather than using them as interchangeable experiment splits. Freeze identical manifests for A/B.
+
+Before training, audit recording/identity overlap and eligible-track/class support in all splits. Report inadequate support rather than searching for a seed using validation/test scores. Normalization, early stopping and selection use only the source train/validation pools. Both corpora have been examined for research definition; the [strict zero-shot rules](../README.md#strict-zero-shot-access) describe training/selection access, not researcher unfamiliarity. Target-informed later changes are separate comparisons.
+
+## Evaluation
+
+### Primary and secondary metrics
+
+Primary: **track-weighted macro-F1**, with each track contributing total confusion-matrix weight 1 across its accepted GT frames. For track `i` with `n_i` accepted frames:
+
+```text
+C[a,b] = sum_i (1 / n_i) * sum_t_in_GT_i 1[y_it = a and prediction_it = b]
+macro-F1 = mean of the four class F1 scores derived from C
+```
+
+The primary metric always averages over the four declared classes; zero F1 denominators contribute 0, with absent support reported. This is F1 from the aggregated weighted confusion matrix, not mean per-track F1. Use the same definition for source-validation selection and final evaluations.
+
+Also report weighted and raw confusion matrices, per-class precision/recall/F1, pooled-frame macro-F1, support-weighted F1 and accuracy, and mean/median per-track accuracy. Include clip/group/track/accepted-frame counts, class support, eligibility/GT exclusions and compute/exposure. **Point estimates only**; no bootstrap/CIs, and one-seed variability remains unmeasured. No segment/event metric is part of this comparison.
+
+### Observation-condition strata
+
+Report each axis separately, not every cross-product. Track strata use the full native union extent and resampled context; frame strata score accepted-GT frames only. Within a stratum, reweight each represented track by `1 / n_i,stratum`, where that count includes only its accepted GT frames in the stratum.
+
+| Level / axis | Bins or definition |
+|---|---|
+| Track duration | [0,1), [1,5), [5,10), [10,15), [15,∞) seconds; LOKI nominal |
+| Track usable-position coverage | Valid pedestrian-position slots / all non-padding context slots: [0,0.25), [0.25,0.75), [0.75,1] |
+| Track accepted GT count | 1; 2–4; 5–19; 20+ frames |
+| Track annotated 2D availability | Never; partial; complete over all context slots |
+| Track longest internal missing-position run | None; >0 to ≤1 s; >1 s. Count missing slots × 0.2 s between first/last valid position only |
+| Frame position availability | Valid / missing pedestrian position |
+| Frame velocity availability | Valid / missing pedestrian velocity |
+| Frame annotated 2D availability | Valid / missing box, with native provenance |
+| Frame horizontal range | `norm(ped_xy - ego_xy)`: [0,10), [10,20), [20,40), [40,∞) m; unknown without valid pedestrian/ego positions |
+| Frame GT transition proximity | Within 0.4 s of the nominal-time midpoint between adjacent grid slots with accepted, different labels; steady farther away. GT gaps break the analysis; do not bridge gaps when assigning proximity |
+
+Report supporting tracks/frames and represented GT classes in every slice. Empty slices have no score. In slice reports, class F1 without positive GT support is unavailable and macro-F1 averages only supported classes, with that class set shown explicitly; this differs from the fixed four-class primary metric. Transition analysis uses continuously labeled runs; singleton runs without a boundary have unknown proximity.
+
+Annotated-box availability is not causal visibility or occlusion. RGB availability metadata is retained, but no RGB-quality cohort is inferred from 2D boxes. Occlusion and LiDAR sparsity remain unknown until verified; do not proxy them by range or missing boxes.
+
+## Verification and unresolved readiness
+
+Protocol choices above are settled for E001; evidence below still gates execution. Other datasets are not prerequisites.
+
+| Gate / setting | Required evidence or remaining value |
+|---|---|
+| Releases / acquisition / associations | Native notes preserve acquired paths/counts; complete release revisions/checksums and versioned reproducible mapping/extension audit **TBD** |
+| Native identity/context / label conflicts | Reproduce [ROAD native-ID extension counts](../../docs/datasets/road-waymo.md#native-identity-and-context-audit-2026-10-06), inspect continuity/semantic disagreements/varied associations, confirm the proposed movement/stop overrides and declare visual acceptance **TBD** |
+| Geometry and time | Verify units/axes, full poses/calibration/world transforms, especially LOKI; physical LOKI timestamps **unknown** |
+| Final population / manifests | Apply union extent, 5 Hz selection, accepted projection and eligibility; count exclusions/classes/strata and verify clip/recording independence **TBD** |
+| Normalization guard | Numerical near-zero scale threshold **TBD**; source-training statistics and guarded columns recorded before runs |
+| Implementation / environment | Code/config/commands **TBD**; prepare CUDA PyTorch in remote `pedestrian-behavior` before authorized training |
+| Low-shot / later ablations | None specified in E001; extensions require explicit labels, access and justification |
+
+At implementation, check: a stationary pedestrian stays stationary under ego translation/turning; canonical features are invariant to global translation/yaw rotation; derivative endpoints/unequal times/gaps behave as declared; duplicates and input/GT masks stay distinct; normalization uses source training only; padding does not change valid predictions; loss and primary F1 give equal total track weight. Preserve unknowns and failures rather than manufacturing geometry or GT. Run the [required validation](../../AGENTS.md#validation) and record actual acceptance evidence before training.
 
 ## Variants and runs
 
-Each trained variant may evaluate within its source and on the other dataset: eight evaluation cells, not necessarily eight training runs. Add one row per actual seed/run or failed attempt; retain negative results. No ablation or seed has been selected.
+Add rows for actual runs or failed attempts; keep negative transfer. No extra ablation is selected.
 
-| Variant | Training source | Evaluations | Ablation / seed | Status | Failure / result |
+| Variant | Training source | Held-out test evaluations | Ablation / seed | Status | Failure / result |
 |---|---|---|---|---|---|
-| A: framewise MLP | ROAD-Waymo | ROAD-Waymo; LOKI | Base / TBD | Planned | Not run |
-| B: whole-track BiLSTM | ROAD-Waymo | ROAD-Waymo; LOKI | Temporal context / TBD | Planned | Not run |
-| A: framewise MLP | LOKI | LOKI; ROAD-Waymo | Base / TBD | Planned | Not run |
-| B: whole-track BiLSTM | LOKI | LOKI; ROAD-Waymo | Temporal context / TBD | Planned | Not run |
+| A: framewise MLP | ROAD-Waymo | ROAD-Waymo; LOKI | Base / 0 | Planned | Not run |
+| B: whole-track BiLSTM | ROAD-Waymo | ROAD-Waymo; LOKI | Temporal context / 0 | Planned | Not run |
+| A: framewise MLP | LOKI | LOKI; ROAD-Waymo | Base / 0 | Planned | Not run |
+| B: whole-track BiLSTM | LOKI | LOKI; ROAD-Waymo | Temporal context / 0 | Planned | Not run |
 
 ## Run provenance
 
-- Comparison-specific effective configs: future files beside this record; none yet.
-- Commands, code revision/uncommitted diff, dependencies and environment versions: TBD. Project environment: `pedestrian-behavior`, Python 3.11; hardware/host and start/end dates recorded when run.
-- Split/subset/release IDs or checksums, selected checkpoint and source-validation evidence: TBD.
-- Generated manifests, logs, checkpoints, predictions and plots: intended `outputs/experiments/E001/` (ignored), or documented external storage; no run artifacts yet.
-- Record exposure, runtime/compute/parameters, cohort/class denominators, variability, association/data failures and protocol deviations for every run.
+- Comparison-specific effective configs: future files beside this record; none yet. Commands, code revision/uncommitted diff, dependency versions and actual environment: **TBD**.
+- Intended compute: RTX 4080 laptop on SSH host `aalto`; Conda `pedestrian-behavior`, Python 3.11. The 2026-10-06 check found no PyTorch in that remote environment; no GPU training/throughput benchmark has run.
+- Generated manifests, normalization, logs, checkpoints, predictions, metrics and plots: ignored `outputs/experiments/E001/` or documented external storage; no training artifacts yet.
+- Record source/release/checksum and split IDs, all seeds/RNG settings, selected checkpoint/validation evidence, host/hardware without credentials, start/end dates, exposure/runtime/parameters, denominators, failures and deviations using the [shared recording rules](../README.md#comparison-records-and-artifacts).
 
 ## Conclusions, limitations and next step
 
-No measured conclusion. Domain, ontology, sensors, geography, scene structure and class frequencies confound transfer asymmetry. The first comparison does not isolate visibility selection or establish 3D-only coverage. Next: complete the readiness gates and predeclare the applicable settings. Later ablations require an observed gap.
+No measured conclusion. Poor within-dataset performance can reflect limited evidence, annotation ambiguity or data/model/protocol failure, without proving sensor insufficiency. A B gain supports learned temporal context under these features; strong within-dataset results with poor transfer suggest mismatch. Geography, hardware, scene structure, semantics, class frequencies and annotation selection all change, so directional scores cannot isolate selection policy or establish causality/novelty. Study difficult conditions and Stopped/Waiting errors even after strong aggregate scores.
+
+Next: finish native verification and final population/manifests, then implement/run the declared comparison when authorized. Inspect failures before adding modalities, sources or architecture. All broader methods and ontology/head choices remain provisional.

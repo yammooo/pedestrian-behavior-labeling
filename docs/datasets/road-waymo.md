@@ -2,17 +2,19 @@
 
 Status: Acquired on aalto; ROAD-authoritative same-frame 3D index inspected and rechecked
 
-Last updated: 2026-10-05
+Last updated: 2026-10-06
 
 ## Candidate role
 
-Initial real behaviour dataset with verified partial multimodal correspondence in the acquired train/validation subset. The proposed kinematic diagnostic uses it as both source and target in separate comparisons with LOKI. Neither linkage nor similar class names establishes LOKI compatibility; the tentative four-state projection requires manual audit. [Gate 1](README.md#outstanding-dataset-checks) owns remaining acceptance checks.
+Initial real behaviour dataset with verified partial multimodal correspondence in the acquired train/validation subset. [E001](../../experiments/E001-kinematic-transfer/README.md) uses it as source and target in separate comparisons with LOKI, with an accepted experiment-specific projection. Linkage and similar class names do not establish universal semantic equivalence. [Gate 1](README.md#outstanding-dataset-checks) owns remaining native-data acceptance checks.
 
 ## Documented annotation form
 
 The [official repository](https://github.com/salmank255/Road-waymo-dataset) describes frontal videos with agent, action, location, frame-box and tube annotations. The acquired `road_waymo_trainval_v1.0.json` and exported vocabulary preserve `tube_uid`, native class-ID lists and complete ROAD box records. Box coordinates are normalized `[x1,y1,x2,y2]`; original ROAD geometry is retained even when it differs from Waymo's camera box.
 
-Observed pedestrian action strings are `Mov`, `MovAway`, `MovTow`, `PushObj`, `Stop`, `Wait2X`, `Xing`, `XingFmLft`, and `XingFmRht`. Decode original IDs using `road_label_definitions.json` (the exporter uses `all_*_labels`). Action `Xing` and location `xing` are distinct. Definitions, overlap, boundaries and correspondence to LOKI remain to be audited; no cross-dataset mapping or loss is accepted. Frame-level AV actions remain in the original ROAD JSON and are not pedestrian targets.
+Observed pedestrian action strings are `Mov`, `MovAway`, `MovTow`, `PushObj`, `Stop`, `Wait2X`, `Xing`, `XingFmLft`, and `XingFmRht`. Decode original IDs using `road_label_definitions.json` (the exporter uses `all_*_labels`). Action `Xing` and location `xing` are distinct. Definitions, overlaps and boundaries remain native evidence; [E001](../../experiments/E001-kinematic-transfer/README.md#accepted-four-state-projection) owns its accepted projection/conflict policy and loss. Frame-level AV actions remain in the original ROAD JSON and are not pedestrian targets.
+
+The [ROAD paper, Table 12 and §3.1](https://arxiv.org/pdf/2102.11585#page=19) defines native `Mov` as travel across the lane/traffic direction, rather than all locomotion. `MovTow`/`MovAway` describe an agent's movement toward/away from the AV; `Stop` describes a stationary agent considered ready to resume motion. `Wait2X` adds pavement position and road-facing orientation to stationary behavior. No numeric speed cutoff is supplied in those definitions. [ROAD-Waymo §III](https://arxiv.org/html/2411.01683v3#S3) states that it carries forward ROAD's annotation strategy. E001 deliberately collapses direction-specific movement labels into a broader output MOVING; do not confuse that output with native `Mov`, or agent actions with AV-action labels. Video/ego-relative image motion alone does not establish pedestrian world motion.
 
 The [ROAD-Waymo paper, v3](https://arxiv.org/abs/2411.01683v3) describes action/location/event understanding and compatibility with UK ROAD for real-country domain adaptation (ROAD++). This is paper-level motivation, not evidence that acquired 3D associations or ROAD/LOKI taxonomies are accepted. Existing population figures below remain explicitly sourced to paper v1 or the inspected release.
 
@@ -50,7 +52,7 @@ native lidar_box(scene, timestamp, laser_object_id) -> same-frame geometry
 
 All exported pedestrian timestamps use `timestamp_basis=automatic_verified`. Other classes in the general box audit include human-confirmed alignment; that caveat does not apply to this pedestrian export. The join uses native IDs and published associations, not nearest-box or IoU assignment. Missing identities and boxes remain missing; no interpolation or inferred association supplies supervision.
 
-[Accepted policy](../archive/2026-10-02-road-waymo-linkage.md): ROAD defines the pedestrian class. Filter/train using `merged_agent_label=Ped`, not `waymo_3d_type`. Apply `has_3d_box` as the validity mask for 3D supervision; a nonempty `official_laser_object_id` alone is insufficient. CSV booleans are strings: compare to `"True"`, not Python truthiness of the field.
+[Accepted policy](../archive/2026-10-02-road-waymo-linkage.md): ROAD defines the pedestrian class. Filter/train using `merged_agent_label=Ped`, not `waymo_3d_type`. Apply `has_3d_box` as the validity mask for exported same-frame 3D geometry; a nonempty `official_laser_object_id` alone is insufficient. E001's additional native-ID observations need a separate validity/provenance mask and do not change that CSV field. CSV booleans are strings: compare to `"True"`, not Python truthiness of the field.
 
 Preserve `road_annotation_json`, original label IDs, native `waymo_3d_type`/`waymo_3d_label`, `semantic_disagreement` and all original geometry. **419 paired rows across 15 camera tracks in 10 clips** have Waymo camera type Pedestrian and associated LiDAR type Cyclist. ROAD's class takes precedence, but these boxes are not resized to person-only geometry. Whether each disagreement reflects a labeling convention or an association error needs visual review.
 
@@ -73,7 +75,7 @@ The export and this inspection's independent full-CSV recheck agree:
 | Clips with ROAD pedestrian labels | 562 |
 | Clips with paired pedestrian observations | 512 |
 
-There are **712,630 distinct frame/object observations**, of which **426,491** are paired. Ten extra annotation rows repeat an observation; the recheck found identical normalized boxes and action/location labels for those repeats. Keep raw rows intact; define duplicate handling explicitly when producing one sample per track/time. Annotation-row identity is `(road_clip_id, road_frame_1based, road_annotation_id)`; pedestrian identity is clip-scoped `road_tube_uid`, not the annotation ID or an unscoped LiDAR ID.
+There are **712,630 distinct frame/object observations**, of which **426,491** are paired. Ten extra annotation rows repeat an observation; the recheck found identical normalized boxes and action/location labels for those repeats. Keep raw rows intact; E001 deduplicates identical observations while retaining all annotation IDs and rejects conflicting repeats. Annotation-row identity is `(road_clip_id, road_frame_1based, road_annotation_id)`; pedestrian identity is clip-scoped `road_tube_uid`, not the annotation ID or an unscoped LiDAR ID.
 
 | ROAD split | All pedestrian rows | Paired rows |
 |---|---:|---:|
@@ -117,11 +119,83 @@ Full annotation-only index scan, with identity `(road_clip_id, road_tube_uid)`: 
 
 3,709 tracks (38.74%) have internal empty ROAD frames, accounting for 7.92% of all first-to-last frame positions. The longest empty run has 181 native frame positions; its adjacent observed boundaries are 18.199996 s apart. Paired 3D is present at 55.11% of full-span positions across all tracks, or 78.84% among tracks with any 3D. These denominators include empty ROAD frames, unlike paired coverage over labeled rows. No missing observation or behavior target was filled.
 
-Median timestamp interval per ROAD index step is 0.099993 s. However, 110 observed intervals exceed 0.15 s per index step (maximum 0.400036 s); causes remain unverified. Do not assume every ROAD index step is exactly 0.1 s or blindly take alternate frames to produce 5 Hz. Conservative capacity `ceil(duration × 5) + 1` has median **33**, P95 **100**, maximum **101** positions. Small timestamp deviations can add a capacity position; actual resampling/grid/tolerance are unset.
+Median timestamp interval per ROAD index step is 0.099993 s. However, 110 observed intervals exceed 0.15 s per index step (maximum 0.400036 s); causes remain unverified. Do not assume every ROAD index step is exactly 0.1 s or blindly take alternate frames to produce 5 Hz. Conservative capacity `ceil(duration × 5) + 1` has median **33**, P95 **100**, maximum **101** positions. Small timestamp deviations can add a capacity position. This is a capacity estimate, distinct from [E001's selected-frame grid](../../experiments/E001-kinematic-transfer/README.md#first-baseline-temporal-representation).
 
 Whole tracks containing `Wait2X` have median 13.70 s, longer than the overall median; action cohorts overlap and are not action-episode durations. Durations are bounded by downloaded train/validation clips; no test supervision, additional native LiDAR-only tracks or ID stitching is included.
 
-Local report: `outputs/inspection/track-statistics/README.md`; `road-waymo/tracks.csv` records every pedestrian, and `road-waymo/summary.json` includes quantiles, split/cohort/action window coverage, masks, source CSV checksum and timing outliers. Remote results: `/home/user20/road-waymo-gallery-20261005/track-statistics-road-waymo-final/`. [Reproduction commands](../../README.md#inspect-track-lengths-and-gaps). Full context at 5 Hz fits the inspected population in 101 positions under the stated rule; no architecture/window policy is selected.
+Local report: `outputs/inspection/track-statistics/README.md`; `road-waymo/tracks.csv` records every pedestrian, and `road-waymo/summary.json` includes quantiles, split/cohort/action window coverage, masks, source CSV checksum and timing outliers. Remote results: `/home/user20/road-waymo-gallery-20261005/track-statistics-road-waymo-final/`. [Reproduction commands](../../README.md#inspect-track-lengths-and-gaps). The 101-position capacity applies to ROAD-only extents under that rule, not the later native-ID union or final eligible 5 Hz samples.
+
+## Native identity and context audit (2026-10-06)
+
+Read-only scans on `aalto` used the acquired CSV/manifest and their native `lidar_box` and FRONT `camera_box` components in place. Counts below precede E001 resampling, pose-validity and accepted-label filtering; they are not final eligible populations. Versioned reproduction of these scans remains **TBD**.
+
+| Identity / grouping check | Observed result |
+|---|---:|
+| ROAD tubes with exactly one official LiDAR ID | 6,809 |
+| ROAD tubes without an official LiDAR ID | 2,764 |
+| Tubes with multiple official LiDAR IDs | 0 |
+| Scene-scoped LiDAR IDs shared by different ROAD tubes | 0 |
+| Pedestrian clips / native segments | 562 / 562 |
+| Manifest clips / unique Waymo segments | 798 / 798 |
+
+No repeated leading segment-name prefix was found. These checks support scene-scoped joins; they do not prove independent recordings, geography or different physical people. The acquired ROAD train/validation versus Waymo training split discrepancy above remains provenance, not a justification for mixing native split names.
+
+| Native context check | Observed result |
+|---|---:|
+| LiDAR-box files scanned for linked scenes / missing files | 516 / 0 |
+| ROAD tubes with any native 3D observation on the unique linked ID | 6,634 |
+| Tubes gaining 3D only outside the export's same-frame pairs | 94 |
+| Tubes with 3D before ROAD start / after ROAD end / either | 2,123 / 4,589 / 5,326 |
+| Additional native 3D observation timestamps beyond export pairs | 495,830 |
+| Export pairs absent from native 3D | 0 |
+| FRONT camera-box files scanned | 562 |
+| ROAD tubes found by native FRONT ID | 9,570 of 9,573 |
+| Tubes with FRONT observations before ROAD start / after ROAD end / either | 120 / 154 / 253 |
+| Additional FRONT observation timestamps absent from ROAD | 8,913 |
+
+All 495,830 additional native 3D timestamps lack a corresponding ROAD observation; they supply context without behavior GT. Counts for before/after overlap. The ROAD+3D union's maximum extent is **19.824513 s**; this scan excludes the additional FRONT extension, so it is not the final all-modality maximum. The three ROAD IDs absent from native FRONT are retained as original ROAD evidence, not replaced by inferred camera identities.
+
+The export contains **6,521** tracks with at least one same-frame 3D box and at least one native action (before the accepted projection/grid). In this candidate population, **16** have one native behavior observation, **151** have at most five, and **27** have one same-frame 3D observation. This does not require input and label to coincide or establish post-resampling eligibility.
+
+### Native action overlaps
+
+An independent full-CSV recheck on 2026-10-06 counted action sets per `(road_clip_id, road_tube_uid, frame_timestamp_micros)`, deduplicating repeated observations and checking identical action sets. Of **712,630** observations, **2,034** have no action, **703,087** have one, **7,466** have two and **43** have three. Thus **7,509 (1.05%)** have simultaneous action labels; this is frame-level overlap, not merely a track changing behavior over time. The scan read `pedestrians.csv.gz` in the acquired index with remote Conda `pedestrian-behavior` and modified no source data.
+
+On 712,630 deduplicated ROAD observations, mapping the eight motion/stop/wait/crossing strings into four states **before applying E001's crossing priority** yields 708,439 unique mapped states, 2,147 mapped-state conflicts, 10 unmapped-only observations and 2,034 with no native action. Of the unique-state observations, 5,269 also carry an unmapped co-label. These are native projection diagnostics, not final accepted-GT counts.
+
+| Exact simultaneous action set | Observations | Tracks |
+|---|---:|---:|
+| `MovTow + PushObj` | 2,168 | 26 |
+| `MovAway + Xing` | 1,222 | 21 |
+| `MovAway + PushObj` | 733 | 13 |
+| `PushObj + Xing` | 699 | 14 |
+| `Mov + PushObj` | 681 | 12 |
+| `PushObj + XingFmLft` | 438 | 5 |
+| `MovTow + Xing` | 427 | 13 |
+| `PushObj + Wait2X` | 219 | 3 |
+| `PushObj + Stop` | 210 | 3 |
+| `Mov + XingFmRht` | 152 | 2 |
+| `Mov + XingFmLft` | 139 | 1 |
+| `PushObj + XingFmRht` | 121 | 2 |
+| `Mov + Xing` | 105 | 3 |
+| `MovTow + Stop` | 49 | 1 |
+| `Mov + MovTow` | 47 | 1 |
+| `Mov + MovAway` | 46 | 1 |
+| `MovTow + PushObj + Xing` | 43 | 1 |
+| `MovAway + Stop` | 10 | 1 |
+
+This table is exhaustive for multi-action sets in the acquired train/validation export. Observation rows are disjoint; tracks may occur in multiple rows. Projected conflicts are **2,088 MOVING+CROSSING** and **59 MOVING+STOPPED**. No Stop+Wait2X or waiting+crossing set was observed in this subset. E001 keeps crossing for the former and now requires audited corrections for the latter rather than permanent exclusion; native action lists remain unchanged.
+
+### Movement/stop conflict inspection (2026-10-06)
+
+Both conflict tracks have same-frame native 3D boxes throughout and native type Pedestrian, without a semantic-disagreement flag. A read-only scan transformed box centers with `[VehiclePoseComponent].world_from_vehicle.transform`, then measured horizontal endpoint displacement over verified timestamps. Measurements use exported same-frame boxes, not independently reconstructed sensor trajectories.
+
+| Clip / native tube ID | ROAD frames / action set | Duration s | World displacement m | Net speed m/s | Ego displacement m | Proposed correction |
+|---|---|---:|---:|---:|---:|---|
+| `train_00383` / `7fc2c418-f760-496a-927c-717d8df6ad06` | 81–129 / `MovTow + Stop` (49 observations) | 4.799600 | 6.208154 | 1.293473 | 28.653447 | MOVING |
+| `train_00425` / `e1dce432-b655-4627-bea9-8f7e0a5f17be` | 1–10 / `MovAway + Stop` (10 observations) | 0.899799 | 0.073747 | 0.081960 | 5.730265 | STOPPED |
+
+Median successive-box horizontal speed is 1.299458 and 0.081960 m/s respectively. The first conflict spans the whole observed 4.8 s track, rather than a one-frame transition. Three native FRONT frames per track were inspected (81/105/129 and 1/5/10); dark images, small boxes, occlusion and endpoint truncation limit independent visual confirmation. These measurements support different corrections and argue against a universal movement/stop priority. They do not prove annotation error, source interpolation policy or exact per-frame physical speed. Full visual/identity confirmation and versioned correction provenance remain **TBD** before these become accepted GT overrides. Do not use an automatic input-speed threshold to redefine benchmark GT.
 
 ## RGB + LiDAR BEV inspection gallery (2026-10-02)
 

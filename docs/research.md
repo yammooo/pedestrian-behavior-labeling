@@ -1,6 +1,6 @@
 # Research definition and direction
 
-Status: research-definition stage. Updated 2026-10-05 from the latest research-question handoff; empirical answers, ontology mappings and final method remain open.
+Status: research-definition stage. Updated 2026-10-06: E001 protocol agreed; empirical answers, broader ontology/head choices and final method remain open.
 
 ## Task and scope
 
@@ -10,7 +10,7 @@ The intended artifact is a general offline pedestrian-behavior labeler for auton
 
 The study is framed under a concrete contract: **RGB + 2D pedestrian tracks + LiDAR/3D point clouds + 3D pedestrian tracks + ego motion + timestamps/calibration**. [Dataset conventions](datasets/README.md) distinguish this contract from per-observation availability and heterogeneous source supervision; exact alignment, fields and usable-observation rules still need verification. Missing RGB or GT never implies a behavior class. Synthetic private state and behavior labels are supervision, not deployable observations.
 
-The current target ontology is motivated by [LOKI](datasets/loki.md): Moving, Stopped, Waiting to cross and Crossing. [E001](../experiments/E001-kinematic-transfer/README.md) uses a tentative four-state projection requiring ROAD-Waymo semantic acceptance. The longer-term endpoint may be a transferable shared representation with lightweight dataset-specific behavior heads; no universal hard-coded ontology is required. Native semantics stay in dataset notes.
+The current target ontology is motivated by [LOKI](datasets/loki.md): Moving, Stopped, Waiting to cross and Crossing. [E001's four-state projection](../experiments/E001-kinematic-transfer/README.md#accepted-four-state-projection) is accepted for that diagnostic, with native semantic differences retained. The longer-term endpoint may be a transferable shared representation with lightweight dataset-specific behavior heads; no universal hard-coded ontology is required. Native semantics stay in dataset notes.
 
 ## Research questions
 
@@ -18,7 +18,7 @@ The current target ontology is motivated by [LOKI](datasets/loki.md): Moving, St
 
 RQ1 characterizes empirical recoverability, rather than asking whether the data is sufficient. Moving/Stopped may be strongly observable from kinematics; Stopped/Waiting may need road geometry, orientation, barriers, traffic context or the complete future trajectory. Distant, occluded, short or 3D-only observations may make labels weakly identifiable. Poor classification alone cannot prove sensor insufficiency or intrinsic ambiguity: model, protocol and annotation failures remain alternatives.
 
-Start with [E001](../experiments/E001-kinematic-transfer/README.md): pedestrian/ego encoders → classifier versus the same encoders → BiLSTM → the same classifier design. Progressively test scene/LiDAR evidence and RGB/context after inspecting failures. Analyze class-wise performance and observation conditions, not just one global score. A later comparison with human judgments from exactly the same evidence may help distinguish model limitations from ambiguity; it needs a predeclared protocol and is not conclusive by itself. Future observations are limited to the complete observed track, not unknown future behavior.
+Start with [E001](../experiments/E001-kinematic-transfer/README.md): joint kinematics/ego MLP → classifier versus the same encoder design → whole-track BiLSTM → the same classifier design. Progressively test scene/LiDAR evidence and RGB/context after inspecting failures. Analyze class-wise performance and observation conditions, not just one global score. A later comparison with human judgments from exactly the same evidence may help distinguish model limitations from ambiguity; it needs a predeclared protocol and is not conclusive by itself. Future observations are limited to the complete observed track, not unknown future behavior.
 
 **RQ2: Can heterogeneous partial supervision across datasets be used to learn representations that improve cross-dataset pedestrian behavior labeling compared with single-dataset end-task training?**
 
@@ -33,11 +33,11 @@ Neither transfer direction is permanently primary (former Q18). E001 compares RO
 ## Priorities and gates
 
 1. Complete varied visual acceptance and reproducibility of the acquired ROAD-Waymo/Waymo index. Structural joins and partial 3D coverage are verified; training acceptance remains open. Failed robust linkage requires reconsidering supervision, without silently substituting another source.
-2. Audit native semantics and the tentative four-state projection, and characterize LOKI population/identity/gaps/cohorts. [Dataset notes](datasets/README.md) own evidence and remaining checks.
-3. Freeze minimal comparable kinematics/ego features, missingness, temporal grid, cohort/split and model-selection rules for [E001](../experiments/E001-kinematic-transfer/README.md). A visibility-comparable subset remains under discussion and cannot test the full 3D-only problem.
+2. Verify native identity/context extensions, physical timing and common world transforms. [Dataset notes](datasets/README.md) own evidence, native semantic limitations and remaining checks.
+3. Materialize and audit E001's final eligible populations and scene-grouped manifests under its agreed features, missingness, 5 Hz grid, projection and selection rules. Include eligible 3D-only tracks; do not substitute a visible-only population. Protocol choices belong in [E001](../experiments/E001-kinematic-transfer/README.md).
 4. Once implementation is authorized and gates pass, run the small framewise MLP versus whole-track BiLSTM diagnostic in both directions. Inspect failures before selecting an extension.
 
-The current handoff updates framing, not implementation readiness. Existing readers/galleries remain native inspection tools; substantial models and rigid abstractions wait for feasibility/protocol gates and implementation authorization.
+The protocol is defined, but native verification still gates execution. Existing readers/galleries remain inspection tools; substantial models wait for the remaining feasibility gates and implementation authorization.
 
 ## Later hypotheses and unresolved direction
 
@@ -68,7 +68,7 @@ The traineeship ends **17 December 2026** (`2026-12-17`). Windows are conditiona
 
 | Window | Work / gate |
 |---|---|
-| 1–9 October | Visual/reproduction acceptance; four-state audit; common coordinates, ego/velocity, timing/cohorts; freeze E001 protocol |
+| 1–9 October | E001 protocol agreed 6 October; finish visual/reproduction acceptance, native timing/transforms and final population/split checks |
 | 12–23 October | After authorization, minimal representation and MLP/BiLSTM; both within-dataset and transfer directions; inspect failures |
 | 26 October–13 November | If justified, scene/missing-visual methods, factorization or one complementary source; no requirement to add all |
 | 16–27 November | Conditional missing-RGB, sensor/alignment, source and negative-transfer comparisons; IDD-PeD optional |

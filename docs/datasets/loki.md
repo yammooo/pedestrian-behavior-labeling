@@ -1,11 +1,11 @@
 # LOKI — Long Term and Key Intentions
 
 Status: Paper and official dataset page verified; local release layout and first action counts inspected
-Last updated: 2026-10-05
+Last updated: 2026-10-06
 
 ## Role and scope
 
-3D-first dataset in the first kinematic diagnostic, evaluated both within-dataset and in both transfer directions with ROAD-Waymo. LOKI supplies the tentative four-state output ontology; its initial visibility-comparable cohort and the eventual primary transfer direction remain open. LOKI-source training is separate from ROAD-Waymo → LOKI strict zero-shot, which excludes LOKI from training/model selection. Existing qualitative inspection is disclosed below; its final split treatment remains open. See [evaluation access rules](../../experiments/README.md).
+3D-first dataset in [E001](../../experiments/E001-kinematic-transfer/README.md), evaluated within-dataset and in both transfer directions with ROAD-Waymo. E001 accepts an experiment-specific four-state projection and includes eligible 3D-only tracks. Neither direction is permanently primary. LOKI-source training is separate from ROAD-Waymo → LOKI strict zero-shot, which excludes LOKI from training/model selection. See [evaluation access rules](../../experiments/README.md).
 
 Recorded from an instrumented Honda SHUTTLE in the Tokyo area: 644 scenarios (mean 12.6 s), more than 28,000 agents across eight traffic classes, and 886,000 linked 2D/3D boxes across all classes. These are **not pedestrian-track counts**. [Paper, §3](https://arxiv.org/pdf/2108.08236); [official dataset page](https://usa.honda-ri.com/loki).
 
@@ -96,17 +96,23 @@ Annotation-only scan of all 644 scenarios: identity remains `(scenario, track_id
 
 Conservative 5 Hz capacity `ceil(duration × 5) + 1` has median **23**, P95 **96**, maximum **102** positions across all tracks. Whole tracks containing crossing have median 11.0 s; waiting tracks 7.4 s. These overlapping action cohorts measure whole-track context, not action episodes. Durations are clip bounded; IDs are not stitched.
 
-Local report: `outputs/inspection/track-statistics/README.md`; `loki/tracks.csv` contains every pedestrian, and `loki/summary.json` contains quantiles, cohort/action window coverage, masks and source annotation digest. The scan reconciles the population and 391,569 3D rows above. [Reproduction commands](../../README.md#inspect-track-lengths-and-gaps). Window/resampling policy remains provisional; this scan does not settle identity fragmentation, behavior episodes or physical timing.
+Local report: `outputs/inspection/track-statistics/README.md`; `loki/tracks.csv` contains every pedestrian, and `loki/summary.json` contains quantiles, cohort/action window coverage, masks and source annotation digest. The scan reconciles the population and 391,569 3D rows above. [Reproduction commands](../../README.md#inspect-track-lengths-and-gaps). These are native statistics preceding E001's agreed grid/eligibility; they do not settle identity fragmentation, behavior episodes or physical timing.
+
+## Identity and short-track audit (2026-10-06)
+
+The read-only protocol scan found **13,365 distinct native ID strings**, with no string reused across scenarios. Continue using `(scenario, track_id)`; string uniqueness does not prove different physical people or absence of fragmentation. The **12,364** tracks with native 3D/action GT occupy **403,813** first-to-last 2D/3D-union positions at nominal 5 Hz, including gaps and 2D extensions. This count is context positions, not 3D observations or accepted training frames.
+
+Of these tracks, **170** have one native 3D/behavior observation and **1,300** have at most five. Short tracks are retained by E001 if they pass its [post-resampling eligibility](../../experiments/E001-kinematic-transfer/README.md#samples-and-eligibility); single positions cannot yield a velocity under the declared derivative rule. Final eligibility and pose-valid counts are **TBD**. These scans used local native annotations and the existing extent report; a versioned audit and complete release provenance remain pending.
 
 ## Prior qualitative inspection
 
-[Seven selected tracks](../archive/2026-09-28-loki-inspection.md#selected-clip-observations-2026-09-28) show weak evidence and Stopped/Waiting ambiguity. They are informative examples, not representative statistics or GT corrections; declare their split treatment before evaluation.
+[Seven selected tracks](../archive/2026-09-28-loki-inspection.md#selected-clip-observations-2026-09-28) show weak evidence and Stopped/Waiting ambiguity. They are informative examples, not representative statistics or GT corrections.
 
 ## Access and remaining checks
 
 Non-commercial use requires a request using a university email, per the [official page](https://usa.honda-ri.com/loki). The first inspection does not yet establish independent episode counts/durations, transitions, timing units, missing pedestrian labels, calibration, or viable scene-level splits.
 
-The [population gate](README.md#outstanding-dataset-checks) must extend the population count with label/scene distributions, track gaps/durations, 2D+3D versus 3D-only/2D-only coverage, missing behaviour GT, and verified distance/point sparsity. Define RGB-visible and 3D-only cohorts at frame and/or track level before scoring; missing 2D boxes do not establish a single visibility cause. [E001](../../experiments/E001-kinematic-transfer/README.md#tentative-first-baseline-projection) owns the proposed comparison mapping.
+The [population gate](README.md#outstanding-dataset-checks) must verify native transforms/timing and final E001 label/scene distributions, eligibility, availability strata and split independence. Native union lengths/gaps and 2D/3D populations are measured above; post-grid usable-position counts remain **TBD**. Verify distance/point sparsity before interpreting them. Missing 2D boxes do not establish a single visibility cause. [E001](../../experiments/E001-kinematic-transfer/README.md#accepted-four-state-projection) owns the accepted comparison mapping and observation-condition definitions.
 
 ## Inspection display
 

@@ -152,7 +152,7 @@ Report each axis separately, not every cross-product. Track strata use the full 
 | Level / axis | Bins or definition |
 |---|---|
 | Track duration | [0,1), [1,5), [5,10), [10,15), [15,∞) seconds; LOKI nominal |
-| Track usable-position coverage | Valid pedestrian-position slots / all non-padding context slots: [0,0.25), [0.25,0.75), [0.75,1] |
+| Track usable 3D-position coverage | Valid pedestrian-position slots / all non-padding context slots: [0,0.25), [0.25,0.75), [0.75,1] |
 | Track accepted GT count | 1; 2–4; 5–19; 20+ frames |
 | Track annotated 2D availability | Never; partial; complete over all context slots |
 | Track longest internal missing-position run | None; >0 to ≤1 s; >1 s. Count missing slots × 0.2 s between first/last valid position only |

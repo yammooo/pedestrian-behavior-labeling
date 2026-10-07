@@ -15,7 +15,7 @@ import pyarrow.parquet as pq
 
 from pedestrian_behavior.datasets.loki import TrackReader as LokiReader
 from pedestrian_behavior.datasets.road_waymo import TrackReader as RoadReader
-from pedestrian_behavior.preparation import (load_track, locator, prepare_collection, prepare_track,
+from pedestrian_behavior.preparation import (load_manifest, load_track, locator, prepare_collection, prepare_track,
     save_track, select_frames, source_times, velocities)
 
 
@@ -323,6 +323,9 @@ class TrackPreparationTest(unittest.TestCase):
             manifest, audit = prepare_collection(reader, first)
             manifest2, _ = prepare_collection(reader, second)
             self.assertEqual(manifest["status"], "complete"); self.assertEqual(len(audit["tracks"]), 2)
+            self.assertEqual(load_manifest(first), manifest)
+            if reader.dataset == "road-waymo":
+                self.assertEqual(manifest["sources"]["native_road_splits"]["clip"], "train")
             self.assertEqual(manifest["tracks"], manifest2["tracks"])
             self.assertEqual(manifest["preparation_id"], manifest2["preparation_id"])
             reader.root.rename(reader.root.with_name("hidden-loki")) if reader.dataset == "loki" else reader.index.rename(reader.index.with_name("hidden-road"))
@@ -339,6 +342,9 @@ class TrackPreparationTest(unittest.TestCase):
                 self.assertIn('id="annotations"', inspector.read_text())
             with self.assertRaises(FileExistsError):
                 prepare_collection(reader, first)
+            (first / "manifest.json").write_text(json.dumps(manifest | {"schema_version": 2}))
+            with self.assertRaisesRegex(ValueError, "Unsupported schema"):
+                load_manifest(first)
 
 
 if __name__ == "__main__":

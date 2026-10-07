@@ -193,12 +193,16 @@ class TrackReader:
                          "https://github.com/waymo-research/waymo-open-dataset/blob/master/src/waymo_open_dataset/dataset.proto"]}
         self.road = {}
         self.frame_mapping = {}
+        native_splits = {}
         for row in annotation_rows(self.index):
             scene, track = row["road_clip_id"], row["road_tube_uid"]
             if scene not in self.scenes or row["merged_agent_label"] != "Ped" or row["camera_name"] != "1":
                 raise ValueError("ROAD population/scene/camera mismatch")
             if row["segment_context_name"] != self.scenes[scene]["segment_context_name"]:
                 raise ValueError("ROAD segment mismatch")
+            if row["waymo_split"] != self.scenes[scene]["waymo_split"]:
+                raise ValueError("ROAD export/manifest Waymo split mismatch")
+            unique_row(native_splits, scene, row["road_split"])
             if row["timestamp_basis"] != "automatic_verified":
                 raise ValueError("Unverified ROAD timestamp interpretation")
             flags = {}
@@ -213,7 +217,7 @@ class TrackReader:
                 raise ValueError("Exported 3D pair lacks an official identity")
             observation = {"annotation": {k: v for k, v in json.loads(row["road_annotation_json"]).items() if k != "box"},
                 "actions": json.loads(row["action_labels_json"]), "locations": json.loads(row["loc_labels_json"]),
-                "frame": int(row["road_frame_1based"]), "road_split": row["road_split"],
+                "frame": int(row["road_frame_1based"]),
                 "laser_id": row["official_laser_object_id"] or None,
                 "flags": flags | {"association_status": row["association_status"],
                     "export_3d_type": row["waymo_3d_type"], "export_3d_label": row["waymo_3d_label"]}}
@@ -226,6 +230,7 @@ class TrackReader:
                 previous["annotation_ids"].append(row["road_annotation_id"])
             else:
                 timestamps[ts] = observation | {"annotation_ids": [row["road_annotation_id"]]}
+        self.sources["native_road_splits"] = native_splits
         self.scene_ids = sorted(self.road)
         if not self.scene_ids:
             raise ValueError("No ROAD candidate identities")

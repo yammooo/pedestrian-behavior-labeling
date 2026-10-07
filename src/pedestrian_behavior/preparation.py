@@ -206,6 +206,18 @@ def load_track(path):
     return metadata, arrays
 
 
+def load_manifest(collection):
+    manifest = json.loads((Path(collection) / "manifest.json").read_text())
+    if manifest.get("schema_version") != 1 or manifest.get("status") != "complete":
+        raise ValueError("Unsupported schema or incomplete preparation collection")
+    if manifest["preparation"]["period_us"] != PERIOD_US or manifest["preparation"]["tolerance_us"] != TOLERANCE_US:
+        raise ValueError("Unsupported preparation timing rules")
+    filenames = manifest["tracks"]
+    if len(set(filenames)) != len(filenames) or any(Path(f).name != f or not f.endswith(".npz") for f in filenames):
+        raise ValueError("Invalid or repeated track archive path")
+    return manifest
+
+
 def prepare_collection(reader, output, scenes=None):
     """Write a fresh collection; keep partial/failing runs explicitly incomplete."""
     output = Path(output)

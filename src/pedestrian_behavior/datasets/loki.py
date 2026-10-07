@@ -105,7 +105,7 @@ class TrackReader:
         if not self.scene_ids:
             raise ValueError("No LOKI scenarios")
         self.contract = json.loads(Path(transform_contract).read_text()) if transform_contract else None
-        self.sources = {"root": str(self.root), "release": "unknown", "transform": self.contract,
+        self.sources = {"root": str(self.root), "release": "unknown", "native_split": "unknown", "transform": self.contract,
                         "format_evidence": "https://usa.honda-ri.com/loki"}
         if self.contract:
             if (self.contract.get("units") != "metres-radians" or self.contract.get("axes") != "x-forward-y-left-z-up"

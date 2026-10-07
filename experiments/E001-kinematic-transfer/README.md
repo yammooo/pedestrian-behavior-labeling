@@ -34,6 +34,8 @@ After the [5 Hz selection](#first-baseline-temporal-representation), an eligible
 
 This mapping is accepted for E001, not asserted as a universal equivalence of native taxonomies. Native meanings and limitations remain in [LOKI](../../docs/datasets/loki.md#semantic-limits) and [ROAD-Waymo](../../docs/datasets/road-waymo.md#documented-annotation-form).
 
+Prepared tracks retain unchanged native supervision; E001's downstream target policy derives the labels/GT mask and eligible view, rather than saving this temporary projection into the common track record. The [reader/track/provenance schema](../../docs/datasets/README.md#reader-and-prepared-track-schema) is implemented for the combined reader/preparation increment. The complete native conflict audit and declared observation overrides below still precede frame filtering; sampling cannot hide unresolved native conflicts. Target policy, eligibility/split manifests and source-training normalization must be versioned together for reproducibility.
+
 | ROAD-Waymo native action | LOKI original current-frame action | Output / class index |
 |---|---|---|
 | `Mov`, `MovAway`, `MovTow` | `Moving` | `MOVING` / 0 |
@@ -166,6 +168,14 @@ Report supporting tracks/frames and represented GT classes in every slice. Empty
 
 Annotated-box availability is not causal visibility or occlusion. RGB availability metadata is retained, but no RGB-quality cohort is inferred from 2D boxes. Occlusion and LiDAR sparsity remain unknown until verified; do not proxy them by range or missing boxes.
 
+## Reader/preparation implementation and acceptance
+
+The first increment combines native readers and complete-track 5 Hz preparation, ending with saved collections/audits and human inspection. [Shared schema](../../docs/datasets/README.md#reader-and-prepared-track-schema), [native LOKI transform evidence](../../docs/datasets/loki.md#verified-preparation-transform-2026-10-07), [runnable commands](../../README.md#prepare-and-inspect-complete-tracks) and [nine end-to-end acceptance scenarios](../../tests/test_track_preparation.py) own details.
+
+Acceptance exercises stationary pedestrians with moving/turning ego, known motion/uneven timing, full tilted transforms/global invariance, union extents/gaps/extensions, independent missingness/initial anchors, exact selection boundaries, native semantics, identities/duplicates and persistence without source roots. Exact fixtures use declared world motion, not behavior labels as physical-motion oracles. The actual inspector values come from reloaded NumPy archives.
+
+Eight real native cases per dataset were frozen before preparation: four representative action groups and four hard cases. Keep IDs/reasons and failures, including both unresolved ROAD Moving/Stop conflicts. Audit all candidates, native versus selected counts/extents, original versus usable observations and complete native action combinations before any target projection. Artifacts: ignored `outputs/experiments/E001/reader-preparation/`. This increment does not implement targets, splits, normalization, batching or models; those follow after review.
+
 ## Verification and unresolved readiness
 
 Protocol choices above are settled for E001; evidence below still gates execution. Other datasets are not prerequisites.
@@ -174,10 +184,10 @@ Protocol choices above are settled for E001; evidence below still gates executio
 |---|---|
 | Releases / acquisition / associations | Native notes preserve acquired paths/counts; complete release revisions/checksums and versioned reproducible mapping/extension audit **TBD** |
 | Native identity/context / label conflicts | Reproduce [ROAD native-ID extension counts](../../docs/datasets/road-waymo.md#native-identity-and-context-audit-2026-10-06), inspect continuity/semantic disagreements/varied associations, confirm the proposed movement/stop overrides and declare visual acceptance **TBD** |
-| Geometry and time | Verify units/axes, full poses/calibration/world transforms, especially LOKI; physical LOKI timestamps **unknown** |
+| Geometry and time | Full LOKI release transform/marker check and official Waymo pose interpretation support preparation; independent sensor accuracy/RGB projection remain open; physical LOKI timestamps **unknown** |
 | Final population / manifests | Apply union extent, 5 Hz selection, accepted projection and eligibility; count exclusions/classes/strata and verify clip/recording independence **TBD** |
 | Normalization guard | Numerical near-zero scale threshold **TBD**; source-training statistics and guarded columns recorded before runs |
-| Implementation / environment | Model code/config/commands **TBD**; [local CPU/remote CUDA uv setup](../../README.md#setup-and-validation) verified 2026-10-07, with no E001 implementation or training |
+| Implementation / environment | Model code/config/commands **TBD**; [local CPU/remote CUDA uv setup](../../README.md#setup-and-validation) verified 2026-10-07, with no model implementation or training |
 | Low-shot / later ablations | None specified in E001; extensions require explicit labels, access and justification |
 
 At implementation, check: a stationary pedestrian stays stationary under ego translation/turning; canonical features are invariant to global translation/yaw rotation; derivative endpoints/unequal times/gaps behave as declared; duplicates and input/GT masks stay distinct; normalization uses source training only; padding does not change valid predictions; loss and primary F1 give equal total track weight. Preserve unknowns and failures rather than manufacturing geometry or GT. Run the [required validation](../../AGENTS.md#validation) and record actual acceptance evidence before training.

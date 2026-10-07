@@ -56,6 +56,14 @@ All exported pedestrian timestamps use `timestamp_basis=automatic_verified`. Oth
 
 Preserve `road_annotation_json`, original label IDs, native `waymo_3d_type`/`waymo_3d_label`, `semantic_disagreement` and all original geometry. **419 paired rows across 15 camera tracks in 10 clips** have Waymo camera type Pedestrian and associated LiDAR type Cyclist. ROAD's class takes precedence, but these boxes are not resized to person-only geometry. Whether each disagreement reflects a labeling convention or an association error needs visual review.
 
+### Track locators and native payload
+
+The [shared schema](README.md#reader-and-prepared-track-schema) uses `{"clip":"train_00383","tube_uid":"7fc2c418-f760-496a-927c-717d8df6ad06"}` as a canonical JSON track locator. Frame keys are integer Waymo microsecond timestamps, so no duplicate source-time array is saved. Scene provenance retains Waymo split/segment/component addresses and officially associated LiDAR IDs; source/export and numeric component checksums support reproduction. Unknown release information remains unknown.
+
+Prepared native semantics retain the original ROAD annotation fields/IDs (excluding its box, retrievable in the source), decoded action/location lists and **all duplicate annotation IDs**. `native_metadata` separately preserves export `has_3d_box`, association status, export 3D type/label and semantic disagreement, plus the observed native LiDAR type. Export pairing remains distinct from extended native 3D availability. Native extensions add context, without ROAD behavior GT. No target correction changes the native payload.
+
+[Official v2 box definitions](https://github.com/waymo-research/waymo-open-dataset/blob/master/src/waymo_open_dataset/v2/perception/box.py) place native LiDAR labels in the frame vehicle coordinates; preparation uses `[VehiclePoseComponent].world_from_vehicle.transform`. [Official frame timing](https://github.com/waymo-research/waymo-open-dataset/blob/master/src/waymo_open_dataset/dataset.proto) clarifies that frame start time and vehicle-pose instant differ; the pose defines the label frame. Derived velocities use frame timestamps and should not be interpreted as exact sensor-exposure-time measurements. Camera-synchronized boxes remain a distinct component and are not substituted.
+
 ### Measured population
 
 The export and this inspection's independent full-CSV recheck agree:
@@ -106,7 +114,7 @@ The [full structural recheck](../archive/2026-10-02-road-waymo-linkage.md#struct
 
 
 
-Remaining work: document acquisition/release history, preserve runnable mapping/checker code in version control, characterize action episodes and physical-ID overlap, investigate timing irregularities below, audit semantic disagreements and varied associations visually, and declare the training acceptance rule. The merger currently hardcodes Waymo `training` paths; this matches the inspected subset but must be changed before processing another split. No model or data adapter is implemented by this inspection.
+Remaining work: document acquisition/release history, preserve runnable mapping/checker code in version control, characterize action episodes and physical-ID overlap, investigate timing irregularities below, audit semantic disagreements and varied associations visually, and declare the training acceptance rule. The merger currently hardcodes Waymo `training` paths; this matches the inspected subset but must be changed before processing another split. The combined native reader/preparation is now implemented; no model has run.
 
 ## Track extents and gaps (2026-10-05)
 

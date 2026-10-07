@@ -50,7 +50,7 @@ The local `data/loki_data` copy has 644 flat `scenario_*` directories. In the in
 
 `label2d_*.json` has class keys; `Pedestrian` maps track IDs to records with `box` (`left`, `top`, `width`, `height`), `not_in_lidar`, and `attributes`. `label3d_*.txt` is comma-delimited with `labels`, `track_id`, 3D position/dimensions/yaw and `intended_actions`; pedestrian actions occur in `intended_actions`. These files can be joined on `(scenario, frame suffix, track_id)`. Some pedestrian records have only one side of the 2D/3D join; the reader retains them.
 
-Same-frame PLY/box plotting is supported by a [four-frame alignment sanity check](../archive/2026-09-28-loki-inspection.md#point-cloud-and-3d-box-alignment-check). Physical units, ego-forward direction, odometry/map transforms and RGB projection remain unverified.
+Same-frame PLY/box plotting is supported by a [four-frame alignment sanity check](../archive/2026-09-28-loki-inspection.md#point-cloud-and-3d-box-alignment-check). The preparation transform is now supported by the [full-release marker check](#verified-preparation-transform-2026-10-07); independent sensor accuracy and RGB projection remain unverified.
 
 A read-only full scan with `python -m pedestrian_behavior.inspection summary --root data/loki_data` found **40,829** frame suffixes and zero missing aligned image, 2D label, 3D label, point-cloud, or odometry files. Counts below are raw pedestrian rows in 3D labels, plus distinct `(scenario, track_id)` pairs per action; one track can contribute to multiple actions. They differ from the paper's published instance counts, and release/version or counting conventions remain unverified.
 
@@ -60,6 +60,20 @@ A read-only full scan with `python -m pedestrian_behavior.inspection summary --r
 | `Moving` | 242,740 | 9,528 |
 | `Stopped` | 31,009 | 1,270 |
 | `Waiting to cross` | 52,595 | 1,634 |
+
+### Track locators and native payload
+
+The [shared schema](README.md#reader-and-prepared-track-schema) uses `{"scenario":"scenario_000","track_id":"<native-id>"}` as a canonical JSON track locator. Selected frame keys retain suffixes such as `"0000"`; the native reader resolves the flat filename layout and same-frame track-ID join. Original boxes remain in the source.
+
+Prepared `native_annotations` preserves 2D attributes (including age/gender and destination references), `not_in_lidar`, original 3D `intended_actions`, `potential_destination` and `stationary`, plus original 3D record indices. These are supervision/metadata, never automatic input features. Destination UUIDs remain references; this increment does not resolve marker geometry. Literal `None`, empty strings, absent fields and JSON null stay distinct. Identical 3D duplicates retain record indices; conflicting repeats and duplicate JSON keys fail.
+
+### Verified preparation transform (2026-10-07)
+
+[Paper §7](https://arxiv.org/html/2108.08236#S7) states that the motion-compensated merged cloud is transformed to a virtual position at the vehicle center. The [official format](https://usa.honda-ri.com/loki) supplies odometry xyz/roll/pitch/yaw. [Full-release verification](../../scripts/verify-loki-transform.py) compares six interpretations on scene-scoped stationary road/destination markers with at least five observations.
+
+For **2,482 road-marker identities**, full `Rz(yaw) Ry(pitch) Rx(roll)` rotation plus odometry translation gives median 3D world RMS **2.05e-14 m** (p90 **1.14e-13 m**). Raw coordinates give **11.464 m**, yaw-only **0.474 m**, inverse rotation **2.453 m**, y reflection **1.599 m** and xy swap **16.118 m**. This empirically verifies the released annotation/odometry composition, including roll/pitch/z; it does not establish independent sensor accuracy. Destination markers are less strict oracles: 2,664 identities give full-transform p90 **0.263 m**.
+
+The evidence-backed [transform contract](../../configs/loki-transform.json) uses identity from the released virtual point-cloud frame to ego, metre/radian units and the full composition above. The native reader requires this explicit verified contract. Forward/left axes follow the vehicle-centered, right-handed pose interpretation; RGB projection/calibration accuracy remains unverified. Evidence: ignored `outputs/experiments/E001/reader-preparation/loki-transform-evidence.json`. Physical timestamps remain **unknown**; derivatives use the declared nominal clock.
 
 ### Unique pedestrian population (2026-10-01)
 

@@ -46,6 +46,45 @@ The headline 54k ROAD-Waymo / 7k ROAD / >28k LOKI agent counts include other cla
 
 This table specifies inspection obligations, not a software schema or adapter framework.
 
+## Reader and prepared-track schema
+
+Steps 1–2 use a common native-reader contract and [shared preparation](../../src/pedestrian_behavior/preparation.py). Readers own native IDs, associations, units, clocks and full native-to-world transforms. The creator owns scene-frame selection, fixed canonical coordinates and adjacent-slot velocities; [E001](../../experiments/E001-kinematic-transfer/README.md#first-baseline-temporal-representation) owns their scientific rules.
+
+| Reader operation | Result |
+|---|---|
+| `index_scene(scene_id)` | Ordered scene frame keys/times/RGB availability; all candidate identities, native union extents/counts and scene provenance |
+| `read_frames(scene_id, frame_ids)` | Exactly requested frames: full ego poses, world pedestrian positions, native semantic dictionaries and independent availability/source flags |
+| `resolve_track(locator)` | Decode and validate the dataset-specific native track address against the source inventory |
+
+Track locators are compact, sorted-key JSON strings. Their native fields belong to [LOKI](loki.md#track-locators-and-native-payload) and [ROAD-Waymo](road-waymo.md#track-locators-and-native-payload). Frame keys plus the track locator recover same-frame native observations/geometry; decoding a locator does not establish immutable content or a correct association. No inferred identity links or component-reference registry.
+
+### Collection manifest
+
+One **JSON manifest per dataset** stores schema version 1, dataset/source identity, preparation ID, release/checksum evidence or explicit unknowns, vocabularies, clock qualification, effective preparation rules, code/environment references and scene provenance. Preparation is marked incomplete until every indexed candidate is saved and reloaded successfully. Failures remain in its audit; a nonempty destination is never overwritten.
+
+One **NumPy archive per track**, read with `allow_pickle=False`, stores numeric arrays and scalar JSON metadata. Global information is not repeated in every track. Generated collections/audits/inspection packs live under ignored `outputs/experiments/E001/reader-preparation/`.
+
+### Prepared track
+
+| Field | Meaning |
+|---|---|
+| `track_locator`, `native_extent_us` | Reversible native address and first-to-last 2D/3D union bounds; no outside padding or cross-scene stitching |
+| `source_frames[T]` | Nullable selected native frame keys; LOKI retains leading-zero suffix strings |
+| `source_time_us[T]` | Actual selected integer-us times, omitted when the frame key itself is the timestamp (Waymo) |
+| `ped_position`, `ped_velocity`, `ego_position`, `ego_velocity` | Named unnormalized float64 `[T,2]` quantities in the fixed canonical frame |
+| `ego_yaw[T]` | Float64 relative ego heading in radians |
+| `ped_position_valid`, `ped_velocity_valid`, `ego_pose_valid`, `ego_velocity_valid` | Independent boolean `[T]` usability masks |
+| `native_annotations[T]` | Native semantic dictionaries, preserving original label IDs/names, co-labels, missing/empty/null distinctions and annotation IDs/record indices; no common target projection |
+| `availability[T]` | Source-specific 2D presence, native 3D presence and tri-state RGB availability; these are independent of numeric usability and supervision |
+| `native_metadata[T]`, `issues[T]` | Original pairing/type/association flags where present; explicit unusability reasons |
+| `anchor_valid`, `native_counts` | Initial-anchor qualification and pre-selection inventory counts for audit |
+
+Requested grid times derive from the native start plus `j × 200000 µs`; no redundant grid array or saved batch padding. Invalid physical values are NaN; valid zero remains zero. Missing initial anchor never selects a later replacement: the candidate/native annotations remain, with unusable canonical arrays. Missing/nonfinite measurements and invalid/unavailable poses are masked and reported independently. Malformed schemas, conflicting duplicates/associations and unverified interpretation fail explicitly. Unused pedestrian yaw/dimensions cannot invalidate a usable center. No speed/jump/outlier filtering.
+
+Keep **all indexed candidates**, including 2D-only, 3D-only, single-observation and unlabeled tracks. E001 later derives its eligible view, four-state target/mask, source-only normalization and 14-column float32 model input; a future head can interpret the same native supervision differently. Model targets/eligibility/splits/normalization belong to the experiment, not the common collection. RGB, point clouds and original boxes stay in the native sources for later retrieval; the numeric cache independently supports E001's declared condition slices.
+
+The [acceptance checks](../../tests/test_track_preparation.py) exercise native-format readers through save/reload, independent known-motion answers, missingness, selection boundaries, semantics, identities and persistence. The portable inspector reads its actual numeric values from saved/reloaded archives; source overlays never interpolate or substitute another frame. [Runnable commands](../../README.md#prepare-and-inspect-complete-tracks).
+
 ## Missing modalities and labels
 
 Represent actual availability explicitly. Apply a task loss only where its native annotation exists. Do not fabricate behaviour targets, treat an unlabeled frame as negative, or fill annotation gaps as ground truth. Interpolation used for a gallery camera center is not a recovered pedestrian observation.

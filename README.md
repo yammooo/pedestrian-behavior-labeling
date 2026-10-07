@@ -90,3 +90,39 @@ uv run --locked --extra cu118 python scripts/track-statistics.py --dataset road-
 ```
 
 Each scan writes `tracks.csv` and `summary.json`, including whole-track duration, observed/missing frames, modality masks, overlapping action cohorts and conservative 5 Hz window capacities. [LOKI](docs/datasets/loki.md#track-extents-and-gaps-2026-10-05) and [ROAD-Waymo](docs/datasets/road-waymo.md#track-extents-and-gaps-2026-10-05) own interpretation and limitations.
+
+## Prepare and inspect complete tracks
+
+Steps 1–2 save every native candidate's complete 5 Hz extent, kinematics, masks and unchanged native supervision. Output directories must be fresh. The [schema](docs/datasets/README.md#reader-and-prepared-track-schema) and [E001 protocol](experiments/E001-kinematic-transfer/README.md) own interpretation. This does not train a model or project targets.
+
+```bash
+uv run --locked --extra cpu python scripts/check-reader-preparation.py \
+  --output outputs/experiments/E001/reader-preparation/acceptance
+uv run --locked --extra cpu python scripts/verify-loki-transform.py \
+  --root data/loki_data --output outputs/experiments/E001/reader-preparation/loki-transform-evidence.json
+uv run --locked --extra cpu python -m pedestrian_behavior.preparation --dataset loki \
+  --input data/loki_data --loki-transform configs/loki-transform.json \
+  --output outputs/experiments/E001/reader-preparation/loki
+```
+
+Run ROAD-Waymo on `aalto`, from its Git checkout:
+
+```bash
+uv run --locked --extra cu118 python -m pedestrian_behavior.preparation --dataset road-waymo \
+  --input /home/user20/road_waymo_mapping/merged_pedestrians_20261002 \
+  --output outputs/experiments/E001/reader-preparation/road-waymo
+```
+
+Each collection has `manifest.json`, `audit.json` and `tracks/*.npz`; `status=complete` requires matching native/saved candidate inventories. Source roots are unnecessary to reload numeric tracks. `--scene` may repeat for an explicitly restricted smoke collection.
+
+Inspect the frozen eight native cases per dataset; ROAD-Waymo uses `--extra cu118` and its index path on `aalto`. Original sources are needed for RGB/LiDAR previews.
+
+```bash
+uv run --locked --extra cpu python -m pedestrian_behavior.inspection.prepared_tracks \
+  --collection outputs/experiments/E001/reader-preparation/loki \
+  --cases outputs/experiments/E001/reader-preparation/loki-cases.json \
+  --input data/loki_data --loki-transform configs/loki-transform.json \
+  --output outputs/experiments/E001/reader-preparation/loki-inspector
+```
+
+Open `acceptance/index.html` for independent expected/actual fixture checks or the dataset inspector's `index.html` for synchronized native context, fixed trajectories, feature timelines, masks and annotation values. Copy the complete inspector directory for portable viewing. Missing slots stay blank; the viewer does not interpolate.

@@ -1,0 +1,14 @@
+{
+  "verified": true,
+  "units": "metres-radians",
+  "axes": "x-forward-y-left-z-up",
+  "euler": "Rz(yaw)Ry(pitch)Rx(roll)",
+  "ego_from_pointcloud": [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]],
+  "evidence": [
+    "https://arxiv.org/html/2108.08236#S7: merged point cloud transformed to virtual vehicle center; metric scene distances documented in S8.4",
+    "https://usa.honda-ri.com/loki: odometry xyz, roll, pitch, yaw",
+    "scripts/verify-loki-transform.py: full-release native stationary road-marker test; 2482 identities with at least five observations, median 3D world RMS 2.05e-14 m; yaw-only median 0.474 m",
+    "docs/datasets/loki.md#verified-preparation-transform-2026-10-07"
+  ],
+  "qualification": "Empirical verification of released annotation/odometry alignment, not independent sensor accuracy; physical clock unknown"
+}

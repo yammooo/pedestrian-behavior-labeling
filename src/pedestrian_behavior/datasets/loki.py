@@ -194,5 +194,5 @@ class TrackReader:
                 people[track_id] = {"world_position": transformed, "annotations": semantic,
                     "availability": {"loki_2d": person.label2d is not None, "native_3d": person.label3d is not None},
                     "issues": [] if transformed is not None else ["missing-or-unusable-native-position"]}
-            result[frame_id] = {"ego_pose": pose, "pedestrians": people}
+            result[frame_id] = {"ego_pose": pose, "pedestrians": people, "availability_fields": ("loki_2d", "native_3d")}
         return result

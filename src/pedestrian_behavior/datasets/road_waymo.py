@@ -330,5 +330,6 @@ class TrackReader:
                                      "native_3d": box is not None},
                     "issues": [], "native_type": box.get("[LiDARBoxComponent].type") if box else None,
                     "export_flags": observation["flags"] if observation else None}
-            result[ts] = {"ego_pose": pose, "pedestrians": people}
+            result[ts] = {"ego_pose": pose, "pedestrians": people,
+                          "availability_fields": ("road_2d", "waymo_2d", "native_3d")}
         return result

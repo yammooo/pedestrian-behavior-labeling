@@ -107,13 +107,15 @@ def prepare_track(track_id, candidate, selected, records):
         c, s = np.cos(yaw0), np.sin(yaw0)
         rotation = np.array([[c, s], [-s, c]])
         origin = anchor[:2, 3]
+    availability_keys = set().union(*(record.get("availability_fields", ()) for record in records.values()))
     annotations, availability, issues, native_metadata = [], [], [], []
     for i, frame in enumerate(selected):
         record = records[frame["key"]] if frame else {}
         person = record.get("pedestrians", {}).get(track_id, {})
         annotations.append(person.get("annotations", {}))
         native_metadata.append({k: person[k] for k in ("native_type", "export_flags") if k in person})
-        availability.append(person.get("availability", {}) | {"rgb": frame.get("rgb") if frame else None})
+        availability.append({k: False for k in availability_keys} | person.get("availability", {})
+                            | {"rgb": frame.get("rgb") if frame else None})
         slot_issues = list(person.get("issues", []))
         if not frame:
             slot_issues.append("no-qualifying-scene-frame")
@@ -227,7 +229,7 @@ def prepare_collection(reader, output, scenes=None):
         (output / "audit.json").write_text(json.dumps(audit, indent=2, allow_nan=False) + "\n")
     write_progress()
     try:
-        for scene in scenes if scenes is not None else reader.scene_ids:
+        for scene_number, scene in enumerate(scenes if scenes is not None else reader.scene_ids):
             index = reader.index_scene(scene)
             manifest["scenes"][scene] = index.get("provenance", {})
             audit["native_candidates"] += len(index["tracks"])
@@ -253,7 +255,8 @@ def prepare_collection(reader, output, scenes=None):
                                               for key in sorted({k for a in metadata["availability"] for k in a})},
                     "anchor_valid": metadata["anchor_valid"]})
             audit["saved_tracks"] = len(manifest["tracks"])
-            write_progress()
+            if scene_number % 25 == 0:
+                write_progress()
             print(f"{scene}: {len(index['tracks'])} candidates; {len(manifest['tracks'])} saved", flush=True)
         if audit["native_candidates"] != audit["saved_tracks"]:
             raise ValueError("Native inventory and persisted candidate counts disagree")

@@ -73,7 +73,7 @@ Prepared `native_annotations` preserves 2D attributes (including age/gender and 
 
 For **2,482 road-marker identities**, full `Rz(yaw) Ry(pitch) Rx(roll)` rotation plus odometry translation gives median 3D world RMS **2.05e-14 m** (p90 **1.14e-13 m**). Raw coordinates give **11.464 m**, yaw-only **0.474 m**, inverse rotation **2.453 m**, y reflection **1.599 m** and xy swap **16.118 m**. This empirically verifies the released annotation/odometry composition, including roll/pitch/z; it does not establish independent sensor accuracy. Destination markers are less strict oracles: 2,664 identities give full-transform p90 **0.263 m**.
 
-The evidence-backed [transform contract](../../configs/loki-transform.json) uses identity from the released virtual point-cloud frame to ego, metre/radian units and the full composition above. The native reader requires this explicit verified contract. Forward/left axes follow the vehicle-centered, right-handed pose interpretation; RGB projection/calibration accuracy remains unverified. Evidence: ignored `outputs/experiments/E001/reader-preparation/loki-transform-evidence.json`. Physical timestamps remain **unknown**; derivatives use the declared nominal clock.
+The evidence-backed [transform contract](../../configs/loki-transform.json) uses identity from the released virtual point-cloud frame to ego, metre/radian units and the full composition above. The native reader requires this explicit verified contract. The median ego heading/motion cosine is **0.999433** over **33,826** adjacent intervals with displacement >2 cm, supporting +x forward; +y left follows the right-handed pose interpretation; RGB projection/calibration accuracy remains unverified. Evidence: ignored `outputs/experiments/E001/reader-preparation/loki-transform-evidence.json`. Physical timestamps remain **unknown**; derivatives use the declared nominal clock.
 
 ### Unique pedestrian population (2026-10-01)
 
@@ -96,6 +96,12 @@ Per-track 3D observation counts: **minimum 1, lower quartile 11, median 23, uppe
 All observed 3D pedestrian rows have one of the four actions in the preceding table. Per-action track counts overlap and must not be added to obtain the 12,364 total. The 1,001 2D-only tracks have no behaviour label through this reader.
 
 Reproduction: `uv run --locked --extra cpu python outputs/inspection/population/loki_counts.py`; the one-off script and `loki_counts.json` remain under ignored `outputs/`. No images or point clouds were decoded. Release checksum and identity-fragmentation audit remain open.
+
+### Prepared inventory (2026-10-07)
+
+The complete reader/preparation audit retains **13,365 candidates** across all **644 scenarios**, including the **1,001** 2D-only tracks. It saves **418,676** 5 Hz slots, with no missing scene-frame selections. All **391,569** native pedestrian 3D rows remain usable positions; **391,399** slots have usable velocity (170 singleton 3D observations have no adjacent support). Every candidate has an initial ego anchor. Native union observations total **413,923**; **196,620** have 2D annotations. No duplicate 3D pedestrian observations or preparation failures were found. These are preparation counts, before E001 target projection/splits.
+
+Evidence: ignored `outputs/experiments/E001/reader-preparation/loki/{manifest,audit}.json`; the [eight native cases](../../experiments/E001-kinematic-transfer/reader-cases.json) are preserved in the portable inspector. Source annotations and physical-clock qualification are unchanged.
 
 ## Track extents and gaps (2026-10-05)
 

@@ -153,6 +153,7 @@ HTML = r'''<!doctype html><html lang="en"><meta charset="utf-8"><title>Prepared 
 <img id="native" alt="Selected source RGB with native box and same-frame LiDAR BEV"><p id="context"></p>
 <div class="grid"><div><h2>Fixed canonical trajectory</h2><canvas id="trajectory" width="400" height="400"></canvas><p>+x forward/up, +y left. Pedestrian: yellow; ego: cyan. Lines break at missing positions.</p></div>
 <div><h2>Position, velocity and yaw timelines</h2><canvas id="timeline" width="800" height="480"></canvas><p>Each named quantity has its own vertical scale. Gray line marks the inspected slot; missing values are blank.</p></div></div>
+<h2>Native action and availability timelines</h2><canvas id="annotations" width="800" height="200"></canvas><p>Native action names stay separate. Green means recorded/usable; gray means false; outlined slots mean unknown. Orange marks the inspected slot.</p>
 <h2>Selected slot and native supervision</h2><pre id="values"></pre><h2>Track / expected checks</h2><pre id="details"></pre>
 <script>
 const cases=__DATA__,pick=document.getElementById('case'),slider=document.getElementById('slot');
@@ -177,6 +178,15 @@ function render(){let c=cases[+pick.value],a=c.arrays,m=c.metadata,i=+slider.val
  ctx.fillStyle='#eee';ctx.fillText(key+(col===null?'':`[${col}]`)+ (valid.length?` ${lo.toFixed(2)}…${hi.toFixed(2)}`:' missing'),6,y0+14);
  if(valid.length)segments(ctx,v,(x,j)=>[235+j/Math.max(n-1,1)*550,y0+43-(x-lo)/span*35],key.startsWith('ped')?'#ffe36d':'#6de1ff');
  ctx.strokeStyle='#aaa';let x=235+i/Math.max(n-1,1)*550;ctx.beginPath();ctx.moveTo(x,y0);ctx.lineTo(x,y0+48);ctx.stroke()});
+ canvas=document.getElementById('annotations');
+ let labels=m.native_annotations.map(x=>x.road?.actions ?? (x.label3d&&Object.hasOwn(x.label3d,'intended_actions')?[x.label3d.intended_actions]:[]));
+ let names=[...new Set(labels.flat().map(String))].sort();
+ let flags=Object.keys(a).filter(k=>k.endsWith('_valid'));
+ let availabilityNames=[...new Set(m.availability.flatMap(Object.keys))].sort();
+ let bands=[...names.map(name=>['action: '+(name||'(empty string)'),labels.map(v=>v.map(String).includes(name))]),
+ ...flags.map(k=>[k,a[k]]),...availabilityNames.map(k=>['available: '+k,m.availability.map(v=>v[k]??null)])];
+ canvas.height=Math.max(48,bands.length*24);ctx=canvas.getContext('2d');ctx.clearRect(0,0,800,canvas.height);
+ bands.forEach(([name,values],r)=>{ctx.fillStyle='#eee';ctx.fillText(name,5,r*24+16);values.forEach((v,j)=>{let x=235+j/Math.max(n,1)*550,w=550/Math.max(n,1);ctx.fillStyle=v===true?'#6dbfa1':'#39404a';ctx.fillRect(x,r*24+3,Math.max(w-1,1),17);if(v===null){ctx.strokeStyle='#aaa';ctx.strokeRect(x,r*24+3,Math.max(w-1,1),17)}if(j===i){ctx.strokeStyle='#ffbd6d';ctx.strokeRect(x,r*24+2,Math.max(w,1),19)}})});
  let values={requested_time_us:m.native_extent_us[0]+i*200000,source_time_us:c.times[i],source_frame:m.source_frames[i],availability:m.availability[i],native_metadata:m.native_metadata[i],annotations:m.native_annotations[i],issues:m.issues[i]};
  for(let k in a)values[k]=a[k][i];document.getElementById('values').textContent=JSON.stringify(values,null,2);
  document.getElementById('details').textContent=JSON.stringify({locator:m.track_locator,native_extent_us:m.native_extent_us,native_counts:m.native_counts,anchor_valid:m.anchor_valid,checks:c.checks,expected:c.expected},null,2);

@@ -64,6 +64,14 @@ Prepared native semantics retain the original ROAD annotation fields/IDs (exclud
 
 [Official v2 box definitions](https://github.com/waymo-research/waymo-open-dataset/blob/master/src/waymo_open_dataset/v2/perception/box.py) place native LiDAR labels in the frame vehicle coordinates; preparation uses `[VehiclePoseComponent].world_from_vehicle.transform`. [Official frame timing](https://github.com/waymo-research/waymo-open-dataset/blob/master/src/waymo_open_dataset/dataset.proto) clarifies that frame start time and vehicle-pose instant differ; the pose defines the label frame. Derived velocities use frame timestamps and should not be interpreted as exact sensor-exposure-time measurements. Camera-synchronized boxes remain a distinct component and are not substituted.
 
+### Prepared inventory (2026-10-07)
+
+The complete reader/preparation audit retains all **9,573 ROAD candidates** across **562 clips with pedestrian annotations**, with **624,170** 5 Hz slots and an initial ego anchor for every candidate. Full native union observations total **1,211,822**: **712,630** unique ROAD annotation frames, **721,403** native FRONT observations and **922,321** native linked 3D observations (overlapping streams). The **10 identical repeated ROAD annotations** retain their original IDs. No conflicting duplicate/association or preparation failure was encountered; this structural check does not replace visual association acceptance.
+
+After selection, **460,867** slots have usable 3D position and **460,841** usable pedestrian velocity; **6,629 tracks** retain at least one usable position. Five of the previously observed 6,634 native-3D tracks lose their sparse 3D evidence during declared scene-frame selection; all candidates remain saved. **292 grid slots** have no scene frame within 75 ms (**0.047%**), consistent with previously observed native timing gaps. LOKI has zero such missing selections. These are preparation counts, before target projection/eligibility/splits.
+
+Evidence: ignored `outputs/experiments/E001/reader-preparation/road-waymo/{manifest,audit}.json`, originally generated in the Git checkout on `aalto` and copied locally for independent reload. The [eight frozen native cases](../../experiments/E001-kinematic-transfer/reader-cases.json) retain both Moving/Stop conflicts without target overrides.
+
 ### Measured population
 
 The export and this inspection's independent full-CSV recheck agree:

@@ -238,6 +238,8 @@ class TrackPreparationTest(unittest.TestCase):
         m, a = self.prepare(reader, case="scene-first", expected={"source_frames": [0, 160000, 400000]})
         self.assertEqual(m["source_frames"], [0, 160000, 400000])
         self.assertFalse(a["ped_position_valid"][1]); self.assertEqual(m["native_annotations"][1], {})
+        self.assertFalse(m["availability"][1]["road_2d"])
+        self.assertFalse(m["availability"][1]["native_3d"])
 
     def test_native_supervision_and_semantic_independence(self):
         readers = native_readers(self.root, [0, 200000, 400000], [pose()]*3,
@@ -329,6 +331,12 @@ class TrackPreparationTest(unittest.TestCase):
                 m2, a2 = load_track(second / "tracks" / filename)
                 self.assertEqual(m, m2)
                 for k in a: np.testing.assert_equal(a[k], a2[k])
+                from pedestrian_behavior.inspection.prepared_tracks import write_inspector
+                inspector = self.root / "standalone-inspector.html"
+                data = write_inspector(inspector, [{"name": filename, "path": first/"tracks"/filename}])
+                self.assertEqual(data[0]["metadata"], m)
+                self.assertEqual(data[0]["arrays"]["ped_position"][0][0], float(a["ped_position"][0,0]) if a["ped_position_valid"][0] else None)
+                self.assertIn('id="annotations"', inspector.read_text())
             with self.assertRaises(FileExistsError):
                 prepare_collection(reader, first)
 

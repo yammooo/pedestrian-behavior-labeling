@@ -29,7 +29,7 @@ The old `zod-ped`/ZOD-IAC is a reference, not the foundation. Generic trajectori
 
 ## Environment and hygiene
 
-Run project Python commands in Conda `pedestrian-behavior` (Python 3.11): `conda activate pedestrian-behavior`. Inspection also requires `ffmpeg` on `PATH`.
+Run project Python commands through uv from the repository root: `uv run --locked --extra cpu python ...` locally or `uv run --locked --extra cu118 python ...` on `aalto`. Use the managed Python version in `.python-version`, dependencies in `pyproject.toml` and `uv.lock`, and the checkout's ignored `.venv`. Inspection also requires `ffmpeg` on `PATH`. [Setup and Git workflow](README.md#setup-and-validation).
 
 Local compute: ThinkPad T14 Gen 4, Intel i7, integrated graphics. Training may use the MSI Raider GE78 HX 13V with RTX 4080 through SSH host `aalto`; never commit credentials.
 
@@ -37,4 +37,4 @@ Never commit datasets or large generated artifacts. Use ignored `outputs/experim
 
 ## Validation
 
-Run `python -m unittest discover -s tests` from the repository root in `pedestrian-behavior`. For documentation changes, check local links/anchors and `git diff --check`.
+Run `uv run --locked --extra cpu python -m unittest discover -s tests` from the repository root locally; use `--extra cu118` on `aalto`. For dependency changes, check `uv lock --check` and `uv pip check`; for documentation changes, check local links/anchors and `git diff --check`.

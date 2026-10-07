@@ -12,20 +12,51 @@ Aalto research workspace for a general offline pedestrian-behavior labeler from 
 
 ## Setup and validation
 
-Run from the repository root. Inspection requires `ffmpeg` on `PATH`.
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/) once on each machine, then run from the repository root. Setup targets Linux x86-64. uv uses managed Python **3.11.16** from [.python-version](.python-version), dependencies from [pyproject.toml](pyproject.toml) and their resolved versions/hashes in [uv.lock](uv.lock). Inspection requires `ffmpeg` on `PATH`.
+
+Choose **one** backend. Each checkout gets an ignored `.venv`; uv installs this package in editable mode and downloads the pinned Python if necessary.
 
 ```bash
-conda create -n pedestrian-behavior python=3.11 pillow pip
-conda activate pedestrian-behavior
-python -m pip install --no-deps -e .
-python -m unittest discover -s tests
+# ThinkPad: CPU
+uv sync --locked --extra cpu
 ```
+
+```bash
+# RTX 4080 laptop: CUDA
+uv sync --locked --extra cu118
+```
+
+PyTorch **2.7.1** provides both builds in the [official installation instructions](https://pytorch.org/get-started/previous-versions/#v271). CUDA 11.8 is selected for the inspected 535.309.01 NVIDIA driver; newer drivers support older CUDA runtimes through [backward compatibility](https://docs.nvidia.com/deploy/cuda-compatibility/minor-version-compatibility.html). The wheel supplies its runtime dependencies. The [explicit PyTorch indexes and conflicting extras](https://docs.astral.sh/uv/guides/integration/pytorch/#configuring-accelerators-with-optional-dependencies) prevent installing both backends together.
+
+Validate locally; replace `cpu` with `cu118` on `aalto`. Include the selected extra on project commands. `--locked` rejects an outdated lockfile instead of changing it.
+
+```bash
+uv lock --check
+uv pip check --python .venv/bin/python
+uv run --locked --extra cpu python -m unittest discover -s tests
+uv run --locked --extra cpu python -c 'import torch; print(torch.__version__, torch.version.cuda, torch.cuda.is_available())'
+```
+
+## Git checkout on the RTX 4080 laptop
+
+The remote checkout is `/home/user20/projects/pedestrian-behavior-labeling`, reached with SSH host `aalto`:
+
+```bash
+ssh aalto
+cd ~/projects/pedestrian-behavior-labeling
+git status --short
+git pull --ff-only
+uv sync --locked --extra cu118
+git rev-parse HEAD
+```
+
+Develop and validate locally, commit reviewed changes including `uv.lock` and push them, then pull and sync the intended revision on `aalto`. Verify its commit before a run; record any uncommitted changes. Run the installed package from this checkout instead of copying individual code files. Dataset paths remain machine-specific, and generated outputs stay ignored. Historical gallery workspaces remain evidence, not the current code checkout.
 
 ## Inspect LOKI
 
 ```bash
-python -m pedestrian_behavior.inspection summary --root data/loki_data
-python -m pedestrian_behavior.inspection gallery --root data/loki_data \
+uv run --locked --extra cpu python -m pedestrian_behavior.inspection summary --root data/loki_data
+uv run --locked --extra cpu python -m pedestrian_behavior.inspection gallery --root data/loki_data \
   --action "Crossing the road" --offset 0 --limit 8 \
   --output outputs/inspection/loki/crossing-000
 ```
@@ -34,11 +65,10 @@ Use exact native action names. Change `--offset` and `--output` for subsequent b
 
 ## Inspect ROAD-Waymo
 
-Install optional Pillow/NumPy/PyArrow dependencies in `pedestrian-behavior`; the inspected `aalto` environment already has them. No Waymo SDK or TensorFlow is required. Run where original Waymo files are accessible.
+The shared environment supplies Pillow/NumPy/PyArrow. No Waymo SDK or TensorFlow is required. Run where original Waymo files are accessible.
 
 ```bash
-python -m pip install -e '.[waymo-inspection]'
-python -m pedestrian_behavior.inspection.road_waymo \
+uv run --locked --extra cu118 python -m pedestrian_behavior.inspection.road_waymo \
   --index /home/user20/road_waymo_mapping/merged_pedestrians_20261002 \
   --action Wait2X --limit 8 --offset 0 \
   --output outputs/inspection/road_waymo/waiting-000
@@ -48,13 +78,13 @@ Use exact actions (`Stop`, `Wait2X`, `Xing`, `XingFmLft`, etc.). Selection is de
 
 ## Inspect track lengths and gaps
 
-Annotation-only statistics retain internal gaps inside each pedestrian's first-to-last clip-scoped extent. Run the ROAD command where its index is accessible, using a copy of the utility and the existing readers. Choose a fresh output directory; existing directories are rejected.
+Annotation-only statistics retain internal gaps inside each pedestrian's first-to-last clip-scoped extent. Run the ROAD command from the Git checkout on `aalto`, where its index is accessible. Choose a fresh output directory; existing directories are rejected.
 
 ```bash
-python scripts/track-statistics.py --self-check
-python scripts/track-statistics.py --dataset loki --input data/loki_data \
+uv run --locked --extra cpu python scripts/track-statistics.py --self-check
+uv run --locked --extra cpu python scripts/track-statistics.py --dataset loki --input data/loki_data \
   --output outputs/inspection/track-statistics/loki
-python scripts/track-statistics.py --dataset road-waymo \
+uv run --locked --extra cu118 python scripts/track-statistics.py --dataset road-waymo \
   --input /home/user20/road_waymo_mapping/merged_pedestrians_20261002 \
   --output outputs/inspection/track-statistics/road-waymo
 ```

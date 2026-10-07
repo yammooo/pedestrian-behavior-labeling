@@ -177,7 +177,7 @@ Protocol choices above are settled for E001; evidence below still gates executio
 | Geometry and time | Verify units/axes, full poses/calibration/world transforms, especially LOKI; physical LOKI timestamps **unknown** |
 | Final population / manifests | Apply union extent, 5 Hz selection, accepted projection and eligibility; count exclusions/classes/strata and verify clip/recording independence **TBD** |
 | Normalization guard | Numerical near-zero scale threshold **TBD**; source-training statistics and guarded columns recorded before runs |
-| Implementation / environment | Code/config/commands **TBD**; prepare CUDA PyTorch in remote `pedestrian-behavior` before authorized training |
+| Implementation / environment | Model code/config/commands **TBD**; [local CPU/remote CUDA uv setup](../../README.md#setup-and-validation) verified 2026-10-07, with no E001 implementation or training |
 | Low-shot / later ablations | None specified in E001; extensions require explicit labels, access and justification |
 
 At implementation, check: a stationary pedestrian stays stationary under ego translation/turning; canonical features are invariant to global translation/yaw rotation; derivative endpoints/unequal times/gaps behave as declared; duplicates and input/GT masks stay distinct; normalization uses source training only; padding does not change valid predictions; loss and primary F1 give equal total track weight. Preserve unknowns and failures rather than manufacturing geometry or GT. Run the [required validation](../../AGENTS.md#validation) and record actual acceptance evidence before training.
@@ -195,8 +195,8 @@ Add rows for actual runs or failed attempts; keep negative transfer. No extra ab
 
 ## Run provenance
 
-- Comparison-specific effective configs: future files beside this record; none yet. Commands, code revision/uncommitted diff, dependency versions and actual environment: **TBD**.
-- Intended compute: RTX 4080 laptop on SSH host `aalto`; Conda `pedestrian-behavior`, Python 3.11. The 2026-10-06 check found no PyTorch in that remote environment; no GPU training/throughput benchmark has run.
+- Comparison-specific effective configs: future files beside this record; none yet. Commands, code revision/uncommitted diff, dependency versions and environment for actual training runs: **TBD**.
+- Intended compute: RTX 4080 laptop on SSH host `aalto`; [uv-managed Python 3.11.16 and locked dependencies](../../README.md#setup-and-validation), with PyTorch 2.7.1 CPU locally/CUDA 11.8 remotely. The 2026-10-06 check found no PyTorch remotely; initial Conda setup on 2026-10-07 was superseded by uv that day. Both uv environments passed the required six tests and packed BiLSTM forward/backward/AdamW smoke checks. The remote package resolves to `/home/user20/projects/pedestrian-behavior-labeling`; no E001 training or throughput benchmark has run.
 - Generated manifests, normalization, logs, checkpoints, predictions, metrics and plots: ignored `outputs/experiments/E001/` or documented external storage; no training artifacts yet.
 - Record source/release/checksum and split IDs, all seeds/RNG settings, selected checkpoint/validation evidence, host/hardware without credentials, start/end dates, exposure/runtime/parameters, denominators, failures and deviations using the [shared recording rules](../README.md#comparison-records-and-artifacts).
 

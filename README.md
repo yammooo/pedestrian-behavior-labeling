@@ -120,7 +120,7 @@ Inspect the frozen eight native cases per dataset; ROAD-Waymo uses `--extra cu11
 ```bash
 uv run --locked --extra cpu python -m pedestrian_behavior.inspection.prepared_tracks \
   --collection outputs/experiments/E001/reader-preparation/loki \
-  --cases outputs/experiments/E001/reader-preparation/loki-cases.json \
+  --cases experiments/E001-kinematic-transfer/reader-cases.json \
   --input data/loki_data --loki-transform configs/loki-transform.json \
   --output outputs/experiments/E001/reader-preparation/loki-inspector
 ```

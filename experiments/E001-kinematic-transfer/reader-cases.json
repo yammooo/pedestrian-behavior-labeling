@@ -1,0 +1,150 @@
+{
+  "loki": [
+    {
+      "locator": "{\"scenario\":\"scenario_000\",\"track_id\":\"4ab64275-275c-4f58-8ed5-39837a4a265d\"}",
+      "reason": "Representative native Moving action group; native labels retained unchanged",
+      "selection_evidence": "Existing native annotation-only tracks.csv; selected before preparation",
+      "native_stat_extent": [
+        "9",
+        "49"
+      ]
+    },
+    {
+      "locator": "{\"scenario\":\"scenario_003\",\"track_id\":\"4031f7b6-10e7-4dac-b6d1-c7cc8431e925\"}",
+      "reason": "Representative native Stopped action group; native labels retained unchanged",
+      "selection_evidence": "Existing native annotation-only tracks.csv; selected before preparation",
+      "native_stat_extent": [
+        "5",
+        "36"
+      ]
+    },
+    {
+      "locator": "{\"scenario\":\"scenario_000\",\"track_id\":\"839d38a7-7b2a-459e-a680-bcb383bb7fcf\"}",
+      "reason": "Representative native Waiting action group; native labels retained unchanged",
+      "selection_evidence": "Existing native annotation-only tracks.csv; selected before preparation",
+      "native_stat_extent": [
+        "17",
+        "51"
+      ]
+    },
+    {
+      "locator": "{\"scenario\":\"scenario_000\",\"track_id\":\"9abd7efb-f4b6-4a67-b269-188213a22d79\"}",
+      "reason": "Representative native Crossing action group; native labels retained unchanged",
+      "selection_evidence": "Existing native annotation-only tracks.csv; selected before preparation",
+      "native_stat_extent": [
+        "1",
+        "22"
+      ]
+    },
+    {
+      "locator": "{\"scenario\":\"scenario_000\",\"track_id\":\"967bd495-76fa-48f2-9053-c68b50b8d132\"}",
+      "reason": "3D-only track, no native 2D box",
+      "selection_evidence": "Existing native annotation-only tracks.csv; selected before preparation",
+      "native_stat_extent": [
+        "40",
+        "51"
+      ]
+    },
+    {
+      "locator": "{\"scenario\":\"scenario_187\",\"track_id\":\"c5d44429-f9f5-4d05-bb45-d5e86be27676\"}",
+      "reason": "Longest native union gap with 3D evidence; keep the gap",
+      "selection_evidence": "Existing native annotation-only tracks.csv; selected before preparation",
+      "native_stat_extent": [
+        "0",
+        "96"
+      ]
+    },
+    {
+      "locator": "{\"scenario\":\"scenario_001\",\"track_id\":\"0c027a96-9aad-406b-9998-b355571864f7\"}",
+      "reason": "2D-only candidate without native behavior/3D",
+      "selection_evidence": "Existing native annotation-only tracks.csv; selected before preparation",
+      "native_stat_extent": [
+        "36",
+        "38"
+      ]
+    },
+    {
+      "locator": "{\"scenario\":\"scenario_001\",\"track_id\":\"4d5fd4fb-8fa4-44e1-861a-dcbee8f8b817\"}",
+      "reason": "Single native 3D observation; velocity may be missing",
+      "selection_evidence": "Existing native annotation-only tracks.csv; selected before preparation",
+      "native_stat_extent": [
+        "0",
+        "0"
+      ]
+    }
+  ],
+  "road-waymo": [
+    {
+      "locator": "{\"clip\":\"train_00001\",\"tube_uid\":\"24508c28-3154-4b7f-964d-70b3ed7d5a9d\"}",
+      "reason": "Representative native Moving action group; native labels retained unchanged",
+      "selection_evidence": "Existing native annotation-only tracks.csv; selected before preparation",
+      "native_stat_extent": [
+        "1",
+        "38"
+      ]
+    },
+    {
+      "locator": "{\"clip\":\"train_00004\",\"tube_uid\":\"04e9e47a-ee7d-448c-adc8-72c2e956d01a\"}",
+      "reason": "Representative native Stopped action group; native labels retained unchanged",
+      "selection_evidence": "Existing native annotation-only tracks.csv; selected before preparation",
+      "native_stat_extent": [
+        "3",
+        "41"
+      ]
+    },
+    {
+      "locator": "{\"clip\":\"train_00016\",\"tube_uid\":\"42044ff0-3b7f-4f50-b32b-34a283b099ee\"}",
+      "reason": "Representative native Waiting action group; native labels retained unchanged",
+      "selection_evidence": "Existing native annotation-only tracks.csv; selected before preparation",
+      "native_stat_extent": [
+        "1",
+        "55"
+      ]
+    },
+    {
+      "locator": "{\"clip\":\"train_00001\",\"tube_uid\":\"4b9a9206-fbf1-4d45-8765-197759100bd6\"}",
+      "reason": "Representative native Crossing action group; native labels retained unchanged",
+      "selection_evidence": "Existing native annotation-only tracks.csv; selected before preparation",
+      "native_stat_extent": [
+        "1",
+        "72"
+      ]
+    },
+    {
+      "locator": "{\"clip\":\"train_00001\",\"tube_uid\":\"0611ea50-f652-406d-942a-9ec7e3e90546\"}",
+      "reason": "No exported paired 3D; native association/extensions must be checked",
+      "selection_evidence": "Existing native annotation-only tracks.csv; selected before preparation",
+      "native_stat_extent": [
+        "1",
+        "199"
+      ]
+    },
+    {
+      "locator": "{\"clip\":\"train_00561\",\"tube_uid\":\"fd8c90a7-64e2-4163-b8e5-98ff29a2ac05\"}",
+      "reason": "Largest ROAD annotation gap with some exported 3D; inspect native extensions",
+      "selection_evidence": "Existing native annotation-only tracks.csv; selected before preparation",
+      "native_stat_extent": [
+        "1",
+        "198"
+      ]
+    },
+    {
+      "locator": "{\"clip\":\"train_00383\",\"tube_uid\":\"7fc2c418-f760-496a-927c-717d8df6ad06\"}",
+      "reason": "Known Moving/Stop co-label conflict; proposed correction remains unaccepted",
+      "selection_evidence": "Existing native annotation-only tracks.csv; selected before preparation",
+      "native_stat_extent": [
+        "81",
+        "129"
+      ]
+    },
+    {
+      "locator": "{\"clip\":\"train_00425\",\"tube_uid\":\"e1dce432-b655-4627-bea9-8f7e0a5f17be\"}",
+      "reason": "Known Moving/Stop co-label conflict; proposed correction remains unaccepted",
+      "selection_evidence": "Existing native annotation-only tracks.csv; selected before preparation",
+      "native_stat_extent": [
+        "1",
+        "10"
+      ]
+    }
+  ]
+}

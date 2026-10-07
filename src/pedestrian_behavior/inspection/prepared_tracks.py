@@ -221,6 +221,7 @@ def main():
     if manifest["status"] != "complete": raise ValueError("Incomplete preparation collection")
     reader = loki.TrackReader(args.input,args.loki_transform) if manifest["dataset"] == "loki" else road.TrackReader(args.input,args.waymo_root)
     frozen = json.loads(args.cases.read_text())
+    if isinstance(frozen, dict): frozen = frozen[manifest["dataset"]]
     paths = {}
     for filename in manifest["tracks"]:
         path = args.collection/"tracks"/filename

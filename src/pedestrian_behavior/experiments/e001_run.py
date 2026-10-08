@@ -99,32 +99,51 @@ def plots(output, history, selection, evaluations):
     return paths
 
 
+def configure_logging(run):
+    run.define_metric("optimizer_step", hidden=True, summary="none")
+    run.define_metric("epoch", hidden=True, summary="none")
+    run.define_metric("train/loss_step", step_metric="optimizer_step", step_sync=False, summary="none")
+    run.define_metric("train/loss_epoch", step_metric="epoch", step_sync=False)
+    run.define_metric("val/*", step_metric="epoch", step_sync=False)
+    run.define_metric("details/*", hidden=True)
+
+
 def log_final(run, evaluations, plot_paths, provenance):
-    payload = {"provenance": provenance}
+    run.config.update({"provenance": provenance,
+                       "evaluation_support": {d: r["primary"]["denominators"] for d, r in evaluations.items()}},
+                      allow_val_change=True)
+    payload = {}
     for dataset, result in evaluations.items():
         for weighting in ("raw", "track_weighted"):
             scores = result["primary"][weighting]
             for metric in ("macro_f1", "support_weighted_f1", "accuracy"):
-                payload[f"{dataset}/{weighting}/{metric}"] = scores[metric]
-            payload[f"{dataset}/{weighting}/per-class"] = wandb.Table(
+                payload[f"eval/{dataset}/{weighting}/{metric}"] = scores[metric]
+            payload[f"details/{dataset}/{weighting}/per-class"] = wandb.Table(
                 columns=["class", "precision", "recall", "f1", "support"],
                 data=[[c]+[scores[k][i] for k in ("precision", "recall", "f1", "support")] for i, c in enumerate(CLASSES)])
-            payload[f"{dataset}/{weighting}/confusion"] = wandb.Table(columns=["gt"]+list(CLASSES),
+            payload[f"details/{dataset}/{weighting}/confusion"] = wandb.Table(columns=["gt"]+list(CLASSES),
                 data=[[c]+scores["confusion"][i] for i, c in enumerate(CLASSES)])
-        for metric in ("track_ce", "mean_track_accuracy", "median_track_accuracy", "denominators"):
-            payload[f"{dataset}/{metric}"] = result["primary"][metric]
+        for metric in ("track_ce", "mean_track_accuracy", "median_track_accuracy"):
+            payload[f"eval/{dataset}/{metric}"] = result["primary"][metric]
         for axis, slices in result.get("strata", {}).items():
-            payload[f"{dataset}/strata/{axis}"] = wandb.Table(
+            payload[f"details/{dataset}/strata/{axis}"] = wandb.Table(
                 columns=["bin", "macro_f1", "groups", "tracks", "frames", "classes", "class_frames"],
                 data=[[label, s["track_weighted"]["macro_f1"], s["denominators"]["groups"], s["denominators"]["tracks"],
                        s["denominators"]["gt_frames"], s["track_weighted"]["supported_classes"], s["denominators"]["class_frames"]]
                       for label, s in slices.items()])
             for weighting in ("raw", "track_weighted"):
-                payload[f"{dataset}/strata/{axis}/{weighting}/per-class"] = wandb.Table(
+                payload[f"details/{dataset}/strata/{axis}/{weighting}/per-class"] = wandb.Table(
                     columns=["bin", "class", "precision", "recall", "f1", "support"],
                     data=[[label, c]+[s[weighting][k][i] for k in ("precision", "recall", "f1", "support")]
                           for label, s in slices.items() for i, c in enumerate(CLASSES)])
-    payload.update({"plots/"+p.stem: wandb.Image(str(p)) for p in plot_paths})
+    for p in plot_paths:
+        key = "details/plots/"+p.stem
+        for dataset in evaluations:
+            axis = p.stem.removeprefix(dataset+"-")
+            if p.stem.startswith(dataset+"-") and axis in STRATA:
+                key = f"strata/{dataset}/{axis}"
+                break
+        payload[key] = wandb.Image(str(p))
     run.log(payload)
 
 
@@ -187,17 +206,24 @@ def run_attempt(source, configuration, variant, output, device, smoke=False):
                          job_type=status["kind"], config=config | {"provenance": provenance},
                          dir=str(output.resolve()), save_code=False, resume="never", mode="online")
         provenance["wandb"] = {"id": run.id, "url": run.url}
+        configure_logging(run)
+        def on_step(step, loss):
+            row = {"optimizer_step": step, "training_ce": loss}
+            with (output/"steps.jsonl").open("a") as stream:
+                stream.write(json.dumps(row, allow_nan=False)+"\n")
+            run.log({"optimizer_step": step, "train/loss_step": loss})
         def on_epoch(row, history):
             write_json(output/"history.json", history)
             provenance.update(completed_epochs=len(history), last_completed_epoch=row["epoch"],
                 exposure={k: sum(r[k] for r in history) for k in ("optimizer_steps", "processed_tracks", "context_slots", "gt_slots", "padding_slots", "batch_slots")})
             write_json(output/"provenance.json", provenance)
-            run.log(row, step=row["epoch"])
+            run.log({"epoch": row["epoch"], "train/loss_epoch": row["training_ce"],
+                     "val/loss": row["validation_ce"], "val/macro_f1": row["validation_f1"]})
         fitted = fit(model, SmokeBatches() if smoke else training,
                      lambda m: prediction_metrics(validation_predictions(m), len(CLASSES)),
                      torch.optim.AdamW(model.parameters(), **SETTINGS["optimizer"]), device, output,
                      {"config": config, "normalization": statistics, "provenance_file": "provenance.json"}, on_epoch,
-                     epochs=1 if smoke else SETTINGS["epochs"], patience=SETTINGS["patience"], clip_norm=SETTINGS["clip_norm"])
+                     epochs=1 if smoke else SETTINGS["epochs"], patience=SETTINGS["patience"], clip_norm=SETTINGS["clip_norm"], on_step=on_step)
         selected = reload_checkpoint(output/"best.pt", model, device)
         evaluations = {}
         for d in ([source] if smoke else list(setups)):

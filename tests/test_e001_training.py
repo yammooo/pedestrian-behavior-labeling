@@ -21,7 +21,7 @@ from pedestrian_behavior.data.loading import collate_tracks
 from pedestrian_behavior.evaluation import (load_predictions, prediction_metrics, save_predictions,
                                             stratified_metrics, track_cross_entropy)
 from pedestrian_behavior.experiments.e001 import STRATA, build_model, observation_conditions
-from pedestrian_behavior.experiments.e001_run import log_final, plots, run_attempt
+from pedestrian_behavior.experiments.e001_run import configure_logging, log_final, plots, run_attempt
 from pedestrian_behavior.training import (fit, reload_checkpoint, save_checkpoint, seed_run, select_epoch, train_epoch)
 
 
@@ -120,6 +120,30 @@ class E001TrainingTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Nonfinite"):
             train_epoch(model, batches, torch.optim.AdamW(model.parameters()), torch.device("cpu"), 1.)
         self.check("nonfinite training fails", True, True)
+
+    def test_step_offsets_batch_losses_and_dashboard_axes(self):
+        model = build_model("K", "A").eval()
+        for module in model.modules():
+            if isinstance(module, torch.nn.Dropout):
+                module.p = 0
+        batches = [collate_tracks([self.sample([0]), self.sample([1, 1, 1])]),
+                   collate_tracks([self.sample([3])])]
+        expected = [float(track_cross_entropy(model(b["inputs"], b["lengths"]), b["targets"],
+                          b["gt_valid"], b["padding_mask"]).mean().detach()) for b in batches]
+        steps = []
+        result = fit(model, batches, lambda m: {"track_ce": 1., "track_weighted": {"macro_f1": .5}},
+                     torch.optim.AdamW(model.parameters(), lr=0, weight_decay=0), torch.device("cpu"), self.root,
+                     {}, lambda r, h: None, epochs=2, patience=5, clip_norm=1., on_step=lambda step, loss: steps.append([step, loss]))
+        self.check("optimizer steps continue across epoch boundaries", [1, 2, 3, 4], [s[0] for s in steps])
+        self.close("each step uses its actual batch's equal-track CE", expected*2, [s[1] for s in steps])
+        self.close("epoch CE is track-weighted across the 2+1 batches", [(expected[0]*2+expected[1])/3]*2,
+                   [r["training_ce"] for r in result["history"]])
+        definitions = {}
+        configure_logging(SimpleNamespace(define_metric=lambda name, **kwargs: definitions.update({name: kwargs})))
+        self.check("native curves use optimizer step or epoch", ["optimizer_step", "epoch", "epoch"],
+                   [definitions[k]["step_metric"] for k in ("train/loss_step", "train/loss_epoch", "val/*")])
+        self.check("counter axes and detail panels hidden from auto plots", [True]*3,
+                   [definitions[k]["hidden"] for k in ("optimizer_step", "epoch", "details/*")])
 
     def test_selection_patience_budget_and_checkpoint_reload(self):
         sequence = [(.2, 2.), (.3, 2.), (.3, 1.), (.3, 1.), (.25, .5), (.3, 1.1), (.3, 1.)]
@@ -228,13 +252,18 @@ class E001TrainingTest(unittest.TestCase):
         history = [{"epoch": 1, "training_ce": 1., "validation_ce": 1.1, "validation_f1": .2}]
         paths = plots(self.root/"plots", history, {"epoch": 1}, {"fixture": result})
         self.check("curves, four confusion views, per-class and slice PNG/SVG", [8, 16], [len(paths), len(list((self.root/"plots").iterdir()))])
-        payloads = []
-        log_final(SimpleNamespace(log=payloads.append), {"fixture": result}, paths, {"revision": "fixture"})
+        payloads, configs = [], []
+        config = SimpleNamespace(update=lambda value, **kwargs: configs.append(value))
+        log_final(SimpleNamespace(log=payloads.append, config=config), {"fixture": result}, paths, {"revision": "fixture"})
         self.check("W&B allowed scalar/table/plot content only", True,
                    all(isinstance(v, (dict, int, float, type(None), wandb.Table, wandb.Image)) for v in payloads[0].values()))
+        self.check("provenance/support stay in config, no numeric metadata charts", [False, True, True],
+                   ["provenance" in payloads[0], "provenance" in configs[0], "evaluation_support" in configs[0]])
+        self.check("all final keys belong to evaluation, strata or details", True,
+                   all(k.startswith(("eval/", "strata/", "details/")) for k in payloads[0]))
         self.check("W&B has no checkpoint or prediction artifacts", False, any(".pt" in k or "predictions" in k for k in payloads[0]))
         with self.assertRaisesRegex(RuntimeError, "logging failure"):
-            log_final(SimpleNamespace(log=lambda _: (_ for _ in ()).throw(RuntimeError("logging failure"))), {}, [], {})
+            log_final(SimpleNamespace(log=lambda _: (_ for _ in ()).throw(RuntimeError("logging failure")), config=config), {}, [], {})
         self.check("logging failure propagates; local predictions remain", True, (self.root/"predictions.npz").exists())
 
     @unittest.skipUnless(torch.cuda.is_available(), "CUDA acceptance runs on aalto")
@@ -283,14 +312,18 @@ class E001TrainingTest(unittest.TestCase):
             destination = base/"data-setup"/d
             destination.mkdir(parents=True)
             (destination/"setup.json").write_text(json.dumps(record))
-        for stage in ("init", "epoch", "final", "complete"):
+        for stage in ("init", "step", "epoch", "final", "complete"):
             output = self.root/stage
             events = []
             class FakeRun:
                 id, url = "test", "test"
+                config = SimpleNamespace(update=lambda value, **kwargs: None)
+                def define_metric(self, *args, **kwargs):
+                    pass
                 def log(self, value, **kwargs):
                     events.append(value)
-                    if stage == "epoch" or (stage == "final" and "provenance" in value):
+                    if ((stage == "step" and "train/loss_step" in value) or (stage == "epoch" and "epoch" in value)
+                            or (stage == "final" and any(k.startswith("eval/") for k in value))):
                         raise RuntimeError(stage+" failure")
                 def finish(self, **kwargs):
                     pass
@@ -310,13 +343,20 @@ class E001TrainingTest(unittest.TestCase):
                         run_attempt("loki", "K", "A", output, "cpu")
             self.check(stage+" attempt persists status/provenance", ["complete" if stage == "complete" else "failed", True],
                        [json.loads((output/"status.json").read_text())["status"], (output/"provenance.json").exists()])
-            if stage != "init":
+            if stage in ("epoch", "final", "complete"):
                 self.check(stage+" failure retains completed epoch and checkpoints", [True, True, True],
                            [(output/f).exists() for f in ("history.json", "best.pt", "last.pt")])
+            if stage != "init":
+                self.check(stage+": step evidence exists before external logging", [1, 1],
+                           [len((output/"steps.jsonl").read_text().splitlines()),
+                            json.loads((output/"steps.jsonl").read_text().splitlines()[0])["optimizer_step"]])
             if stage in ("final", "complete"):
                 self.check(stage+": both final evaluations survive W&B failure", [True, True],
                            [(output/(d+"-test")/"predictions.npz").exists() for d in ("loki", "road-waymo")])
-                self.check("exactly one epoch record", 1, sum("epoch" in v for v in events))
+                self.check("exactly one epoch and one step record", [1, 1],
+                           [sum("epoch" in v for v in events), sum("train/loss_step" in v for v in events)])
+                epoch = next(v for v in events if "epoch" in v)
+                self.check("epoch history exposes only the agreed curves and axis", ["epoch", "train/loss_epoch", "val/loss", "val/macro_f1"], sorted(epoch))
             with self.assertRaises(FileExistsError):
                 run_attempt("loki", "K", "A", output, "cpu")
 

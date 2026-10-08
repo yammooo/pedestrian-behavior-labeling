@@ -223,7 +223,9 @@ uv run --locked --extra cpu python scripts/train-e001.py \
 
 Use `--extra cu118 --device cuda` on `aalto` after Git push/pull and revision verification. Configurations are `K`, `K+T`, `K+T+R`, `RAW`; variants are A/B. Output directories must be fresh, including after failure. No resume/retry or comparison sweep is implemented. W&B errors propagate after saving available local evidence.
 
-Each attempt contains config/provenance/status, epoch history, `best.pt`, `last.pt`, dataset-specific `metrics.json` and pickle-free `predictions.npz`, and PNG/SVG plots. Checkpoints and full predictions stay local; W&B receives config/provenance, epoch records, final metrics, tables and PNG plots. Before valuable runs, arrange a separate backup; external backup storage remains **TBD**.
+Each attempt contains config/provenance/status, epoch history, per-update `steps.jsonl`, `best.pt`, `last.pt`, dataset-specific `metrics.json` and pickle-free `predictions.npz`, and PNG/SVG plots. Checkpoints and full predictions stay local; W&B receives configuration/provenance, per-update training CE, epoch training/validation curves and final metrics/tables/PNG plots. Provenance and denominators stay in configuration rather than metric history. Before valuable runs, arrange a separate backup; external backup storage remains **TBD**.
+
+Open the [manual E001 workspace](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling?nw=71j6lc3jv4g) for the main native curves and collapsible final-evaluation/observation-strata sections. Automatic panel generation is disabled in that saved view. Detailed tables remain available in each run; local numerical files retain all metrics. [Metric names and axes](experiments/E001-kinematic-transfer/README.md#wb-workspace-and-logging) are fixed separately from W&B's internal logging-row counter.
 
 The separate GPU smoke command uses one epoch, two training batches and one source-validation batch. It logs to the same W&B project with `job_type=gpu-smoke`, never accesses held-out tests and is not a comparison result:
 

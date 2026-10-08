@@ -49,7 +49,7 @@ def reload_checkpoint(path, model, device):
     return checkpoint
 
 
-def train_epoch(model, batches, optimizer, device, clip_norm):
+def train_epoch(model, batches, optimizer, device, clip_norm, on_step=None, step_offset=0):
     model.train()
     started = time.monotonic()
     total_loss, tracks, steps, slots, gt_slots, padding, capacity = 0., 0, 0, 0, 0, 0, 0
@@ -62,13 +62,16 @@ def train_epoch(model, batches, optimizer, device, clip_norm):
         optimizer.step()
         if any(not torch.isfinite(p).all() for p in model.parameters()):
             raise ValueError("Nonfinite model parameters")
-        total_loss += float(losses.detach().double().sum())
+        loss_sum = float(losses.detach().double().sum())
+        total_loss += loss_sum
         tracks += len(losses)
         steps += 1
         slots += int(batch["lengths"].sum())
         gt_slots += int(batch["gt_valid"].sum())
         padding += int(batch["padding_mask"].sum())
         capacity += batch["padding_mask"].numel()
+        if on_step is not None:
+            on_step(step_offset+steps, loss_sum/len(losses))
     if not tracks:
         raise ValueError("Empty training split")
     if device.type == "cuda":
@@ -79,10 +82,11 @@ def train_epoch(model, batches, optimizer, device, clip_norm):
 
 
 def fit(model, batches, validate, optimizer, device, output, checkpoint_references, on_epoch,
-        epochs, patience, clip_norm):
-    history, best, stale = [], None, 0
+        epochs, patience, clip_norm, on_step=None):
+    history, best, stale, step_offset = [], None, 0, 0
     for epoch in range(1, epochs+1):
-        row = {"epoch": epoch} | train_epoch(model, batches, optimizer, device, clip_norm)
+        row = {"epoch": epoch} | train_epoch(model, batches, optimizer, device, clip_norm, on_step=on_step, step_offset=step_offset)
+        step_offset += row["optimizer_steps"]
         validation = validate(model)
         row.update(validation_ce=validation["track_ce"], validation_f1=validation["track_weighted"]["macro_f1"])
         best, stale, selected = select_epoch(best, row["validation_f1"], row["validation_ce"], epoch, stale)

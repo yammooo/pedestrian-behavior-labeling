@@ -1,0 +1,839 @@
+{
+  "experiment": "E001",
+  "date": "2026-10-08",
+  "status": "accepted-for-e001-with-qualifications",
+  "scope": "Acquired scene-scoped official ROAD-Waymo links and native-ID context for the frozen kinematic population; no model or training.",
+  "authorization": "User instructed closing ROAD gate and assumes independent clips/scenarios; individual image observations are Codex review, not attributed to user.",
+  "reviewer": "Codex",
+  "audit_revision": "055df5f08e84c4695a78b29e637810e0bc4f1941",
+  "collection_manifest_sha256": "4225fc21eedc1ec7e4805639f5a2328daa5829536ba4492aae850f83f5d62b66",
+  "source_sha256": {
+    "pedestrians.csv.gz": "1b1fa986ce901c803946e3b7f55ba8431fcd83fdc9de31aaacee9c6ab12b541f",
+    "scene_manifest.json": "86751d3448e14b699c3994ef49bcb9052cefd5951d7400a03fedafc09cdbc3a8",
+    "road_label_definitions.json": "7638136dda3b45c59c25192f6ccdd4c497beb9ff3c16565a2063b2cd1f00af5f"
+  },
+  "rule": {
+    "accept": "Verified frozen sources, unique scene-scoped official IDs, exact native export-pair presence/type, native/saved inventory/extents and same-frame FRONT images. Purposive review found no demonstrated wrong actor link.",
+    "reject": "Source/scope mismatch, ambiguous/shared official ID, conflicting repeat, absent native exported pair/type mismatch, or demonstrated wrong actor/identity switch.",
+    "inconclusive": "Disclose tiny/dark/occluded/truncated/out-of-FRONT views; retain on verified official link without claiming independent visual confirmation.",
+    "missing": "Keep missing observations. Native-only extensions have no ROAD GT; no interpolation, new association, speed-based GT or eligibility change."
+  },
+  "selection": "Eight frozen native cases; all non-Pedestrian native type tracks including context extensions; top three distinct clips each by maximum selected speed, minimum median ROAD box area, maximum same-frame ROAD pedestrian count. Ties: locator. Include velocity peak and immediate grid neighbors for velocity cases.",
+  "snapshot_rule": "First/middle/last ROAD, disagreement, selected-position and non-Pedestrian-type times; first/last 3D-only extensions; velocity-peak immediate grid neighbors for velocity cases.",
+  "expected_actual_native_counts": {
+    "native_candidates": {
+      "expected": 9573,
+      "actual": 9573
+    },
+    "with_unique_lidar_id": {
+      "expected": 6809,
+      "actual": 6809
+    },
+    "without_lidar_id": {
+      "expected": 2764,
+      "actual": 2764
+    },
+    "with_native_3d": {
+      "expected": 6634,
+      "actual": 6634
+    },
+    "native_union_observations": {
+      "expected": 1211822,
+      "actual": 1211822
+    },
+    "unique_road_observations": {
+      "expected": 712630,
+      "actual": 712630
+    },
+    "export_pairs": {
+      "expected": 426491,
+      "actual": 426491
+    },
+    "additional_3d_timestamps": {
+      "expected": 495830,
+      "actual": 495830
+    },
+    "additional_front_timestamps": {
+      "expected": 8913,
+      "actual": 8913
+    },
+    "gain_3d_without_export_pair": {
+      "expected": 94,
+      "actual": 94
+    },
+    "3d_before_road": {
+      "expected": 2123,
+      "actual": 2123
+    },
+    "3d_after_road": {
+      "expected": 4589,
+      "actual": 4589
+    },
+    "disagreement_tracks": {
+      "expected": 15,
+      "actual": 15
+    },
+    "unique_disagreement_observations": {
+      "expected": 419,
+      "actual": 419
+    }
+  },
+  "structural_result": "Pass for all 9573 candidates / 562 clips; all source/component hashes and inventory/extents/IDs match; no ambiguous/shared ID, exported native pair/type mismatch, FRONT image absence or conflicting repeat encountered.",
+  "native_counts": {
+    "native_candidates": 9573,
+    "with_unique_lidar_id": 6809,
+    "without_lidar_id": 2764,
+    "with_native_3d": 6634,
+    "native_front_identity_missing": 3,
+    "native_union_observations": 1211822,
+    "native_3d_observations": 922321,
+    "native_front_observations": 721403,
+    "unique_road_observations": 712630,
+    "duplicate_annotation_rows": 10,
+    "export_pairs": 426491,
+    "additional_3d_timestamps": 495830,
+    "additional_front_timestamps": 8913,
+    "gain_3d_without_export_pair": 94,
+    "3d_before_road": 2123,
+    "3d_after_road": 4589,
+    "front_before_road": 120,
+    "front_after_road": 154,
+    "disagreement_tracks": 15,
+    "unique_disagreement_observations": 419,
+    "native_type_2_observations": 921036,
+    "native_type_4_observations": 1285
+  },
+  "csv_row_counts": {
+    "official_id_with_3d_box": 426496,
+    "semantic_disagreement_rows": 419,
+    "associated_3d_box_missing": 98024,
+    "no_official_association": 187980,
+    "missing_camera_identity": 140
+  },
+  "review_tracks": 33,
+  "review_snapshots": 236,
+  "demonstrated_wrong_links_in_selected_views": 0,
+  "artifacts": {
+    "local": "outputs/experiments/E001/association-review/complete",
+    "remote": "aalto:/home/user20/projects/pedestrian-behavior-labeling/outputs/experiments/E001/association-review/complete",
+    "audit_sha256": "bd2394439ecf966b2c32cb6834bc22531051dbdeb3e14fb467d4c60aa7f642bd",
+    "index_sha256": "c685d67ab5af9c7d1042fe4bfbaa5873e876996814f41bd917653e9df22aee7a",
+    "snapshot_file_manifest_sha256": "3ccf76a8f25e2897f6c0ebe6731396491b2b4fed6a6cc3eff4fbb89e0ecfd373",
+    "snapshot_file_manifest": "SHA256SUMS",
+    "file_count": 376
+  },
+  "limitations": [
+    "Purposive visual sample; no estimated population association error rate or full-video identity audit.",
+    "Several tiny/dark/occluded/native-only views cannot be independently confirmed; type disagreements are not all resolved semantically.",
+    "Native geometry can include bicycles and ROAD population includes scooter/wheeled human motion; original labels/types/geometry remain unchanged.",
+    "No independent RGB projection or sensor accuracy validation. Upstream acquisition/release revisions remain unknown; frozen acquired artifacts are reproducible.",
+    "Clip/scenario independence is the accepted user assumption, not an empirical claim.",
+    "Existing target/source inspection remains disclosed under E001 access rules."
+  ],
+  "unchanged": [
+    "Native annotations and numeric archives",
+    "Accepted behavior overrides and target mapping",
+    "Eligible populations: 6608 ROAD-Waymo / 12364 LOKI",
+    "Frozen split assignments and normalization"
+  ],
+  "validation": "23 unittests passed on local CPU and aalto CUDA locked uv environments; native-only Cyclist context/missing-pair/source-guard fixture included.",
+  "cases": [
+    {
+      "locator": "{\"clip\":\"train_00001\",\"tube_uid\":\"0611ea50-f652-406d-942a-9ec7e3e90546\"}",
+      "laser_id": null,
+      "reasons": [
+        "frozen native case: No exported paired 3D; native association/extensions must be checked"
+      ],
+      "snapshot_times": [
+        1552440195362591,
+        1552440206462312,
+        1552440215162553
+      ],
+      "native_type_counts": {},
+      "maximum_selected_speed_mps": 0.0,
+      "observation": "No official linked 3D footprint; ROAD figure remains visible. Missing association stays missing and this track is excluded by existing position eligibility."
+    },
+    {
+      "locator": "{\"clip\":\"train_00001\",\"tube_uid\":\"24508c28-3154-4b7f-964d-70b3ed7d5a9d\"}",
+      "laser_id": "dNW3S4yA8s8GmltmAPV8LQ",
+      "reasons": [
+        "frozen native case: Representative native Moving action group; native labels retained unchanged"
+      ],
+      "snapshot_times": [
+        1552440195362591,
+        1552440197261778,
+        1552440199062081,
+        1552440199162145,
+        1552440204962566,
+        1552440214562543,
+        1552440214662526
+      ],
+      "native_type_counts": {
+        "2": 194
+      },
+      "maximum_selected_speed_mps": 2.08181990440256,
+      "observation": "Walking figures on the left pavement; ROAD actor and linked footprint progress as ego passes. Later actor is outside FRONT or occluded; full visual continuity is unconfirmed there."
+    },
+    {
+      "locator": "{\"clip\":\"train_00001\",\"tube_uid\":\"4b9a9206-fbf1-4d45-8765-197759100bd6\"}",
+      "laser_id": "L5HBM5tSKtNA4qHegDQk8Q",
+      "reasons": [
+        "frozen native case: Representative native Crossing action group; native labels retained unchanged"
+      ],
+      "snapshot_times": [
+        1552440195362591,
+        1552440197761529,
+        1552440199462292,
+        1552440202462481,
+        1552440205162607,
+        1552440214962518,
+        1552440215162553
+      ],
+      "native_type_counts": {
+        "2": 199
+      },
+      "maximum_selected_speed_mps": 1.782677525025506,
+      "observation": "Crossing figure traverses the view and exits at the left edge. Later native context is not fully visible in FRONT; no demonstrated identity switch."
+    },
+    {
+      "locator": "{\"clip\":\"train_00004\",\"tube_uid\":\"04e9e47a-ee7d-448c-adc8-72c2e956d01a\"}",
+      "laser_id": "zT-Cajx8QA9XAz16elbgkA",
+      "reasons": [
+        "frozen native case: Representative native Stopped action group; native labels retained unchanged"
+      ],
+      "snapshot_times": [
+        1552696050477586,
+        1552696050577796,
+        1552696052485621,
+        1552696054391349,
+        1552696060293733,
+        1552696070093774
+      ],
+      "native_type_counts": {
+        "2": 197
+      },
+      "maximum_selected_speed_mps": 0.4229289145777496,
+      "observation": "Distant backlit roadside figure with sparse returns; small crops limit independent identity confirmation. No demonstrated wrong link."
+    },
+    {
+      "locator": "{\"clip\":\"train_00007\",\"tube_uid\":\"5f556c9b-6228-46d8-9660-aec924330565\"}",
+      "laser_id": "rA3fdNWC58cY9eF_Ozw1Bw",
+      "reasons": [
+        "smallest median ROAD box (three distinct clips)"
+      ],
+      "snapshot_times": [
+        1549594222673580,
+        1549594223673816,
+        1549594227473877,
+        1549594228773938,
+        1549594229373958,
+        1549594232274004
+      ],
+      "native_type_counts": {
+        "2": 97
+      },
+      "maximum_selected_speed_mps": 0.1822689157625932,
+      "observation": "Extremely small night-time box and sparse points. Visual identity is inconclusive; retained on structurally verified official link, not claimed visually confirmed."
+    },
+    {
+      "locator": "{\"clip\":\"train_00016\",\"tube_uid\":\"42044ff0-3b7f-4f50-b32b-34a283b099ee\"}",
+      "laser_id": "IswoOeecokrg845OsZfmfA",
+      "reasons": [
+        "frozen native case: Representative native Waiting action group; native labels retained unchanged"
+      ],
+      "snapshot_times": [
+        1557844352622016,
+        1557844355322669,
+        1557844358022405,
+        1557844358122432,
+        1557844362622740,
+        1557844372422648
+      ],
+      "native_type_counts": {
+        "2": 199
+      },
+      "maximum_selected_speed_mps": 1.7369570152935188,
+      "observation": "Small left pavement figure near crossing and parked vehicles. Footprint remains on that side as ego passes; distant/edge context limits confirmation."
+    },
+    {
+      "locator": "{\"clip\":\"train_00019\",\"tube_uid\":\"140a5e3c-7603-4fdd-ac52-f6fb556d2a44\"}",
+      "laser_id": "rBcbIMFHFDHbMVr-oyIhrA",
+      "reasons": [
+        "all non-Pedestrian native types, including context extensions"
+      ],
+      "snapshot_times": [
+        1512860025330498,
+        1512860028230570,
+        1512860029830424,
+        1512860031430248,
+        1512860033530219,
+        1512860033630253,
+        1512860041704894,
+        1512860041904888
+      ],
+      "native_type_counts": {
+        "4": 167
+      },
+      "maximum_selected_speed_mps": 0.40998225018242135,
+      "observation": "Right pavement human resolves in later crops; earlier frames are distant/blurred. Bicycle interpretation is unclear; no demonstrated actor switch."
+    },
+    {
+      "locator": "{\"clip\":\"train_00102\",\"tube_uid\":\"9d41339a-50a6-4adc-833b-1b2c9b48a362\"}",
+      "laser_id": "hnUo4hyZCFm1C_pXJddkUQ",
+      "reasons": [
+        "all non-Pedestrian native types, including context extensions"
+      ],
+      "snapshot_times": [
+        1557845032662435,
+        1557845033962496,
+        1557845034362403,
+        1557845035962852,
+        1557845042464909,
+        1557845042564900,
+        1557845052264296,
+        1557845052364317
+      ],
+      "native_type_counts": {
+        "4": 198
+      },
+      "maximum_selected_speed_mps": 1.7140852489890117,
+      "observation": "Grey-shirt/backpack figure on the right pavement, later at image edge or occluded by street furniture. Exact bicycle interpretation remains unclear."
+    },
+    {
+      "locator": "{\"clip\":\"train_00202\",\"tube_uid\":\"87cabdcc-7ecb-4bd9-923c-d0554efb95f6\"}",
+      "laser_id": "H1UMlDE2Tplm26V1NuUPzw",
+      "reasons": [
+        "all non-Pedestrian native types, including context extensions"
+      ],
+      "snapshot_times": [
+        1507658185440087,
+        1507658189640124,
+        1507658190439930,
+        1507658192140185,
+        1507658193540215,
+        1507658194340029,
+        1507658195239926,
+        1507658195339962,
+        1507658200034438,
+        1507658200134363
+      ],
+      "native_type_counts": {
+        "4": 98
+      },
+      "maximum_selected_speed_mps": 0.07892622108053025,
+      "observation": "Human with bicycle at the right curb becomes clear in closer side views. Elongated native Cyclist geometry is compatible with this actor; no demonstrated wrong link."
+    },
+    {
+      "locator": "{\"clip\":\"train_00228\",\"tube_uid\":\"945787db-97a1-4597-ba9e-be95c5d6ddae\"}",
+      "laser_id": "bu77rfoOnSX0XxAXjFv-fQ",
+      "reasons": [
+        "smallest median ROAD box (three distinct clips)"
+      ],
+      "snapshot_times": [
+        1507663803784988,
+        1507663804584918,
+        1507663806385148,
+        1507663806585080,
+        1507663808384979,
+        1507663810685034
+      ],
+      "native_type_counts": {
+        "2": 39
+      },
+      "maximum_selected_speed_mps": 1.9468387676574623,
+      "observation": "Only a small head/upper body above a vehicle is visible in several crops. Tiny/occluded case is inconclusive, not a confirmed identity match."
+    },
+    {
+      "locator": "{\"clip\":\"train_00240\",\"tube_uid\":\"060b948f-afdb-4276-9066-c949349a1313\"}",
+      "laser_id": "VrmNQvQdgCyHI3yj12a06w",
+      "reasons": [
+        "most same-frame ROAD pedestrians (three distinct clips)"
+      ],
+      "snapshot_times": [
+        1557364374737694,
+        1557364376937678,
+        1557364379037857,
+        1557364379137762,
+        1557364384537517,
+        1557364394337157,
+        1557364394537163
+      ],
+      "native_type_counts": {
+        "2": 199
+      },
+      "maximum_selected_speed_mps": 1.8712996430885027,
+      "observation": "Dark-clothed pavement figure in crowded street; ROAD crops follow the person to the right edge and native footprint remains on that pavement. Later context limits visual confirmation."
+    },
+    {
+      "locator": "{\"clip\":\"train_00277\",\"tube_uid\":\"c92fb1a2-e21b-4ac3-87ca-9b62673b3154\"}",
+      "laser_id": "h4laOpYWHxioBNgFk3eKNQ",
+      "reasons": [
+        "all non-Pedestrian native types, including context extensions",
+        "largest selected velocity (three distinct clips)"
+      ],
+      "snapshot_times": [
+        1559319173762489,
+        1559319174362725,
+        1559319174562774,
+        1559319174762702,
+        1559319175862591,
+        1559319175962530,
+        1559319179562494,
+        1559319180662423,
+        1559319185362646
+      ],
+      "native_type_counts": {
+        "4": 117
+      },
+      "maximum_selected_speed_mps": 7.2414085363359275,
+      "observation": "Person/bicycle-like actor in traffic, with distant frames and car occlusion covering much of the body. Saved positions around the velocity peak change smoothly; bicycle/identity confirmation is limited at the peak."
+    },
+    {
+      "locator": "{\"clip\":\"train_00326\",\"tube_uid\":\"ad4403b8-f63e-49e0-86e7-873242955853\"}",
+      "laser_id": "rx43aHLVrVQnkErl9OR19A",
+      "reasons": [
+        "all non-Pedestrian native types, including context extensions"
+      ],
+      "snapshot_times": [
+        1559343462398759,
+        1559343464398592,
+        1559343464498608,
+        1559343464898540,
+        1559343465498639,
+        1559343465798620,
+        1559343466398772,
+        1559343466498830
+      ],
+      "native_type_counts": {
+        "4": 42
+      },
+      "maximum_selected_speed_mps": 9.097688294881947e-12,
+      "observation": "Tiny backlit figure on the right roadside; sparse broad footprint. Bicycle interpretation and exact identity are inconclusive."
+    },
+    {
+      "locator": "{\"clip\":\"train_00331\",\"tube_uid\":\"0f10f56d-16c7-4fee-8f87-004ef60d84b9\"}",
+      "laser_id": "rLGm_ea9zLaVQsFKsKd0JA",
+      "reasons": [
+        "most same-frame ROAD pedestrians (three distinct clips)"
+      ],
+      "snapshot_times": [
+        1557873652898951,
+        1557873658298926,
+        1557873661398983,
+        1557873662698652,
+        1557873669598942,
+        1557873672498799,
+        1557873672698831
+      ],
+      "native_type_counts": {
+        "2": 199
+      },
+      "maximum_selected_speed_mps": 0.076606070741421,
+      "observation": "Head/torso visible behind cars among nearby actors; later larger crop resolves a person on left pavement. Occlusion prevents confirming every context frame."
+    },
+    {
+      "locator": "{\"clip\":\"train_00348\",\"tube_uid\":\"b8c39888-f89c-40de-86d9-73f41eee122b\"}",
+      "laser_id": "48X5n3SHr4HO-NFSbx4DiA",
+      "reasons": [
+        "all non-Pedestrian native types, including context extensions"
+      ],
+      "snapshot_times": [
+        1559178701737863,
+        1559178703637981,
+        1559178705437693,
+        1559178705637927,
+        1559178705738103,
+        1559178713537259,
+        1559178721337304,
+        1559178721437323
+      ],
+      "native_type_counts": {
+        "4": 159
+      },
+      "maximum_selected_speed_mps": 2.4014552352872247,
+      "observation": "Person at right crossing/pavement in ROAD crops; later native-only Cyclist context has no same-frame FRONT crop and is partly behind street objects/vehicles. Bicycle interpretation and full context identity remain inconclusive; no demonstrated wrong link."
+    },
+    {
+      "locator": "{\"clip\":\"train_00348\",\"tube_uid\":\"cd66d0bc-3dfc-4c82-9eaa-292e30058157\"}",
+      "laser_id": "i1NRa5X_KxJZor4W3jeiBg",
+      "reasons": [
+        "all non-Pedestrian native types, including context extensions"
+      ],
+      "snapshot_times": [
+        1559178702237505,
+        1559178702337448,
+        1559178703237887,
+        1559178704137942,
+        1559178708037691,
+        1559178713637217,
+        1559178713737204
+      ],
+      "native_type_counts": {
+        "4": 116
+      },
+      "maximum_selected_speed_mps": 9.102124018134835e-11,
+      "observation": "Tiny dark figure near crossing traffic and later pavement, with vehicle occlusion. Bicycle interpretation is unclear; no demonstrated identity switch."
+    },
+    {
+      "locator": "{\"clip\":\"train_00383\",\"tube_uid\":\"7fc2c418-f760-496a-927c-717d8df6ad06\"}",
+      "laser_id": "HddH5Z45xjPfNCZRVsDavA",
+      "reasons": [
+        "frozen native case: Known Moving/Stop co-label conflict; proposed correction remains unaccepted"
+      ],
+      "snapshot_times": [
+        1557546538122353,
+        1557546544822526,
+        1557546547222557,
+        1557546547322540,
+        1557546549622126,
+        1557546556522308,
+        1557546556622295
+      ],
+      "native_type_counts": {
+        "2": 186
+      },
+      "maximum_selected_speed_mps": 1.478212394531041,
+      "observation": "Night-time right pavement figure, later at image edge. Low light/small crops limit identity confirmation; previously accepted MOVING override remains unchanged."
+    },
+    {
+      "locator": "{\"clip\":\"train_00425\",\"tube_uid\":\"e1dce432-b655-4627-bea9-8f7e0a5f17be\"}",
+      "laser_id": "TT21G0mmQEpIIlEQWxHJOg",
+      "reasons": [
+        "frozen native case: Known Moving/Stop co-label conflict; proposed correction remains unaccepted"
+      ],
+      "snapshot_times": [
+        1558152523822478,
+        1558152524322334,
+        1558152524722277,
+        1558152524822268,
+        1558152533624356,
+        1558152543423092,
+        1558152543523078
+      ],
+      "native_type_counts": {
+        "2": 198
+      },
+      "maximum_selected_speed_mps": 0.21258115423245366,
+      "observation": "Night-time left-side figure near parked cars, then native context after ego turns. Dark blurred crops limit identity confirmation; previously accepted STOPPED override remains unchanged."
+    },
+    {
+      "locator": "{\"clip\":\"train_00439\",\"tube_uid\":\"221236dd-9275-4659-acb4-bc6171c73c35\"}",
+      "laser_id": "DVq51GmqAKcbwFMVQ2oNSQ",
+      "reasons": [
+        "largest selected velocity (three distinct clips)"
+      ],
+      "snapshot_times": [
+        1542650100027626,
+        1542650101526571,
+        1542650102925780,
+        1542650103025764,
+        1542650106425636,
+        1542650106625635,
+        1542650106825602,
+        1542650108625710,
+        1542650117020915,
+        1542650117120851
+      ],
+      "native_type_counts": {
+        "2": 172
+      },
+      "maximum_selected_speed_mps": 6.744830540683043,
+      "observation": "Actor on a small wheeled device on the left pavement becomes visible in ROAD crops. Native Pedestrian type does not guarantee walking. Peak motion is smooth; peak images have no FRONT crop and are visually inconclusive despite smooth neighboring displacement."
+    },
+    {
+      "locator": "{\"clip\":\"train_00509\",\"tube_uid\":\"a53d0b0f-2d9c-4cc4-a948-4aea1967225b\"}",
+      "laser_id": "S6PIinWw61AwG4lCYpu7Yg",
+      "reasons": [
+        "largest selected velocity (three distinct clips)"
+      ],
+      "snapshot_times": [
+        1553011292726034,
+        1553011296526062,
+        1553011296626016,
+        1553011298125820,
+        1553011302325952,
+        1553011302525994,
+        1553011302726040,
+        1553011303526049,
+        1553011304625845,
+        1553011312525917
+      ],
+      "native_type_counts": {
+        "2": 109
+      },
+      "maximum_selected_speed_mps": 11.811156838135318,
+      "observation": "Backpack-wearing person clearly riding a scooter away in the right cycle lane. Largest saved speed is compatible with visible wheeled motion; native Pedestrian geometry and ROAD action remain unchanged."
+    },
+    {
+      "locator": "{\"clip\":\"train_00528\",\"tube_uid\":\"0b90efbd-62b0-4a67-bdfc-5db507d883c6\"}",
+      "laser_id": "iWmlgrszN2OtQm8Dg3FF7Q",
+      "reasons": [
+        "all non-Pedestrian native types, including context extensions"
+      ],
+      "snapshot_times": [
+        1557873689798803,
+        1557873691298624,
+        1557873691998375,
+        1557873692398337,
+        1557873692598413,
+        1557873692698441
+      ],
+      "native_type_counts": {
+        "4": 8
+      },
+      "maximum_selected_speed_mps": 1.447686537233975,
+      "observation": "Small stationary-looking human on left pavement; sparse/missing linked boxes in several ROAD frames. Cyclist semantics cannot be confirmed visually."
+    },
+    {
+      "locator": "{\"clip\":\"train_00528\",\"tube_uid\":\"243647a3-3b64-4735-9bac-d0ac7cf64f1c\"}",
+      "laser_id": "Tn0wQRB52tZSmcTKj9Vz2g",
+      "reasons": [
+        "all non-Pedestrian native types, including context extensions"
+      ],
+      "snapshot_times": [
+        1557873672998900,
+        1557873681398730,
+        1557873690898789,
+        1557873692298344,
+        1557873692398337,
+        1557873692498397,
+        1557873692598413,
+        1557873692698441
+      ],
+      "native_type_counts": {
+        "4": 5
+      },
+      "maximum_selected_speed_mps": 1.9210719752171312,
+      "observation": "Small person on left pavement, partly behind vehicles. Five native Cyclist observations occur only after ROAD ends, with sparse returns and no FRONT crop. Neither bicycle semantics nor those extension identities can be independently confirmed; retained on the verified official link with explicit uncertainty."
+    },
+    {
+      "locator": "{\"clip\":\"train_00528\",\"tube_uid\":\"44feeff4-4289-4125-aede-c54eac3dd9a2\"}",
+      "laser_id": "DBe9RODcaopjCpBt6e43Ew",
+      "reasons": [
+        "all non-Pedestrian native types, including context extensions"
+      ],
+      "snapshot_times": [
+        1557873683698808,
+        1557873688198640,
+        1557873691498529,
+        1557873692098366,
+        1557873692498397,
+        1557873692698441
+      ],
+      "native_type_counts": {
+        "4": 13
+      },
+      "maximum_selected_speed_mps": 1.3864588898099905,
+      "observation": "Person with helmet and bicycle handlebars becomes clear in the last closer crop. Human/bicycle actor is compatible with Cyclist geometry."
+    },
+    {
+      "locator": "{\"clip\":\"train_00528\",\"tube_uid\":\"56fdeaee-0fb0-47bc-83da-fa9da2a27b63\"}",
+      "laser_id": "HugVqjsT9YAk9epJUOJkWw",
+      "reasons": [
+        "all non-Pedestrian native types, including context extensions"
+      ],
+      "snapshot_times": [
+        1557873672998900,
+        1557873683098602,
+        1557873686898684,
+        1557873686998737,
+        1557873689798803,
+        1557873692598413,
+        1557873692698441
+      ],
+      "native_type_counts": {
+        "4": 59
+      },
+      "maximum_selected_speed_mps": 1.5630575873860069,
+      "observation": "Human on left pavement with others nearby; close crops show a body but bicycle interpretation remains unclear. No demonstrated wrong link."
+    },
+    {
+      "locator": "{\"clip\":\"train_00528\",\"tube_uid\":\"90cbb7c2-d478-470a-9cba-79c291649a97\"}",
+      "laser_id": "z6satJ0hJbg2xavCzz-IHw",
+      "reasons": [
+        "all non-Pedestrian native types, including context extensions"
+      ],
+      "snapshot_times": [
+        1557873672998900,
+        1557873681098619,
+        1557873692298344,
+        1557873692398337,
+        1557873692498397,
+        1557873692598413,
+        1557873692698441
+      ],
+      "native_type_counts": {
+        "4": 5
+      },
+      "maximum_selected_speed_mps": 1.325609142214518,
+      "observation": "Mostly head/upper body above cars; small occluded boxes become tiny. Independent identity and bicycle interpretation remain inconclusive."
+    },
+    {
+      "locator": "{\"clip\":\"train_00528\",\"tube_uid\":\"bd158d05-5c3d-4e62-b675-30e568d14530\"}",
+      "laser_id": "pQcfKiLD-Wj8MXUDGMCFWQ",
+      "reasons": [
+        "all non-Pedestrian native types, including context extensions"
+      ],
+      "snapshot_times": [
+        1557873683798831,
+        1557873688298673,
+        1557873689398909,
+        1557873690998734,
+        1557873691098688,
+        1557873692598413,
+        1557873692698441
+      ],
+      "native_type_counts": {
+        "4": 34
+      },
+      "maximum_selected_speed_mps": 1.4086826950413625,
+      "observation": "Human on left pavement beside vehicles; body resolves in later crops. Possible nearby bicycle is not enough to confirm semantic convention; no demonstrated actor switch."
+    },
+    {
+      "locator": "{\"clip\":\"train_00528\",\"tube_uid\":\"e4acf221-6621-4697-837a-030742ace308\"}",
+      "laser_id": "5nhjyfn5vVKp9QGdNtrMZQ",
+      "reasons": [
+        "all non-Pedestrian native types, including context extensions"
+      ],
+      "snapshot_times": [
+        1557873672998900,
+        1557873682898552,
+        1557873689298887,
+        1557873689398909,
+        1557873690998734,
+        1557873692598413,
+        1557873692698441
+      ],
+      "native_type_counts": {
+        "4": 35
+      },
+      "maximum_selected_speed_mps": 1.919702527811646,
+      "observation": "Human on left pavement, with nearby actors and vehicles. Body resolves in later crops; bicycle interpretation remains unclear."
+    },
+    {
+      "locator": "{\"clip\":\"train_00555\",\"tube_uid\":\"038673d4-e9c0-4373-a262-7cb89ddd2a73\"}",
+      "laser_id": "uB2l9zavpNibtweXP8BR6A",
+      "reasons": [
+        "most same-frame ROAD pedestrians (three distinct clips)"
+      ],
+      "snapshot_times": [
+        1557857070597727,
+        1557857072097838,
+        1557857073498039,
+        1557857073598051,
+        1557857080398442,
+        1557857090221406,
+        1557857090321818
+      ],
+      "native_type_counts": {
+        "2": 198
+      },
+      "maximum_selected_speed_mps": 0.04447464165170387,
+      "observation": "Small human on right pavement near crossing and crowd; native context follows ego turn. Crowd/occlusion limits complete confirmation."
+    },
+    {
+      "locator": "{\"clip\":\"train_00558\",\"tube_uid\":\"4064d5fb-fa90-4572-9df2-d6d881c8e6d7\"}",
+      "laser_id": "Lqc5trtX8ZPlyCM0UgPIIA",
+      "reasons": [
+        "all non-Pedestrian native types, including context extensions"
+      ],
+      "snapshot_times": [
+        1544460727387487,
+        1544460727887733,
+        1544460728387647,
+        1544460728487633,
+        1544460732087578,
+        1544460732187566,
+        1544460736787530
+      ],
+      "native_type_counts": {
+        "4": 95
+      },
+      "maximum_selected_speed_mps": 5.290405789675896,
+      "observation": "Left pavement figure seen through railings, then clipped by image edge. Railings/edge and later native-only context limit confirmation; no demonstrated actor switch."
+    },
+    {
+      "locator": "{\"clip\":\"train_00561\",\"tube_uid\":\"fd8c90a7-64e2-4163-b8e5-98ff29a2ac05\"}",
+      "laser_id": "XXyUNizk0wfQnXJd9MDXUw",
+      "reasons": [
+        "frozen native case: Largest ROAD annotation gap with some exported 3D; inspect native extensions"
+      ],
+      "snapshot_times": [
+        1508027102917835,
+        1508027103717905,
+        1508027112717823,
+        1508027121717901,
+        1508027121817934,
+        1508027122518042,
+        1508027122618046
+      ],
+      "native_type_counts": {
+        "2": 198
+      },
+      "maximum_selected_speed_mps": 0.3783396652548846,
+      "observation": "Human at left edge near intersection with backlighting and native-only internal slots. Missing ROAD slots remain context without GT; no demonstrated switch."
+    },
+    {
+      "locator": "{\"clip\":\"train_00592\",\"tube_uid\":\"249dd253-f53b-4311-b156-4a86eacf3fc7\"}",
+      "laser_id": "2k1QEnhS-pMcdQq2kSotDw",
+      "reasons": [
+        "all non-Pedestrian native types, including context extensions"
+      ],
+      "snapshot_times": [
+        1541791878175043,
+        1541791883367587,
+        1541791883466892,
+        1541791885055763,
+        1541791885553349,
+        1541791886051275,
+        1541791888548762,
+        1541791888648782
+      ],
+      "native_type_counts": {
+        "4": 106
+      },
+      "maximum_selected_speed_mps": 2.845717981054881,
+      "observation": "Human partly hidden behind parked vehicles; crops show head/body intermittently. Native-only context and bicycle interpretation need qualification; no demonstrated wrong link."
+    },
+    {
+      "locator": "{\"clip\":\"train_00615\",\"tube_uid\":\"f5f65077-47a9-4cf2-b3fd-2ec664ea69da\"}",
+      "laser_id": "H_hnA4MKXib9o6c8PVpv2g",
+      "reasons": [
+        "smallest median ROAD box (three distinct clips)"
+      ],
+      "snapshot_times": [
+        1557240110472182,
+        1557240119972222,
+        1557240124072564,
+        1557240126872653,
+        1557240129472637
+      ],
+      "native_type_counts": {
+        "2": 56
+      },
+      "maximum_selected_speed_mps": 9.271148821458986e-12,
+      "observation": "Tiny partly hidden head/upper body behind traffic; independent identity confirmation is inconclusive. Retain official link with explicit limitation."
+    },
+    {
+      "locator": "{\"clip\":\"train_00664\",\"tube_uid\":\"b2606f96-f84e-4312-b550-8b74b5db8c34\"}",
+      "laser_id": "a0ZFystaIZcNWKA11drZZA",
+      "reasons": [
+        "all non-Pedestrian native types, including context extensions"
+      ],
+      "snapshot_times": [
+        1507156708022166,
+        1507156708619578,
+        1507156709117162,
+        1507156709216684,
+        1507156709415641,
+        1507156710608857,
+        1507156710708333
+      ],
+      "native_type_counts": {
+        "4": 28
+      },
+      "maximum_selected_speed_mps": 3.432906830720712,
+      "observation": "Tiny head/upper body near trees/vehicles, later native context outside useful FRONT visibility. Exact identity and Cyclist semantics remain inconclusive."
+    }
+  ]
+}

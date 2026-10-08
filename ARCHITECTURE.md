@@ -43,4 +43,6 @@ Future RGB/LiDAR representations can retrieve native observations through existi
 - Agree each increment's input/output and readable acceptance tests before coding it. Reuse existing fixture/inspection tools where suitable; rerun existing tests for regressions.
 - Update affected imports, commands, tests and owner documents together when moving code. Keep schemas in dataset notes, protocols/results in comparison records, and architecture here; link rather than duplicate.
 
-Next increment: models/training and the agreed equal-track loss/F1 and padding-invariance acceptance tests. Training still depends on the unresolved evidence gates in E001.
+The one-off `scripts/audit-road-associations.py` reuses the native reader and preview renderer to verify frozen ROAD sources/official links and generate a purposive review pack. E001 owns its acceptance record; the audit does not modify associations, targets or saved archives.
+
+Next increment: models/training and the agreed equal-track loss/F1 and padding-invariance acceptance tests. E001's data/association gates are accepted with recorded qualifications; model implementation and validation remain to be done.

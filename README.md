@@ -127,6 +127,17 @@ uv run --locked --extra cpu python -m pedestrian_behavior.inspection.prepared_tr
 
 Open `acceptance/index.html` for independent expected/actual fixture checks or the dataset inspector's `index.html` for synchronized native context, fixed trajectories, feature timelines, masks and annotation values. Copy the complete inspector directory for portable viewing. Missing slots stay blank; the viewer does not interpolate.
 
+Reproduce the ROAD association/context audit and review pack on `aalto`, after pulling and verifying the intended Git revision. The output directory must be fresh; the full native index and saved collection are required. E001 owns the [acceptance record](experiments/E001-kinematic-transfer/README.md#road-association-acceptance-2026-10-08).
+
+```bash
+uv run --locked --extra cu118 python scripts/audit-road-associations.py \
+  --index /home/user20/road_waymo_mapping/merged_pedestrians_20261002 \
+  --collection outputs/experiments/E001/reader-preparation/road-waymo \
+  --output outputs/experiments/E001/association-review/complete
+```
+
+`audit.json` freezes source hashes, native counts, selected identities/timestamps and command/revision; `index.html` shows same-frame RGB/BEV and original-resolution box crops. Structural success is not automatic visual acceptance. Native-only extensions have no ROAD GT; images with tiny boxes or occlusion may remain inconclusive.
+
 ## E001 saved tracks to batches
 
 Audit native supervision once, then freeze the eligible population, clip/scenario splits and source-training normalization. Setup outputs must be fresh. Native files are required only for this audit; subsequent samples/batches use the existing saved archives and setup artifacts. [E001](experiments/E001-kinematic-transfer/README.md#saved-tracks-to-batches-2026-10-08) owns targets, settings and population evidence.

@@ -54,7 +54,7 @@ All exported pedestrian timestamps use `timestamp_basis=automatic_verified`. Oth
 
 [Accepted policy](../archive/2026-10-02-road-waymo-linkage.md): ROAD defines the pedestrian class. Filter/train using `merged_agent_label=Ped`, not `waymo_3d_type`. Apply `has_3d_box` as the validity mask for exported same-frame 3D geometry; a nonempty `official_laser_object_id` alone is insufficient. E001's additional native-ID observations need a separate validity/provenance mask and do not change that CSV field. CSV booleans are strings: compare to `"True"`, not Python truthiness of the field.
 
-Preserve `road_annotation_json`, original label IDs, native `waymo_3d_type`/`waymo_3d_label`, `semantic_disagreement` and all original geometry. **419 paired rows across 15 camera tracks in 10 clips** have Waymo camera type Pedestrian and associated LiDAR type Cyclist. ROAD's class takes precedence, but these boxes are not resized to person-only geometry. Whether each disagreement reflects a labeling convention or an association error needs visual review.
+Preserve `road_annotation_json`, original label IDs, native `waymo_3d_type`/`waymo_3d_label`, `semantic_disagreement` and all original geometry. **419 paired rows across 15 camera tracks in 10 clips** have Waymo camera type Pedestrian and associated LiDAR type Cyclist. ROAD's class takes precedence, but these boxes are not resized to person-only geometry. [E001's qualified acceptance](../../experiments/E001-kinematic-transfer/README.md#road-association-acceptance-2026-10-08) reviews all 15 plus two native-context-only Cyclist tracks; several visible bicycle actors support differing geometry/conventions, while small/occluded cases remain semantically inconclusive.
 
 ### Track locators and native payload
 
@@ -116,7 +116,7 @@ Labels can overlap; these are observation counts, not unique tracks or action ep
 
 `waymo_box3d_center_size_heading_json` is native `[cx,cy,cz,sx,sy,sz,heading]` in the vehicle frame, with metres and radians. This is a moving ego frame, not a world trajectory; derive velocity only after appropriate ego compensation or verification of native speed attributes. Original optional attributes, including point counts and speed, are in `waymo_3d_attributes_json`; null values remain missing.
 
-The manifest references camera images, native LiDAR, calibration, vehicle/LiDAR poses, native and camera-synchronized boxes and other components in place. File existence does not establish per-frame content or annotation coverage. Sampled `lidar` Parquet stores range-image returns, not PLY vertices; point-cloud visualization needs decoding and calibration/pose handling. Native and camera-synchronized boxes have distinct timing/geometry provenance. FRONT behaviour supervision does not label every pedestrian visible to other cameras or LiDAR. HD map coverage is still unverified.
+The manifest references camera images, native LiDAR, calibration, vehicle/LiDAR poses, native and camera-synchronized boxes and other components in place. A read-only native check on 2026-10-08 found camera-calibration Parquet files for all **562** pedestrian clips on `aalto`, each with one FRONT row and finite `f_u`, `f_v`, `c_u`, `c_v`, `k1`, `k2`, `k3`, `p1`, `p2`. These supply camera intrinsics/distortion; the component also stores camera-to-vehicle extrinsics and image dimensions ([official schema](https://github.com/waymo-research/waymo-open-dataset/blob/master/src/waymo_open_dataset/v2/perception/context.py)). Files live under `/media/user20/F47C60057C5FC152/projects/waymo_v2/training/camera_calibration/`; this availability check does not validate RGB projection. File existence does not establish per-frame content or annotation coverage. Sampled `lidar` Parquet stores range-image returns, not PLY vertices; point-cloud visualization needs decoding and calibration/pose handling. Native and camera-synchronized boxes have distinct timing/geometry provenance. FRONT behaviour supervision does not label every pedestrian visible to other cameras or LiDAR. HD map coverage is still unverified.
 
 The [full structural recheck](../archive/2026-10-02-road-waymo-linkage.md#structural-recheck) supports export consistency, not a measured visual matching error rate.
 
@@ -143,7 +143,7 @@ Local report: `outputs/inspection/track-statistics/README.md`; `road-waymo/track
 
 ## Native identity and context audit (2026-10-06)
 
-Read-only scans on `aalto` used the acquired CSV/manifest and their native `lidar_box` and FRONT `camera_box` components in place. Counts below precede E001 resampling, pose-validity and accepted-label filtering; they are not final eligible populations. Versioned reproduction of these scans remains **TBD**.
+Read-only scans on `aalto` used the acquired CSV/manifest and their native `lidar_box` and FRONT `camera_box` components in place. Counts below precede E001 resampling, pose-validity and accepted-label filtering; they are not final eligible populations. The [versioned association audit](../../scripts/audit-road-associations.py), run at verified revision `055df5f08e84c4695a78b29e637810e0bc4f1941` on 2026-10-08, reproduces the candidate/link/observation/extension counts below and checks every saved source/component hash, native extent and exported native pair/type. Historical whole-manifest/prefix/file-count and union-before/after summaries remain evidence from the original scan rather than outputs of that narrower executable recheck. [Command](../../README.md#prepare-and-inspect-complete-tracks) and [E001 acceptance](../../experiments/E001-kinematic-transfer/README.md#road-association-acceptance-2026-10-08).
 
 | Identity / grouping check | Observed result |
 |---|---:|
@@ -155,6 +155,8 @@ Read-only scans on `aalto` used the acquired CSV/manifest and their native `lida
 | Manifest clips / unique Waymo segments | 798 / 798 |
 
 No repeated leading segment-name prefix was found. These checks support scene-scoped joins; they do not prove independent recordings, geography or different physical people. The acquired ROAD train/validation versus Waymo training split discrepancy above remains provenance, not a justification for mixing native split names.
+
+E001 assumes every clip is independent by explicit user instruction (2026-10-08). This is a protocol assumption, not a remaining independence audit/approval gate.
 
 | Native context check | Observed result |
 |---|---:|
@@ -170,6 +172,8 @@ No repeated leading segment-name prefix was found. These checks support scene-sc
 | Additional FRONT observation timestamps absent from ROAD | 8,913 |
 
 All 495,830 additional native 3D timestamps lack a corresponding ROAD observation; they supply context without behavior GT. Counts for before/after overlap. The ROAD+3D union's maximum extent is **19.824513 s**; this scan excludes the additional FRONT extension, so it is not the final all-modality maximum. The three ROAD IDs absent from native FRONT are retained as original ROAD evidence, not replaced by inferred camera identities.
+
+The complete 2026-10-08 native type scan found **921,036 Pedestrian / 1,285 Cyclist** observations on linked IDs, with Cyclist geometry on **17 tracks**; two have Cyclist observations only in native context and were absent from the export's disagreement flags. No other native 3D type was found. A purposive **33-track / 236-snapshot** RGB/BEV/crop review covers all 17, frozen cases and deterministic small/crowded/large-velocity cases. No wrong actor link was demonstrated in those views; tiny, dark, occluded and out-of-FRONT context cannot all be independently confirmed. Visible bicycle and scooter actors mean native class differences/large speeds cannot automatically be treated as erroneous associations. E001 accepts the official links with these qualifications; no population visual error rate is claimed. Ignored evidence: `outputs/experiments/E001/association-review/complete/`, including `audit.json`, `index.html` and a snapshot `SHA256SUMS`; [versioned per-case record](../../experiments/E001-kinematic-transfer/road-association-review.json). Original acquisition/release revisions remain unknown; no native annotations, geometry or saved archives were changed.
 
 The export contains **6,521** tracks with at least one same-frame 3D box and at least one native action (before the accepted projection/grid). In this candidate population, **16** have one native behavior observation, **151** have at most five, and **27** have one same-frame 3D observation. This does not require input and label to coincide or establish post-resampling eligibility.
 
@@ -211,7 +215,9 @@ Both conflict tracks have same-frame native 3D boxes throughout and native type 
 | `train_00383` / `7fc2c418-f760-496a-927c-717d8df6ad06` | 81–129 / `MovTow + Stop` (49 observations) | 4.799600 | 6.208154 | 1.293473 | 28.653447 | MOVING |
 | `train_00425` / `e1dce432-b655-4627-bea9-8f7e0a5f17be` | 1–10 / `MovAway + Stop` (10 observations) | 0.899799 | 0.073747 | 0.081960 | 5.730265 | STOPPED |
 
-Median successive-box horizontal speed is 1.299458 and 0.081960 m/s respectively. The first conflict spans the whole observed 4.8 s track, rather than a one-frame transition. Three native FRONT frames per track were inspected (81/105/129 and 1/5/10); dark images, small boxes, occlusion and endpoint truncation limit independent visual confirmation. These measurements support different corrections and argue against a universal movement/stop priority. They do not prove annotation error, source interpolation policy or exact per-frame physical speed. Full visual/identity confirmation and versioned correction provenance remain **TBD** before these become accepted GT overrides. Do not use an automatic input-speed threshold to redefine benchmark GT.
+Median successive-box horizontal speed is 1.299458 and 0.081960 m/s respectively. The first conflict spans the whole observed 4.8 s track, rather than a one-frame transition. Three native FRONT frames per track were inspected (81/105/129 and 1/5/10); dark images, small boxes, occlusion and endpoint truncation limit independent visual confirmation. These measurements support different corrections and argue against a universal movement/stop priority. They do not prove annotation error, source interpolation policy or exact per-frame physical speed. Do not use an automatic input-speed threshold to redefine benchmark GT.
+
+On 2026-10-08, the user reviewed the saved 5 Hz RGB/LiDAR examples and confirmed the two corrections above. A native CSV recheck verified their exact frame ranges, action sets and timestamps, covering all **59** known movement/stop conflicts. E001 owns the accepted [versioned overrides](../../experiments/E001-kinematic-transfer/behavior-overrides.json). Review artifacts: `outputs/experiments/E001/conflict-review/`; native annotations and prepared tracks remain unchanged. [E001 association acceptance](../../experiments/E001-kinematic-transfer/README.md#road-association-acceptance-2026-10-08) is now recorded separately with visual limitations.
 
 ## RGB + LiDAR BEV inspection gallery (2026-10-02)
 

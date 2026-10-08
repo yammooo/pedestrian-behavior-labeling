@@ -32,12 +32,12 @@ Neither transfer direction is permanently primary (former Q18). E001 compares RO
 
 ## Priorities and gates
 
-1. Complete varied visual acceptance and reproducibility of the acquired ROAD-Waymo/Waymo index. Structural joins and partial 3D coverage are verified; training acceptance remains open. Failed robust linkage requires reconsidering supervision, without silently substituting another source.
-2. Verify native identity/context extensions, physical timing and common world transforms. [Dataset notes](datasets/README.md) own evidence, native semantic limitations and remaining checks.
-3. Review [E001's audited eligible populations, frozen clip splits and source normalization](../experiments/E001-kinematic-transfer/README.md#real-data-setup-evidence-2026-10-08), including 3D-only tracks. Saved-track batching is implemented; clip/scenario independence is an accepted E001 assumption, not a remaining gate. Protocol choices belong in E001.
-4. Once implementation is authorized and gates pass, run the small framewise MLP versus whole-track BiLSTM diagnostic in both directions. Inspect failures before executing the tentative extensions below.
+1. Implement E001's framewise MLP versus whole-track BiLSTM increment with the agreed equal-track loss/F1 and padding-invariance tests, then run both directions. Inspect failures before executing the tentative extensions below.
+2. Make the existing LOKI saved collection/setup available on `aalto` for both-dataset runs. [E001 populations, frozen clip splits and source normalization](../experiments/E001-kinematic-transfer/README.md#real-data-setup-evidence-2026-10-08) are implemented; clip/scenario independence is the accepted user assumption and needs no further approval/audit.
+3. Preserve [ROAD's qualified association acceptance](../experiments/E001-kinematic-transfer/README.md#road-association-acceptance-2026-10-08): a full source/ID/context audit and purposive 33-track review, with inconclusive cases disclosed. This closes the E001 gate, without establishing population-wide visual matching accuracy.
+4. Alongside E001, verify broader physical timing, independent sensor accuracy, RGB projection and map/context usability. [Dataset notes](datasets/README.md) own these unknowns and semantic limitations; they are not new prerequisites for the accepted kinematic diagnostic.
 
-The protocol is defined, but native verification still gates execution. Existing readers/galleries remain inspection tools; substantial models wait for the remaining feasibility gates and implementation authorization.
+E001's protocol and data/association gates are accepted with recorded limitations. No models/training are implemented yet; the next increment must supply and verify them. Broader methods and architecture remain provisional.
 
 ## Tentative experiment direction
 

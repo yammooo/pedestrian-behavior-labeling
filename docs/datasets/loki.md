@@ -18,7 +18,7 @@ Recorded from an instrumented Honda SHUTTLE in the Tokyo area: 644 scenarios (me
 | Ego sensing | MTi-G-710-GNSS/INS-2A8G4 (gyroscope, accelerometer, GPS); vehicle CAN bus used for ego-motion compensation. Scenario files include odometry poses. |
 | Published annotation cadence | Synchronized RGB/LiDAR downsampled to **5 Hz** for annotation. Do not confuse this with the 30 Hz camera capture or 10 Hz LiDAR spin. |
 
-The paper describes camera intrinsics and LiDAR-to-camera extrinsics used for calibration; whether calibration files are shipped, and their names/formats, still need checking. [Paper, §3 and §7](https://arxiv.org/pdf/2108.08236); [official dataset page](https://usa.honda-ri.com/loki).
+The paper describes camera intrinsics and LiDAR-to-camera extrinsics used for calibration. A read-only filename inventory on 2026-10-08 found no camera calibration files in our local copy: all 644 scenario directories contain only the known images, labels, point clouds, odometry and maps (evidence: ignored `outputs/inspection/calibration/loki-inventory.json`). The inspected 2D label schema contains boxes/attributes, not intrinsics. Whether calibration is supplied separately remains **unknown**; the point-cloud-to-ego contract below is not camera calibration. [Paper, §3 and §7](https://arxiv.org/pdf/2108.08236); [official dataset page](https://usa.honda-ri.com/loki).
 
 ## Labels and track data
 
@@ -105,7 +105,7 @@ Evidence: ignored `outputs/experiments/E001/reader-preparation/loki/{manifest,au
 
 ## Track extents and gaps (2026-10-05)
 
-Annotation-only scan of all 644 scenarios: identity remains `(scenario, track_id)`, and context spans the first to last **2D or 3D** pedestrian observation, including empty frames in between. Every within-scenario filename increment is two (40,185 increments); `suffix / 2` is the ordinal at the documented nominal 5 Hz. Physical timestamps remain unverified. One-frame tracks span zero elapsed seconds but need one context position.
+Annotation-only scan of all 644 scenarios: identity remains `(scenario, track_id)`, and context spans the first to last **2D or 3D** pedestrian observation, including empty frames in between. Every within-scenario filename increment is two (40,185 increments); `suffix / 2` is the ordinal at the documented nominal 5 Hz. Physical timestamps remain unverified. Regular filenames cannot reveal dropped frames renumbered consecutively or irregular capture intervals; zero missing selections does not prove regular physical timing. One-frame tracks span zero elapsed seconds but need one context position.
 
 | Population | Tracks | Mean s | Median s | P90 s | P95 s | P99 s | Max s |
 |---|---:|---:|---:|---:|---:|---:|---:|
@@ -132,7 +132,7 @@ Of these tracks, **170** have one native 3D/behavior observation and **1,300** h
 
 Non-commercial use requires a request using a university email, per the [official page](https://usa.honda-ri.com/loki). The first inspection does not yet establish independent episode counts/durations, transitions, timing units, missing pedestrian labels, calibration, or viable scene-level splits.
 
-The [population gate](README.md#outstanding-dataset-checks) must verify native transforms/timing and final E001 label/scene distributions, eligibility, availability strata and split independence. Native union lengths/gaps and 2D/3D populations are measured above; post-grid usable-position counts remain **TBD**. Verify distance/point sparsity before interpreting them. Missing 2D boxes do not establish a single visibility cause. [E001](../../experiments/E001-kinematic-transfer/README.md#accepted-four-state-projection) owns the accepted comparison mapping and observation-condition definitions.
+The [population checks](README.md#outstanding-dataset-checks) retain physical timing and independent sensor accuracy as unknowns. Native transforms, post-grid counts and [E001's eligible populations/splits](../../experiments/E001-kinematic-transfer/README.md#real-data-setup-evidence-2026-10-08) now have recorded evidence; E001 assumes each scenario is independent by explicit user instruction. Verify distance/point sparsity before interpreting them. Missing 2D boxes do not establish a single visibility cause. [E001](../../experiments/E001-kinematic-transfer/README.md#accepted-four-state-projection) owns the accepted comparison mapping and observation-condition definitions.
 
 ## Inspection display
 

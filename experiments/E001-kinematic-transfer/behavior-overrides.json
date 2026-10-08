@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "experiment": "E001",
+  "dataset": "road-waymo",
+  "accepted_date": "2026-10-08",
+  "accepted_by": "user",
+  "review": "User confirmed train_00383 is moving and train_00425 is stopped after reviewing the saved 5 Hz RGB/LiDAR previews. Native annotations remain unchanged.",
+  "native_csv_sha256": "1b1fa986ce901c803946e3b7f55ba8431fcd83fdc9de31aaacee9c6ab12b541f",
+  "scope": "Only original ROAD observations matching the track, inclusive frame/timestamp bounds and expected native actions. Audit all native conflicts before resampling; these overrides add no GT to native-only extensions.",
+  "overrides": [
+    {
+      "clip": "train_00383",
+      "tube_uid": "7fc2c418-f760-496a-927c-717d8df6ad06",
+      "road_frames_inclusive": [
+        81,
+        129
+      ],
+      "expected_native_actions": [
+        "MovTow",
+        "Stop"
+      ],
+      "target": "MOVING",
+      "observation_count": 49,
+      "timestamps_inclusive_us": [
+        1557546544822526,
+        1557546549622126
+      ]
+    },
+    {
+      "clip": "train_00425",
+      "tube_uid": "e1dce432-b655-4627-bea9-8f7e0a5f17be",
+      "road_frames_inclusive": [
+        1,
+        10
+      ],
+      "expected_native_actions": [
+        "MovAway",
+        "Stop"
+      ],
+      "target": "STOPPED",
+      "observation_count": 10,
+      "timestamps_inclusive_us": [
+        1558152523822478,
+        1558152524722277
+      ]
+    }
+  ]
+}

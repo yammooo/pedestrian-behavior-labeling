@@ -178,7 +178,7 @@ class TrackReader:
              "qualification": "Frame pose defines native label coordinates; pose instant differs from frame start"}
 
     def __init__(self, index, waymo_root=None):
-        from pedestrian_behavior.preparation import checksum
+        from pedestrian_behavior.data.preparation import checksum
         self.index, self.waymo_root = Path(index), waymo_root
         manifest = json.loads((self.index / "scene_manifest.json").read_text())
         self.scenes = {s["road_clip_id"]: s for s in manifest}
@@ -243,7 +243,7 @@ class TrackReader:
         return key
 
     def index_scene(self, scene_id):
-        from pedestrian_behavior.preparation import checksum, locator
+        from pedestrian_behavior.data.preparation import checksum, locator
         scene = self.scenes[scene_id]
         name = scene["segment_context_name"]
         def rows(component, columns=None):
@@ -310,7 +310,7 @@ class TrackReader:
                     "native_action_sets": dict(native_action_sets), "association_ids": {k: v["laser_id"] for k, v in tracks.items()}}}
 
     def read_frames(self, scene_id, frame_ids):
-        from pedestrian_behavior.preparation import world_position
+        from pedestrian_behavior.data.preparation import world_position
         if self._scene_id != scene_id:
             self.index_scene(scene_id)
         result = {}

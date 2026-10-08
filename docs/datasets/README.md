@@ -48,7 +48,7 @@ This table specifies inspection obligations, not a software schema or adapter fr
 
 ## Reader and prepared-track schema
 
-Steps 1–2 use a common native-reader contract and [shared preparation](../../src/pedestrian_behavior/preparation.py). Readers own native IDs, associations, units, clocks and full native-to-world transforms. The creator owns scene-frame selection, fixed canonical coordinates and adjacent-slot velocities; [E001](../../experiments/E001-kinematic-transfer/README.md#first-baseline-temporal-representation) owns their scientific rules.
+Steps 1–2 use a common native-reader contract and [shared preparation](../../src/pedestrian_behavior/data/preparation.py). Readers own native IDs, associations, units, clocks and full native-to-world transforms. The creator owns scene-frame selection, fixed canonical coordinates and adjacent-slot velocities; [E001](../../experiments/E001-kinematic-transfer/README.md#first-baseline-temporal-representation) owns their scientific rules.
 
 | Reader operation | Result |
 |---|---|

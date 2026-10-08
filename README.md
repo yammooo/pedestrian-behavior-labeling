@@ -6,7 +6,7 @@ Aalto research workspace for a general offline pedestrian-behavior labeler from 
 
 - `docs/`: research definition, dataset/literature evidence, historical archive and log.
 - `experiments/`: stable comparison records and future comparison-specific configs.
-- `src/`: reusable native readers/inspection tools; `scripts/` and `notebooks/`: one-off inspection/exploration.
+- `src/`: package code following the [agreed architecture](ARCHITECTURE.md); `scripts/` and `notebooks/`: one-off inspection/exploration.
 - `configs/`: shared configuration; `tests/`: checks.
 - `data/`: local datasets; `outputs/`: ignored generated artifacts. Never commit either datasets or large outputs.
 
@@ -100,7 +100,7 @@ uv run --locked --extra cpu python scripts/check-reader-preparation.py \
   --output outputs/experiments/E001/reader-preparation/acceptance
 uv run --locked --extra cpu python scripts/verify-loki-transform.py \
   --root data/loki_data --output outputs/experiments/E001/reader-preparation/loki-transform-evidence.json
-uv run --locked --extra cpu python -m pedestrian_behavior.preparation --dataset loki \
+uv run --locked --extra cpu python -m pedestrian_behavior.data.preparation --dataset loki \
   --input data/loki_data --loki-transform configs/loki-transform.json \
   --output outputs/experiments/E001/reader-preparation/loki
 ```
@@ -108,7 +108,7 @@ uv run --locked --extra cpu python -m pedestrian_behavior.preparation --dataset 
 Run ROAD-Waymo on `aalto`, from its Git checkout:
 
 ```bash
-uv run --locked --extra cu118 python -m pedestrian_behavior.preparation --dataset road-waymo \
+uv run --locked --extra cu118 python -m pedestrian_behavior.data.preparation --dataset road-waymo \
   --input /home/user20/road_waymo_mapping/merged_pedestrians_20261002 \
   --output outputs/experiments/E001/reader-preparation/road-waymo
 ```
@@ -126,3 +126,43 @@ uv run --locked --extra cpu python -m pedestrian_behavior.inspection.prepared_tr
 ```
 
 Open `acceptance/index.html` for independent expected/actual fixture checks or the dataset inspector's `index.html` for synchronized native context, fixed trajectories, feature timelines, masks and annotation values. Copy the complete inspector directory for portable viewing. Missing slots stay blank; the viewer does not interpolate.
+
+## E001 saved tracks to batches
+
+Audit native supervision once, then freeze the eligible population, clip/scenario splits and source-training normalization. Setup outputs must be fresh. Native files are required only for this audit; subsequent samples/batches use the existing saved archives and setup artifacts. [E001](experiments/E001-kinematic-transfer/README.md#saved-tracks-to-batches-2026-10-08) owns targets, settings and population evidence.
+
+```bash
+uv run --locked --extra cpu python scripts/check-e001-data.py \
+  --output outputs/experiments/E001/data-setup/acceptance
+uv run --locked --extra cpu python -m pedestrian_behavior.experiments.e001 \
+  --collection outputs/experiments/E001/reader-preparation/loki \
+  --native-input data/loki_data --output outputs/experiments/E001/data-setup/loki
+```
+
+On `aalto`, pull the intended Git revision and verify `git rev-parse HEAD` before running:
+
+```bash
+uv run --locked --extra cu118 python -m pedestrian_behavior.experiments.e001 \
+  --collection outputs/experiments/E001/reader-preparation/road-waymo \
+  --native-input /home/user20/road_waymo_mapping/merged_pedestrians_20261002 \
+  --output outputs/experiments/E001/data-setup/road-waymo
+```
+
+Load batches without native sensor files (run through the same uv environment):
+
+```python
+import json
+from pathlib import Path
+from pedestrian_behavior.data.loading import track_batches
+from pedestrian_behavior.experiments.e001 import dataset_from_setup
+
+base = Path("outputs/experiments/E001")
+source_setup = base / "data-setup/loki/setup.json"
+statistics = json.loads(source_setup.read_text())["normalization"]["K+T+R"]
+dataset = dataset_from_setup(base / "reader-preparation/loki", source_setup,
+                             "training", "K+T+R", statistics)
+batches = track_batches(dataset, training=True)
+batch = next(iter(batches))
+```
+
+For transfer, pass the target collection/setup and split while retaining the source statistics. A sample returns CPU `inputs[T,D]` float32, `targets[T]` int64, `gt_valid[T]` bool, locator and archive reference. A batch adds original `lengths`, a mask true only for padding, and reference lists; padding is zero/−100/false. Internal missing slots stay in the sequence. No model or training is included.

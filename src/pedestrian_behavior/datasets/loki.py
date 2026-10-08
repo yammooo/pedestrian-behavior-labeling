@@ -97,7 +97,7 @@ class TrackReader:
              "qualification": "Documented 5 Hz annotation cadence; physical timestamps unknown"}
 
     def __init__(self, root, transform_contract=None):
-        from pedestrian_behavior.preparation import checksum, valid_pose
+        from pedestrian_behavior.data.preparation import checksum, valid_pose
         import numpy as np
 
         self.root = Path(root)
@@ -128,7 +128,7 @@ class TrackReader:
         return key
 
     def index_scene(self, scene_id):
-        from pedestrian_behavior.preparation import locator
+        from pedestrian_behavior.data.preparation import locator
         if scene_id not in self.scene_ids:
             raise KeyError(scene_id)
         import hashlib
@@ -158,7 +158,7 @@ class TrackReader:
                 "provenance": {"scenario": scene_id, "annotation_odometry_sha256": digest.hexdigest()}}
 
     def read_frames(self, scene_id, frame_ids):
-        from pedestrian_behavior.preparation import native_float, valid_pose, world_position
+        from pedestrian_behavior.data.preparation import native_float, valid_pose, world_position
         import numpy as np
         if self.contract is None:
             raise ValueError("LOKI world transform unverified: require evidence-backed --loki-transform; no assumed extrinsic")

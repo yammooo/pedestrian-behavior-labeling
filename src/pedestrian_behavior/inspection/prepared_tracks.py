@@ -10,7 +10,7 @@ from PIL import Image, ImageDraw, ImageOps
 
 from pedestrian_behavior.datasets import loki, road_waymo as road
 from pedestrian_behavior.inspection.render import BEV_SIZE, BEV_SPAN, bev_pixel, footprint, read_points
-from pedestrian_behavior.preparation import load_manifest, load_track, source_times
+from pedestrian_behavior.data.preparation import load_manifest, load_track, source_times
 
 
 def json_safe(value):

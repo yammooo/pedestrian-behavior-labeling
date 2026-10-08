@@ -15,7 +15,7 @@ import pyarrow.parquet as pq
 
 from pedestrian_behavior.datasets.loki import TrackReader as LokiReader
 from pedestrian_behavior.datasets.road_waymo import TrackReader as RoadReader
-from pedestrian_behavior.preparation import (load_manifest, load_track, locator, prepare_collection, prepare_track,
+from pedestrian_behavior.data.preparation import (load_manifest, load_track, locator, prepare_collection, prepare_track,
     save_track, select_frames, source_times, velocities)
 
 

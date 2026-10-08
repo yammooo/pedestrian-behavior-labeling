@@ -157,7 +157,8 @@ def run_attempt(source, configuration, variant, output, device, smoke=False):
         (output/"source-diff.patch").write_bytes(diff)
         provenance.update(revision=subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
             diff_sha256=hashlib.sha256(diff).hexdigest(), code_sha256={str(p): checksum(p) for p in sorted(Path("src").rglob("*.py"))},
-            versions={p: version(p) for p in ("numpy", "torch", "wandb", "matplotlib")}, python=platform.python_version(),
+            versions={p: version(p) for p in ("numpy", "torch", "wandb", "matplotlib", "pillow", "pyarrow")}, python=platform.python_version(),
+            dependency_lock_sha256=checksum("uv.lock"), pyproject_sha256=checksum("pyproject.toml"),
             cuda_build=torch.version.cuda, cudnn=torch.backends.cudnn.version(), host=platform.node(),
             hardware={"platform": platform.platform(), "cpu": platform.processor() or "unknown", "gpu": torch.cuda.get_device_name(device) if device.type == "cuda" else None},
             seed=0, determinism=deterministic, source_statistics=statistics,

@@ -10,6 +10,9 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
+# Set before earlier CUDA tests create cuBLAS handles in this shared process.
+os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+
 import numpy as np
 import torch
 import wandb

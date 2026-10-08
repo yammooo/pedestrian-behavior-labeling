@@ -6,7 +6,7 @@ Updated 2026-10-08. Research-definition stage; no comparison training or compari
 
 ## Next work
 
-1. Run the 16 E001 comparisons in the next increment and inspect failures before broader methods. [Training/evaluation acceptance](../experiments/E001-kinematic-transfer/README.md#trainingevaluation-implementation-and-acceptance-2026-10-08) passed CPU/CUDA checks and a separate ROAD BiLSTM smoke with actual W&B logging; no held-out evaluation or comparison results yet.
+1. Run the 16 E001 comparisons in the next increment and inspect failures before broader methods. [Training/evaluation acceptance](../experiments/E001-kinematic-transfer/README.md#trainingevaluation-implementation-and-acceptance-2026-10-08) passed CPU/CUDA checks and a separate ROAD BiLSTM smoke with actual W&B logging; [step/epoch curves and the tidy E001 workspace](../experiments/E001-kinematic-transfer/README.md#wb-workspace-and-logging) are verified. No held-out evaluation or comparison results yet.
 2. Arrange a separate backup for valuable checkpoints/predictions; external storage is **TBD**. Frozen LOKI collection/setup are checksum-verified on `aalto`; reuse the [populations/splits/source statistics](../experiments/E001-kinematic-transfer/README.md#real-data-setup-evidence-2026-10-08).
 3. Alongside E001, define the first RGB/3D representations and verify auxiliary-source feasibility; follow the [tentative schedule](research.md#schedule).
 

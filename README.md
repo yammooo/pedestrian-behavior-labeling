@@ -28,6 +28,8 @@ uv sync --locked --extra cu118
 
 PyTorch **2.7.1** provides both builds in the [official installation instructions](https://pytorch.org/get-started/previous-versions/#v271). CUDA 11.8 is selected for the inspected 535.309.01 NVIDIA driver; newer drivers support older CUDA runtimes through [backward compatibility](https://docs.nvidia.com/deploy/cuda-compatibility/minor-version-compatibility.html). The wheel supplies its runtime dependencies. The [explicit PyTorch indexes and conflicting extras](https://docs.astral.sh/uv/guides/integration/pytorch/#configuring-accelerators-with-optional-dependencies) prevent installing both backends together.
 
+W&B **0.30.0** is included in both environments for experiment tracking. Authentication, a W&B project and training integration are not configured yet.
+
 Validate locally; replace `cpu` with `cu118` on `aalto`. Include the selected extra on project commands. `--locked` rejects an outdated lockfile instead of changing it.
 
 ```bash
@@ -35,7 +37,10 @@ uv lock --check
 uv pip check --python .venv/bin/python
 uv run --locked --extra cpu python -m unittest discover -s tests
 uv run --locked --extra cpu python -c 'import torch; print(torch.__version__, torch.version.cuda, torch.cuda.is_available())'
+uv run --locked --extra cpu wandb --version
 ```
+
+To authenticate, run `uv run --locked --extra cpu wandb login --verify` locally. On `aalto`, run `/home/user20/.local/bin/uv run --locked --extra cu118 wandb login --verify` from its repository root. Paste your W&B API key into the interactive prompt; credentials are stored outside Git. Login does not configure training logging.
 
 ## Git checkout on the RTX 4080 laptop
 

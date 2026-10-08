@@ -7,6 +7,9 @@ from pathlib import Path
 import tempfile
 import unittest
 
+import pyarrow as pa
+import pyarrow.parquet as pq
+
 from pedestrian_behavior.data.preparation import prepare_collection
 from pedestrian_behavior.datasets.road_waymo import TrackReader
 from test_track_preparation import native_readers, pose
@@ -30,6 +33,11 @@ class RoadAssociationAuditTest(unittest.TestCase):
             with gzip.open(path,"wt",newline="") as destination:
                 writer=csv.DictWriter(destination,fieldnames=list(rows[0]));writer.writeheader();writer.writerows(rows)
             reader=TrackReader(reader.index)
+            lidar_path=reader.index/"lidar_box.parquet"
+            native=pq.read_table(lidar_path).to_pylist()
+            for row in native:
+                row["[LiDARBoxComponent].type"]=4
+            pq.write_table(pa.Table.from_pylist(native),lidar_path)
             collection=root/"collection"
             manifest,_=prepare_collection(reader,collection)
             report=audit_module.audit(reader,collection,[])
@@ -39,6 +47,8 @@ class RoadAssociationAuditTest(unittest.TestCase):
                 "3d_before_road","3d_after_road","additional_front_timestamps")],[1,1,3,2,0,2,1,1,1,2])
             self.assertEqual(report["cases"][0]["snapshot_times"],[0,200000,400000])
             self.assertEqual(report["cases"][0]["native_road_times"],[200000])
+            self.assertEqual(report["cases"][0]["native_type_counts"],{"4":2})
+            self.assertIn("all non-Pedestrian native types, including context extensions",report["cases"][0]["reasons"])
             self.assertEqual(report["status"],"structural-pass")
             rows[0]["action_labels_json"]='["Stop"]'
             with gzip.open(path,"wt",newline="") as destination:

@@ -27,10 +27,12 @@ def audit(reader, collection, frozen_cases):
     for filename in manifest["tracks"]:
         metadata, arrays = load_track(collection / "tracks" / filename)
         speed = np.linalg.norm(arrays["ped_velocity"][arrays["ped_velocity_valid"]], axis=1)
+        peak = int(np.flatnonzero(arrays["ped_velocity_valid"])[speed.argmax()]) if len(speed) else None
         archives[metadata["track_locator"]] = {"archive": filename, "metadata": metadata,
             "maximum_selected_speed_mps": float(speed.max()) if len(speed) else 0.,
             "has_position": bool(arrays["ped_position_valid"].any()),
-            "position_times": [source_times(metadata)[i] for i in np.flatnonzero(arrays["ped_position_valid"])]}
+            "position_times": [source_times(metadata)[i] for i in np.flatnonzero(arrays["ped_position_valid"])],
+            "speed_peak_times": [t for t in source_times(metadata)[max(0,peak-1):peak+2] if t is not None] if peak is not None else []}
     if len(archives) != len(manifest["tracks"]):
         raise ValueError("Repeated saved identity")
     counts, tracks, action_rows = Counter(), [], Counter()
@@ -67,6 +69,9 @@ def audit(reader, collection, frozen_cases):
                 if int(observations[ts]["flags"]["export_3d_type"]) != reader.lidar[laser, ts]["[LiDARBoxComponent].type"]:
                     raise ValueError("Export/native 3D type mismatch")
             disagreements = [ts for ts, o in observations.items() if o["flags"]["semantic_disagreement"]]
+            types = Counter(str(reader.lidar[laser, ts]["[LiDARBoxComponent].type"]) for ts in lt)
+            for kind, n in types.items():
+                counts["native_type_"+kind+"_observations"] += n
             counts.update({"native_candidates": 1, "with_unique_lidar_id": laser is not None,
                 "without_lidar_id": laser is None, "with_native_3d": bool(lt), "native_front_identity_missing": not ct,
                 "native_union_observations": candidate["counts"]["observations"], "native_3d_observations": len(lt),
@@ -85,6 +90,8 @@ def audit(reader, collection, frozen_cases):
                 "has_position": archives[address]["has_position"],
                 "maximum_selected_speed_mps": archives[address]["maximum_selected_speed_mps"],
                 "position_times": archives[address]["position_times"]})
+            tracks[-1].update({"native_type_counts": dict(types), "speed_peak_times": archives[address]["speed_peak_times"],
+                "nonpedestrian_type_times": sorted(ts for ts in lt if reader.lidar[laser,ts]["[LiDARBoxComponent].type"] != 2)})
         print(f"{scene_id}: native links verified", flush=True)
     if len(tracks) != len(archives):
         raise ValueError("Saved candidate absent from native audit")
@@ -99,8 +106,8 @@ def audit(reader, collection, frozen_cases):
         track["maximum_same_frame_road_pedestrians"] = max(action_rows[track["clip"], t] for t in track["native_road_times"])
     selected = {case["locator"]: ["frozen native case: " + case["reason"]] for case in frozen_cases}
     for track in tracks:
-        if track["disagreement_times"]:
-            selected.setdefault(track["locator"], []).append("all Pedestrian/Cyclist disagreement tracks")
+        if track["nonpedestrian_type_times"]:
+            selected.setdefault(track["locator"], []).append("all non-Pedestrian native types, including context extensions")
     usable = [t for t in tracks if t["has_position"]]
     for name, ordered in (
         ("largest selected velocity", sorted(usable, key=lambda t: (-t["maximum_selected_speed_mps"], t["locator"]))),
@@ -120,19 +127,21 @@ def audit(reader, collection, frozen_cases):
         if track["locator"] not in selected:
             continue
         snapshots = set()
-        for times in (track["native_road_times"], track["disagreement_times"], track["position_times"]):
+        for times in (track["native_road_times"], track["disagreement_times"], track["position_times"], track["nonpedestrian_type_times"]):
             if times:
                 snapshots.update((times[0], times[len(times)//2], times[-1]))
         extensions = sorted(set(track["native_3d_times"]) - set(track["native_road_times"]))
         if extensions:
             snapshots.update((extensions[0], extensions[-1]))
+        if any(reason.startswith("largest selected velocity") for reason in selected[track["locator"]]):
+            snapshots.update(track["speed_peak_times"])
         cases.append(track | {"reasons": selected[track["locator"]], "snapshot_times": sorted(snapshots)})
     return {"status": "structural-pass", "created_utc": datetime.now(timezone.utc).isoformat(),
         "revision": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
         "command": sys.orig_argv, "collection_manifest_sha256": checksum(collection/"manifest.json"),
         "source_sha256": reader.sources["sha256"], "native_component_checksums": "all matched saved manifest",
         "counts": dict(counts), "csv_rows": dict(rows), "cases": cases,
-        "selection": "Eight frozen native cases; all disagreement tracks; top three distinct clips each by maximum selected speed, minimum median ROAD box area, maximum same-frame ROAD pedestrian count. Ties: locator.",
+        "selection": "Eight frozen native cases; all non-Pedestrian native type tracks including context extensions; top three distinct clips each by maximum selected speed, minimum median ROAD box area, maximum same-frame ROAD pedestrian count. Ties: locator. Include velocity peak and immediate grid neighbors for velocity cases.",
         "limitations": "Purposive visual sample, not an estimated population association error rate. Occlusion is assessed visually, not inferred from missing boxes."}
 
 
@@ -151,10 +160,15 @@ def render(reader, report, output):
             if row["key.camera_name"] != 1 or ts not in case["snapshot_times"]:
                 continue
             observation = observations[case["clip"], case["tube_uid"]].get(ts)
-            if observation is None:
-                continue
             with Image.open(BytesIO(row["[CameraImageComponent].image"])) as raw:
-                x1,y1,x2,y2 = observation["box2d"]
+                if observation is not None:
+                    x1,y1,x2,y2 = observation["box2d"]
+                elif (case["tube_uid"],ts) in reader.camera:
+                    b=reader.camera[case["tube_uid"],ts];prefix="[CameraBoxComponent].box."
+                    x,y,w,h=(b[prefix+k] for k in ("center.x","center.y","size.x","size.y"))
+                    x1,y1,x2,y2=(x-w/2)/raw.width,(y-h/2)/raw.height,(x+w/2)/raw.width,(y+h/2)/raw.height
+                else:
+                    continue
                 margin = .01
                 bounds = (max(0,int((x1-margin)*raw.width)),max(0,int((y1-margin)*raw.height)),
                           min(raw.width,int((x2+margin)*raw.width)+1),min(raw.height,int((y2+margin)*raw.height)+1))
@@ -170,11 +184,12 @@ def render(reader, report, output):
         frames=[]
         for ts,preview,crop in zip(case["snapshot_times"],case["previews"],case["crops"]):
             frames.append(f'<figure><figcaption>{ts}</figcaption><img width="622" src="{preview}" alt="Native RGB and same-frame BEV">'
-                          +(f'<img style="max-width:320px;image-rendering:auto" src="{crop}" alt="Original-resolution ROAD box crop">' if crop else '<p>Native extension; no ROAD box/GT</p>')+'</figure>')
+                          +(f'<img style="max-width:320px;image-rendering:auto" src="{crop}" alt="Original-resolution box crop">' if crop else '<p>No same-frame 2D box crop</p>')
+                          +('<p>Native extension; native FRONT box where available; no ROAD GT</p>' if ts not in case['native_road_times'] else '')+'</figure>')
         rows.append(f'<h2>{number}: {escape(case["clip"])} / {escape(case["tube_uid"])}</h2><p>{escape("; ".join(case["reasons"]))}</p><div style="display:flex;flex-wrap:wrap">'+''.join(frames)+'</div>')
     (output/"index.html").write_text('<!doctype html><html lang="en"><meta charset="utf-8"><title>ROAD association review</title>'
         '<style>body{font:16px system-ui;margin:2rem}figure{margin:.4rem;max-width:622px}img{max-width:100%}</style>'
-        '<h1>ROAD association review</h1><p>Yellow: original ROAD box/native linked 3D footprint. Crops retain original pixels; no inferred association or GT.</p>'+''.join(rows)+'</html>')
+        '<h1>ROAD association review</h1><p>Yellow: ROAD box (native FRONT box in context extensions) and linked native 3D footprint. Crops retain original pixels; no inferred association or GT. Frozen case reasons are historical: both Moving/Stop corrections were accepted later.</p>'+''.join(rows)+'</html>')
 
 
 def main():

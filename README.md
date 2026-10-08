@@ -183,6 +183,21 @@ batch = next(iter(batches))
 
 For transfer, pass the target collection/setup and split while retaining the source statistics. A sample returns CPU `inputs[T,D]` float32, `targets[T]` int64, `gt_valid[T]` bool, locator and archive reference. A batch adds original `lengths`, a mask true only for padding, and reference lists; padding is zero/−100/false. Internal missing slots stay in the sequence.
 
+## E001b bbox extension
+
+Prepare [E001b](experiments/E001b-2d-bbox-contribution/README.md) separately; this reads the frozen E001 collections/setup and writes only a fresh bbox cache/statistics directory. No training or W&B run is started. Locally:
+
+```bash
+uv run --locked --extra cpu python scripts/prepare-e001b.py \
+  --collection outputs/experiments/E001/reader-preparation/loki \
+  --setup outputs/experiments/E001/data-setup/loki/setup.json \
+  --native-input data/loki_data --output outputs/experiments/E001b/bbox/loki
+```
+
+On `aalto`, use an isolated Git worktree and its own uv environment while E001 runs; do not pull/sync into the active training checkout. Pass absolute E001 collection/setup paths from `/home/user20/projects/pedestrian-behavior-labeling`, use `--extra cu118`, and set `--native-input` to `/media/user20/F47C60057C5FC152/projects/loki_data` or `/home/user20/road_waymo_mapping/merged_pedestrians_20261002`. Write separate E001b outputs. The command requires a fresh directory, retains failure evidence and checks all original collection/setup file hashes before/after.
+
+For saved-cache sample construction, call `pedestrian_behavior.experiments.e001b.dataset_from_extension(collection, setup_path, extension, split, configuration, baseline_statistics, bbox_statistics)`, with configuration `availability` or `geometry`. Both statistics come from the **training source**, including for opposite-dataset evaluation. Read the extension's `baseline_normalization` and `normalization` fields. Samples use unchanged E001 targets/references, with 14 or 20 input columns. The E001b training command is deferred.
+
 ## E001 models
 
 The [model protocol](experiments/E001-kinematic-transfer/README.md#first-diagnostic-baseline) defines A (framewise MLP) and B (one-layer BiLSTM), with the same encoder/linear-head structure and independent weights. Generate data/model expected/actual acceptance evidence in a fresh directory:

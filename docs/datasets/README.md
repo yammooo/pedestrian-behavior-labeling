@@ -85,6 +85,8 @@ Keep **all indexed candidates**, including 2D-only, 3D-only, single-observation 
 
 The [acceptance checks](../../tests/test_track_preparation.py) exercise native-format readers through save/reload, independent known-motion answers, missingness, selection boundaries, semantics, identities and persistence. The portable inspector reads its actual numeric values from saved/reloaded archives; source overlays never interpolate or substitute another frame. [Runnable commands](../../README.md#prepare-and-inspect-complete-tracks).
 
+[E001b](../../experiments/E001b-2d-bbox-contribution/README.md#extension-artifacts-and-data-flow) retrieves original annotated boxes/dimensions through these references and saves a separate aligned bbox cache on the frozen eligible E001 populations. It does not change the shared prepared-track schema or resample/rebuild the kinematic collections. Its record owns box-source selection, usability flags, normalization and coverage evidence.
+
 ## Missing modalities and labels
 
 Represent actual availability explicitly. Apply a task loss only where its native annotation exists. Do not fabricate behaviour targets, treat an unlabeled frame as negative, or fill annotation gaps as ground truth. Interpolation used for a gallery camera center is not a recovered pedestrian observation.

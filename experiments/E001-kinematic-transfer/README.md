@@ -1,6 +1,6 @@
 # E001 — Kinematic transfer
 
-Status: **Planned** for training. Created 2026-10-05 from the 2026-10-02 proposal. Protocol agreed 2026-10-06; input/model comparison revised 2026-10-08. Data preparation/setup, ROAD association acceptance, both models and training/evaluation are implemented with acceptance checks below. No comparison training or comparison results.
+Status: **User running comparisons** (reported 2026-10-08); analysis pending until completion. Created 2026-10-05 from the 2026-10-02 proposal. Protocol agreed 2026-10-06; input/model comparison revised 2026-10-08. Data preparation/setup, ROAD association acceptance, both models and training/evaluation are implemented with acceptance checks below. Historical acceptance records below retain their then-current execution status. The separate [E001b bbox extension](../E001b-2d-bbox-contribution/README.md) preserves this protocol/data and has no training results.
 
 ## Question and controls
 

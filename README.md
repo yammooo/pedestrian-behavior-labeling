@@ -176,4 +176,31 @@ batches = track_batches(dataset, training=True)
 batch = next(iter(batches))
 ```
 
-For transfer, pass the target collection/setup and split while retaining the source statistics. A sample returns CPU `inputs[T,D]` float32, `targets[T]` int64, `gt_valid[T]` bool, locator and archive reference. A batch adds original `lengths`, a mask true only for padding, and reference lists; padding is zero/−100/false. Internal missing slots stay in the sequence. No model or training is included.
+For transfer, pass the target collection/setup and split while retaining the source statistics. A sample returns CPU `inputs[T,D]` float32, `targets[T]` int64, `gt_valid[T]` bool, locator and archive reference. A batch adds original `lengths`, a mask true only for padding, and reference lists; padding is zero/−100/false. Internal missing slots stay in the sequence.
+
+## E001 models
+
+The [model protocol](experiments/E001-kinematic-transfer/README.md#first-diagnostic-baseline) defines A (framewise MLP) and B (one-layer BiLSTM), with the same encoder/linear-head structure and independent weights. Generate data/model expected/actual acceptance evidence in a fresh directory:
+
+```bash
+uv run --locked --extra cpu python scripts/check-e001-data.py \
+  --output outputs/experiments/E001/models/acceptance-local
+```
+
+On `aalto`, pull/verify the intended revision, use `--extra cu118` and a fresh output path. CUDA acceptance checks run when a GPU is available; the local CPU report records that check as skipped. Open the generated `index.html`.
+
+Run this after obtaining `batch` above, through the same uv environment:
+
+```python
+import torch
+from pedestrian_behavior.experiments.e001 import build_model
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model = build_model("K+T+R", "B").to(device).eval()  # "A" for framewise
+with torch.no_grad():
+    logits = model(batch["inputs"].to(device), batch["lengths"])  # lengths stay on CPU
+predictions = logits.argmax(dim=-1)
+# Only non-padding predictions are meaningful; score only accepted GT slots.
+```
+
+Logits have shape `[B,T,4]`; padded logits are zero, internal missing slots remain predictions. This is model inference/acceptance only; comparison training/evaluation/checkpoint commands are not implemented yet.

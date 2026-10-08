@@ -21,7 +21,7 @@ src/pedestrian_behavior/
   inspection/               Human inspection tools
 ```
 
-Native readers, preparation, E001 setup, features, splitting, normalization and batch loading are implemented. Models, training and evaluation remain future modules; create them only when used. The [saved-track format](docs/datasets/README.md#reader-and-prepared-track-schema) is unchanged. The repository-root `experiments/` remains the home of comparison records/configs/accepted overrides; `src/pedestrian_behavior/experiments/` contains executable experiment code.
+Native readers, preparation, E001 setup, features, splitting, normalization, batch loading and kinematic models are implemented. Training and evaluation remain future modules; create them only when used. The [saved-track format](docs/datasets/README.md#reader-and-prepared-track-schema) is unchanged. The repository-root `experiments/` remains the home of comparison records/configs/accepted overrides; `src/pedestrian_behavior/experiments/` contains executable experiment code.
 
 ## Data flow
 
@@ -32,6 +32,8 @@ Native readers, preparation, E001 setup, features, splitting, normalization and 
 **On-the-fly samples:** the Dataset loads a selected track through the existing `load_track()`, derives experiment targets and selected physical features, applies frozen normalization, and returns CPU tensors plus track references. It never fits statistics, chooses splits or silently skips samples. Feature construction receives physical arrays/masks; native behavior annotations go only to the target policy.
 
 An E001 sample contains `inputs[T,D]` (float32, including feature-validity flags), `targets[T]` (int64), `gt_valid[T]` (bool), locator and saved-track reference. The collator pads to the batch's longest track and retains lengths, a padding mask and references. Internal missing observations remain sequence positions. The training loop moves tensors to the device; temporal models exclude batch padding from processing. Exact feature/GT/loss semantics remain in E001.
+
+**Models, implemented:** shared `KinematicClassifier` owns a two-layer MLP encoder, optional single-layer BiLSTM and linear readout. E001's `build_model()` supplies dimensions/classes/dropout and chooses A/B; shared model code imports no experiment policy. Forward accepts padded `[B,T,D]` inputs and CPU int64 lengths, returns `[B,T,C]` logits, masks padding and packs recurrence without carrying state between calls. Ground truth is never a model input. [Hand-calculated output and padding/gradient acceptance](tests/test_e001_models.py) owns checks; [E001](experiments/E001-kinematic-transfer/README.md#model-implementation-and-acceptance-2026-10-08) owns settings/parameter counts.
 
 Future RGB/LiDAR representations can retrieve native observations through existing references and add justified caches. Their sample layouts and any schema changes remain open.
 
@@ -45,4 +47,4 @@ Future RGB/LiDAR representations can retrieve native observations through existi
 
 The one-off `scripts/audit-road-associations.py` reuses the native reader and preview renderer to verify frozen ROAD sources/official links and generate a purposive review pack. E001 owns its acceptance record; the audit does not modify associations, targets or saved archives.
 
-Next increment: models/training and the agreed equal-track loss/F1 and padding-invariance acceptance tests. E001's data/association gates are accepted with recorded qualifications; model implementation and validation remain to be done.
+Next increment: training/evaluation/checkpoints and the agreed equal-track loss/F1 acceptance tests. E001's data/association gates are accepted with recorded qualifications, and model padding invariance is verified.

@@ -20,13 +20,24 @@ from pedestrian_behavior.data.loading import TrackDataset
 from pedestrian_behavior.data.preparation import checksum, load_manifest, load_track, locator, source_times
 from pedestrian_behavior.data.splits import split_groups
 from pedestrian_behavior.datasets import loki, road_waymo
+from pedestrian_behavior.models.kinematic import KinematicClassifier
 
 CLASSES = ("MOVING", "STOPPED", "WAITING_TO_CROSS", "CROSSING")
+MODEL_SETTINGS = {"embedding_dim": 64, "dropout": 0.1, "recurrent_hidden": 32}
 MAPPING = {
     "road-waymo": {"Mov": 0, "MovAway": 0, "MovTow": 0, "Stop": 1, "Wait2X": 2,
                    "Xing": 3, "XingFmLft": 3, "XingFmRht": 3},
     "loki": {"Moving": 0, "Stopped": 1, "Waiting to cross": 2, "Crossing the road": 3},
 }
+
+
+def build_model(configuration, variant):
+    """E001 A: framewise; B: one-layer BiLSTM; independent weights on each call."""
+    if configuration not in FEATURE_SETS or variant not in ("A", "B"):
+        raise ValueError("Unknown E001 feature configuration or model variant")
+    return KinematicClassifier(3*len(FEATURE_SETS[configuration]), MODEL_SETTINGS["embedding_dim"],
+                               len(CLASSES), MODEL_SETTINGS["dropout"],
+                               recurrent_hidden=MODEL_SETTINGS["recurrent_hidden"] if variant == "B" else None)
 
 
 def mapped_target(actions, dataset):

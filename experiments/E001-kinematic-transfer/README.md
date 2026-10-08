@@ -1,6 +1,6 @@
 # E001 — Kinematic transfer
 
-Status: **Planned** for modeling. Created 2026-10-05 from the 2026-10-02 proposal. Protocol agreed 2026-10-06; input comparison revised 2026-10-08. Data preparation/setup and ROAD association acceptance are complete with the qualifications below. No model implementation, training or model results.
+Status: **Planned** for training. Created 2026-10-05 from the 2026-10-02 proposal. Protocol agreed 2026-10-06; input/model comparison revised 2026-10-08. Data preparation/setup, ROAD association acceptance and both models are implemented with acceptance checks below. No comparison training or measured model results.
 
 ## Question and controls
 
@@ -108,9 +108,26 @@ Model B: selected features + masks → joint MLP → whole-track BiLSTM → clas
 |---|---|
 | Joint encoder, A and B | Linear D→64, ReLU, dropout 0.1, linear 64→64, ReLU; D is the feature-set dimension including masks |
 | BiLSTM, B only | One layer, input 64, hidden 32 **per direction**; concatenate outputs to 64 |
-| Classifier, A and B | Linear 64→32, ReLU, dropout 0.1, linear 32→4 |
+| Classifier, A and B | Dropout 0.1, linear 64→4; four unnormalized per-timestep logits |
 
-Each recurrent direction receives the complete 64-feature embedding; it is not split into two input halves. No extra recurrent layers, internal recurrent dropout or hidden-state carry between tracks. Record actual parameter counts at implementation. Future Transformers/token layouts are not fixed by E001.
+Each recurrent direction receives the complete 64-feature embedding; it is not split into two input halves. No extra recurrent layers, internal recurrent dropout or hidden-state carry between tracks. No pooling or final-state-only readout. Encoder/head structures match across A/B, with independent weights. Future Transformers/token layouts are not fixed by E001.
+
+On 2026-10-08 the user authorized this implementation after reconsidering depth, widths and regularization. The linear head replaces the former 64→32→4 head; both encoder nonlinearities remain. One recurrent layer introduces full-track learned context without assuming stacked temporal processing is needed. Width 64 / hidden 32 and dropout 0.1 are practical starting choices, not experimentally validated optima. Dropout applies to hidden activations between encoder layers and before the readout, never directly to input features/flags or timestep/GT masks. It is disabled during evaluation. B adds capacity as well as recurrence, so an A/B gain cannot isolate temporal access from parameter count.
+
+| Feature set | Input dimension | A parameters | B parameters |
+|---|---:|---:|---:|
+| K | 3 | 4,676 | 29,764 |
+| K+T | 6 | 4,868 | 29,956 |
+| K+T+R | 12 | 5,252 | 30,340 |
+| RAW | 12 | 5,252 | 30,340 |
+
+### Model implementation and acceptance (2026-10-08)
+
+[Shared model](../../src/pedestrian_behavior/models/kinematic.py) implements framewise and one-layer bidirectional processing; [E001's `build_model(configuration, variant)`](../../src/pedestrian_behavior/experiments/e001.py) owns feature dimensions, classes and model settings. Inputs are `[B,T,D]` floating tensors and CPU int64 `lengths[B]`; outputs are `[B,T,4]` logits on the input/model device. Padding is masked before the encoder and excluded from recurrence with unsorted length-based packing. Padding logits are zero and unscored; internal missing slots receive predictions and remain recurrent updates. Every call starts with zero recurrent state. No GT or native sensor files enter the model.
+
+[Model acceptance tests](../../tests/test_e001_models.py) verify hand-set two-ReLU outputs and an independently calculated bidirectional cell recurrence (`i=f=o=1/2`), including a singleton, unsorted lengths and a decaying internal zero-input slot. They compare per-track logits alone/in mixed batches/with extra NaN padding at tolerance 1e−6, check no state carry, finite gradients, zero padding gradients and an optimizer update. Counts/output dimensions are checked for all eight feature/model combinations. A CUDA-specific check verifies all eight combinations on the GPU when available. These are numerical/differentiability acceptance checks, not comparison training or evidence of predictive performance. Equal-track loss/F1 and checkpoint/training behavior remain the next increment.
+
+The [existing report command](../../README.md#e001-models) now includes data and model expected/actual checks; local evidence lives under ignored `outputs/experiments/E001/models/`. Native archives, eligible populations, splits, normalization and target mapping are unchanged.
 
 ## Batch construction
 
@@ -183,7 +200,7 @@ The first increment combines native readers and complete-track 5 Hz preparation,
 
 Acceptance exercises stationary pedestrians with moving/turning ego, known motion/uneven timing, full tilted transforms/global invariance, union extents/gaps/extensions, independent missingness/initial anchors, exact selection boundaries, native semantics, identities/duplicates and persistence without source roots. Exact fixtures use declared world motion, not behavior labels as physical-motion oracles. The actual inspector values come from reloaded NumPy archives.
 
-[Eight real native cases per dataset](reader-cases.json) were frozen before preparation: four representative action groups and four hard cases. Keep IDs/reasons and failures; conflict reasons record their then-unaccepted status, with the two overrides accepted subsequently. Audit all candidates, native versus selected counts/extents, original versus usable observations and complete native action combinations before any target projection. Artifacts: ignored `outputs/experiments/E001/reader-preparation/`. This first increment leaves targets to the downstream E001 policy; the data increment below now implements setup and batching. Models remain unimplemented.
+[Eight real native cases per dataset](reader-cases.json) were frozen before preparation: four representative action groups and four hard cases. Keep IDs/reasons and failures; conflict reasons record their then-unaccepted status, with the two overrides accepted subsequently. Audit all candidates, native versus selected counts/extents, original versus usable observations and complete native action combinations before any target projection. Artifacts: ignored `outputs/experiments/E001/reader-preparation/`. This first increment leaves targets to the downstream E001 policy; setup/batching and models are now implemented separately.
 
 ## Saved tracks to batches (2026-10-08)
 
@@ -234,7 +251,7 @@ Unknown upstream acquisition/release revisions remain disclosed in native notes;
 
 ## Verification and unresolved readiness
 
-Protocol choices and data/association acceptance above are settled for E001. Model implementation and its acceptance tests remain before execution; broader unknowns below are retained as limitations. Other datasets are not prerequisites.
+Protocol choices and data/association/model acceptance above are settled for E001. Training/evaluation implementation and its acceptance tests remain before execution; broader unknowns below are retained as limitations. Other datasets are not prerequisites.
 
 | Gate / setting | Required evidence or remaining value |
 |---|---|
@@ -243,7 +260,7 @@ Protocol choices and data/association acceptance above are settled for E001. Mod
 | Geometry and time | Full LOKI release transform/marker check and official Waymo pose interpretation support preparation; independent sensor accuracy/RGB projection remain open; physical LOKI timestamps **unknown** |
 | Final population / manifests | Setup implements the accepted projection/eligibility, reports exclusions and split/class support, and freezes clip groups; clip/scenario independence is accepted as an assumption (2026-10-08), not a remaining gate |
 | Normalization guard | Numerical near-zero scale threshold **1e−8**, inclusive; source-training statistics and guarded columns recorded before runs |
-| Implementation / environment | Model code/config/commands **TBD**; [local CPU/remote CUDA uv setup](../../README.md#setup-and-validation) verified 2026-10-07, with no model implementation or training |
+| Implementation / environment | Models and E001 assembly/settings implemented; training/evaluation/checkpoint code/commands **TBD**; locked CPU/CUDA environments verified |
 | Low-shot / later ablations | None specified in E001; extensions require explicit labels, access and justification |
 
 At implementation, check: a stationary pedestrian stays stationary under ego translation/turning; canonical features are invariant to global translation/yaw rotation; derivative endpoints/unequal times/gaps behave as declared; duplicates and input/GT masks stay distinct; normalization uses source training only; padding does not change valid predictions; loss and primary F1 give equal total track weight. Preserve unknowns and failures rather than manufacturing geometry or GT. Run the [required validation](../../AGENTS.md#validation) and record actual acceptance evidence before training.
@@ -272,4 +289,4 @@ No measured conclusion. Poor within-dataset performance can reflect limited evid
 
 Examine whether added trajectory and interaction information helps Stopped/Waiting and Moving/Crossing, and whether gains survive transfer. RAW is a diagnostic control, not an automatic final representation: structured trajectory variants supply explicit track-start displacement that framewise RAW cannot directly reconstruct. Positive results do not establish safe use by a larger Transformer; negative results do not prove a feature inherently useless. Use observed errors to guide later temporal/multimodal comparisons, without permanently selecting features from this baseline alone.
 
-Next: implement models/training with the agreed equal-track loss/F1 and padding-invariance tests, and make the existing LOKI saved collection/setup available on `aalto` before the comparison runs. ROAD association acceptance and clip/scenario independence need no further approval. Inspect failures before adding modalities, sources or architecture. All broader methods and ontology/head choices remain provisional.
+Next: implement training/evaluation/checkpoints with the agreed equal-track loss/F1 tests, and make the existing LOKI saved collection/setup available on `aalto` before comparison runs. Model padding invariance is verified; ROAD association acceptance and clip/scenario independence need no further approval. Inspect failures before adding modalities, sources or architecture. All broader methods and ontology/head choices remain provisional.

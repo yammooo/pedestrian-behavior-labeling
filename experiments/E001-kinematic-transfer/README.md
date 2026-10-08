@@ -191,7 +191,30 @@ Acceptance exercises stationary pedestrians with moving/turning ego, known motio
 
 [Seven acceptance scenarios](../../tests/test_e001_data.py) check target collapse and both override targets, source/scope/conflict failures, distinct position/GT slots, eligible singletons/3D-only tracks, all four feature sets with a delayed reference and independent masks, exact group assignments, guarded statistics, held-out-value independence, CPU dtypes/references and length-3/length-1 padding with a real internal gap. Random loaders preserve the final partial batch and use a seeded generator across epochs. The [report command](../../README.md#e001-saved-tracks-to-batches) writes hand-written expected values beside actual outputs. Equal-track loss/F1 and padding-invariant model predictions belong to the following increment.
 
-Setup writes collection/policy references, native audit evidence, split assignments, per-track/class support and frozen normalization to ignored `outputs/experiments/E001/data-setup/<dataset>/setup.json`. It references existing archives; it creates no second processed trajectory dataset. Incomplete or failed setups retain status/failures and cannot be loaded. Real-data population evidence: **TBD until the verified-revision setup runs finish**. ROAD-Waymo association acceptance still gates training.
+Setup writes collection/policy references, native audit evidence, split assignments, per-track/class support and frozen normalization to ignored `outputs/experiments/E001/data-setup/<dataset>/setup.json`. It references existing archives; it creates no second processed trajectory dataset. Incomplete or failed setups retain status/failures and cannot be loaded. The real-data counts below are setup evidence; ROAD-Waymo association acceptance still gates training.
+
+### Real-data setup evidence (2026-10-08)
+
+Both setups completed at implementation revision `9698bd1c3da980296baa7fc6a8da02fc03ab855d`, with the checkout's locked uv environment: local CPU LOKI and CUDA-build `aalto` ROAD-Waymo. Native audits reconciled **391,569** LOKI pedestrian label observations (zero duplicate annotations) and **712,630** unique ROAD observations (**10** identical repeated annotations). ROAD source checksums matched the accepted policy; all **49 + 10** native overrides passed identity/action/frame/timestamp/count verification, with **24 MOVING and 5 STOPPED** observations selected on the saved grid. Native-only extensions still have no GT.
+
+- **LOKI:** 13,365 saved candidates → **12,364 eligible**, including **4,139** with no selected native 2D observations. All **1,001 exclusions** lack both usable position and accepted GT. **616** scenarios contain eligible tracks; the other 28 of 644 do not enter the split.
+- **ROAD-Waymo:** 9,573 saved candidates → **6,608 eligible**, **2,965 excluded**. Reasons overlap: **2,944** lack usable position and **35** lack accepted GT; **2,930** lack position only, **21** lack GT only and **14** lack both. **514** clips contain eligible tracks; the other 48 of 562 pedestrian clips do not enter the split. No eligible track lacks selected native 2D observations.
+- Both datasets have valid initial anchors for every saved candidate. Every split supports all four classes; no alternative seed was searched. All four feature configurations for both sources have **no guarded columns**; means/scales/counts/stds are saved in their setup artifacts.
+
+Class columns below use **MOVING, STOPPED, WAITING_TO_CROSS, CROSSING** order. Track class support overlaps when a track has multiple states; slots include unlabeled context.
+
+| Dataset | Split | Groups | Eligible tracks | Slots | GT frames | Class frames | Tracks per class |
+|---|---|---:|---:|---:|---:|---|---|
+| loki | training | 430 | 8,574 | 270,355 | 262,071 | 160,612 / 21,035 / 35,322 / 45,102 | 6,566 / 860 / 1,174 / 1,338 |
+| loki | validation | 93 | 1,861 | 61,900 | 60,231 | 37,410 / 4,206 / 8,320 / 10,295 | 1,453 / 181 / 226 / 306 |
+| loki | test | 93 | 1,929 | 71,558 | 69,267 | 44,718 / 5,768 / 8,953 / 9,828 | 1,509 / 229 / 234 / 323 |
+| road-waymo | training | 358 | 4,380 | 332,940 | 167,280 | 86,095 / 39,059 / 11,336 / 30,790 | 2,576 / 1,209 / 318 / 1,038 |
+| road-waymo | validation | 78 | 1,110 | 87,824 | 45,388 | 24,018 / 11,232 / 3,317 / 6,821 | 658 / 306 / 91 / 262 |
+| road-waymo | test | 78 | 1,118 | 86,380 | 41,488 | 21,239 / 10,631 / 3,523 / 6,095 | 652 / 278 / 88 / 224 |
+
+Evidence: local `outputs/experiments/E001/data-setup/{loki,road-waymo}/setup.json`; ROAD's original artifact is `/home/user20/projects/pedestrian-behavior-labeling/outputs/experiments/E001/data-setup/road-waymo/setup.json` on `aalto` and its copy was checked against the local saved collection. Manifests retain collection/policy hashes, native action sets, per-track native annotation counts, every candidate/exclusion/split, environment/code hashes, command and times. Local `loki/source-diff.patch` preserves the pre-existing documentation-only changes recorded by its diff checksum; the remote setup checkout was clean. Setup took about **60 s locally / 32 s remotely**, without training or sensor-image/LiDAR decoding.
+
+Validation: **22 unittests passed on both laptops**, affected local links/anchors and `git diff --check` passed. The seven-scenario expected/actual report is `outputs/experiments/E001/data-setup/acceptance/index.html`. `runtime-checks.json` and its retained `runtime-checks.py` also verify the first seeded 64-track batch for each of **four feature sets × two source statistics × two dataset populations**, plus both real override tracks. These smoke checks confirm finite CPU tensors, dtypes, masks, references and pad values with within-dataset and unchanged cross-source normalization; they are not model predictions or an exhaustive batch-throughput study. Reproduce with `uv run --locked --extra cpu python outputs/experiments/E001/data-setup/runtime-checks.py` after both setup artifacts/collections are available locally.
 
 ## Verification and unresolved readiness
 

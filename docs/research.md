@@ -34,7 +34,7 @@ Neither transfer direction is permanently primary (former Q18). E001 compares RO
 
 1. Complete varied visual acceptance and reproducibility of the acquired ROAD-Waymo/Waymo index. Structural joins and partial 3D coverage are verified; training acceptance remains open. Failed robust linkage requires reconsidering supervision, without silently substituting another source.
 2. Verify native identity/context extensions, physical timing and common world transforms. [Dataset notes](datasets/README.md) own evidence, native semantic limitations and remaining checks.
-3. Materialize and audit E001's final eligible populations and scene-grouped manifests under its agreed features, missingness, 5 Hz grid, projection and selection rules. Include eligible 3D-only tracks; do not substitute a visible-only population. Protocol choices belong in [E001](../experiments/E001-kinematic-transfer/README.md).
+3. Review [E001's audited eligible populations, frozen clip splits and source normalization](../experiments/E001-kinematic-transfer/README.md#real-data-setup-evidence-2026-10-08), including 3D-only tracks. Saved-track batching is implemented; physical recording/identity independence remains a training gate. Protocol choices belong in E001.
 4. Once implementation is authorized and gates pass, run the small framewise MLP versus whole-track BiLSTM diagnostic in both directions. Inspect failures before executing the tentative extensions below.
 
 The protocol is defined, but native verification still gates execution. Existing readers/galleries remain inspection tools; substantial models wait for the remaining feasibility gates and implementation authorization.

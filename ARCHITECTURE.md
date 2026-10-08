@@ -17,11 +17,12 @@ src/pedestrian_behavior/
   training.py               Training loop and checkpoint handling
   evaluation.py             Loss, metrics and condition analysis
   experiments/
-    e001.py                 E001 target/eligibility policy and run assembly
+    e001.py                 E001 targets, eligibility, models and condition policy
+    e001_run.py             Fixed E001 attempt, artifacts, plots and W&B logging
   inspection/               Human inspection tools
 ```
 
-Native readers, preparation, E001 setup, features, splitting, normalization, batch loading and kinematic models are implemented. Training and evaluation remain future modules; create them only when used. The [saved-track format](docs/datasets/README.md#reader-and-prepared-track-schema) is unchanged. The repository-root `experiments/` remains the home of comparison records/configs/accepted overrides; `src/pedestrian_behavior/experiments/` contains executable experiment code.
+Native readers, preparation, E001 setup, features, splitting, normalization, batch loading and kinematic models are implemented. Training, evaluation, checkpoints and local/W&B evidence are implemented. The [saved-track format](docs/datasets/README.md#reader-and-prepared-track-schema) is unchanged. The repository-root `experiments/` remains the home of comparison records/configs/accepted overrides; `src/pedestrian_behavior/experiments/` contains executable experiment code.
 
 ## Data flow
 
@@ -47,4 +48,8 @@ Future RGB/LiDAR representations can retrieve native observations through existi
 
 The one-off `scripts/audit-road-associations.py` reuses the native reader and preview renderer to verify frozen ROAD sources/official links and generate a purposive review pack. E001 owns its acceptance record; the audit does not modify associations, targets or saved archives.
 
-Next increment: training/evaluation/checkpoints and the agreed equal-track loss/F1 acceptance tests. E001's data/association gates are accepted with recorded qualifications, and model padding invariance is verified.
+**Training and evaluation:** `training.py` seeds deterministic execution, trains equal-track minibatches, aggregates changing-weight epoch CE, selects from full source validation and atomically replaces state-dictionary checkpoints. `evaluation.py` owns shared masked loss, inference, raw/track-weighted confusion metrics, slice reweighting and pickle-free prediction persistence. It imports no E001 policy. `e001.py` owns four classes and the ten observation axes; conditions are derived from physical saved archives after inference. No GT/condition metadata enters model inputs or changes saved-track schema.
+
+`e001_run.py` assembles the fixed optimizer/settings and one persistent training loader, saves local config/provenance/status/history before external logging, reloads the selected checkpoint and evaluates both tests with frozen source statistics. It exports numerical evidence plus plots and logs only config/provenance, metrics, tables and plots to W&B. Checkpoints/full predictions remain local. Logging failures propagate while completed local evidence remains. The explicitly restricted GPU smoke uses source validation only; scientific comparisons use the full source validation/test populations. Fresh directories are required; no resume/restart/retry framework.
+
+Next: complete the separate GPU smoke verification, then execute the 16 planned comparisons in a later increment and inspect failures.

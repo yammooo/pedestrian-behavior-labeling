@@ -1,6 +1,6 @@
 # Pedestrian Behavior Labeling
 
-Aalto research workspace for a general offline pedestrian-behavior labeler from existing tracks under the [multimodal study contract](docs/datasets/README.md). No labeling model yet. Start with the [research dashboard](docs/README.md); the first kinematic transfer comparison is [E001, Planned](experiments/E001-kinematic-transfer/README.md).
+Aalto research workspace for a general offline pedestrian-behavior labeler from existing tracks under the [multimodal study contract](docs/datasets/README.md). Kinematic baseline models and their training/evaluation pipeline are implemented; no comparison results yet. Start with the [research dashboard](docs/README.md); the first kinematic transfer comparison is [E001, Planned](experiments/E001-kinematic-transfer/README.md).
 
 ## Layout
 
@@ -28,7 +28,7 @@ uv sync --locked --extra cu118
 
 PyTorch **2.7.1** provides both builds in the [official installation instructions](https://pytorch.org/get-started/previous-versions/#v271). CUDA 11.8 is selected for the inspected 535.309.01 NVIDIA driver; newer drivers support older CUDA runtimes through [backward compatibility](https://docs.nvidia.com/deploy/cuda-compatibility/minor-version-compatibility.html). The wheel supplies its runtime dependencies. The [explicit PyTorch indexes and conflicting extras](https://docs.astral.sh/uv/guides/integration/pytorch/#configuring-accelerators-with-optional-dependencies) prevent installing both backends together.
 
-W&B **0.30.0** is included in both environments for experiment tracking. [E001's run provenance](experiments/E001-kinematic-transfer/README.md#run-provenance) records the destination and user-reported login on both laptops; training integration remains unimplemented.
+W&B **0.30.0** is included in both environments for experiment tracking. [E001's run provenance](experiments/E001-kinematic-transfer/README.md#run-provenance) records the destination and user-reported login on both laptops; training logging is implemented; E001 records upload validation separately.
 
 Validate locally; replace `cpu` with `cu118` on `aalto`. Include the selected extra on project commands. `--locked` rejects an outdated lockfile instead of changing it.
 
@@ -208,4 +208,39 @@ predictions = logits.argmax(dim=-1)
 # Only non-padding predictions are meaningful; score only accepted GT slots.
 ```
 
-Logits have shape `[B,T,4]`; padded logits are zero, internal missing slots remain predictions. This is model inference/acceptance only; comparison training/evaluation/checkpoint commands are not implemented yet.
+Logits have shape `[B,T,4]`; padded logits are zero, internal missing slots remain predictions. This is model inference/acceptance only; Use the fixed single-attempt command below for training and final evaluation.
+
+
+## E001 training and evaluation
+
+Both frozen collections/setups must be available under `outputs/experiments/E001/{reader-preparation,data-setup}/{loki,road-waymo}/`. Native files are unnecessary. The command uses the [fixed protocol](experiments/E001-kinematic-transfer/README.md#loss-and-training), selects only on source validation, reloads `best.pt`, then evaluates both held-out tests using source normalization.
+
+```bash
+uv run --locked --extra cpu python scripts/train-e001.py \
+  --source loki --configuration K --variant A --device cpu \
+  --output outputs/experiments/E001/runs/loki-k-a-seed0
+```
+
+Use `--extra cu118 --device cuda` on `aalto` after Git push/pull and revision verification. Configurations are `K`, `K+T`, `K+T+R`, `RAW`; variants are A/B. Output directories must be fresh, including after failure. No resume/retry or comparison sweep is implemented. W&B errors propagate after saving available local evidence.
+
+Each attempt contains config/provenance/status, epoch history, `best.pt`, `last.pt`, dataset-specific `metrics.json` and pickle-free `predictions.npz`, and PNG/SVG plots. Checkpoints and full predictions stay local; W&B receives config/provenance, epoch records, final metrics, tables and PNG plots. Before valuable runs, arrange a separate backup; external backup storage remains **TBD**.
+
+The separate GPU smoke command uses one epoch, two training batches and one source-validation batch. It logs to the same W&B project with `job_type=gpu-smoke`, never accesses held-out tests and is not a comparison result:
+
+```bash
+uv run --locked --extra cu118 python scripts/train-e001.py \
+  --source road-waymo --configuration K --variant B --device cuda --smoke \
+  --output outputs/experiments/E001/runs/road-k-b-gpu-smoke
+```
+
+Generate the extended expected/actual report with `scripts/check-e001-data.py --output <fresh-directory>` through uv. Recompute metrics without inference:
+
+```python
+from pedestrian_behavior.evaluation import load_predictions, prediction_metrics, stratified_metrics
+from pedestrian_behavior.experiments.e001 import CLASSES, STRATA
+tracks = load_predictions("outputs/experiments/E001/runs/loki-k-a-seed0/loki-test/predictions.npz")
+primary = prediction_metrics(tracks, len(CLASSES))
+strata = stratified_metrics(tracks, len(CLASSES), STRATA)
+```
+
+`experiments.e001_run.plots()` can regenerate PNG/SVG exports from these results plus saved history/selection. Saved arrays retain every non-padding prediction, targets/GT masks, offsets, identities, archive references, source/grid times, condition memberships and individual 2D provenance flags.

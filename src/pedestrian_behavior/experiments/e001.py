@@ -1,4 +1,4 @@
-"""E001 native audit, temporary targets, eligibility and frozen setup (no training)."""
+"""E001 native audit, temporary targets, eligibility and frozen setup."""
 
 import argparse
 from collections import Counter
@@ -288,6 +288,58 @@ def main():
     record = setup(args.collection, args.native_input, args.output, args.overrides)
     print(json.dumps({k: record[k] for k in ("population", "support")}, indent=2))
     print("Guarded columns:", {k: v["guarded_columns"] for k, v in record["normalization"].items()})
+
+
+# Conditions are E001 policy, derived only after inference from unchanged archives.
+STRATA = {
+    "duration": ("[0,1)", "[1,5)", "[5,10)", "[10,15)", "[15,inf)"),
+    "position-coverage": ("[0,.25)", "[.25,.75)", "[.75,1]"),
+    "gt-count": ("1", "2-4", "5-19", "20+"),
+    "track-2d": ("never", "partial", "complete"),
+    "internal-position-gap": ("none", "(0,1]", "(1,inf)"),
+    "position": ("missing", "valid"), "velocity": ("missing", "valid"), "frame-2d": ("missing", "valid"),
+    "range": ("[0,10)", "[10,20)", "[20,40)", "[40,inf)", "unknown"),
+    "transition": ("near", "steady", "unknown"),
+}
+
+
+def observation_conditions(metadata, arrays, y, gt, dataset):
+    n = len(y)
+    position = arrays["ped_position_valid"]
+    flags = {key: np.array([bool(a.get(key, False)) for a in metadata["availability"]])
+             for key in ("loki_2d", "road_2d", "waymo_2d")}
+    boxes = flags["loki_2d"] if dataset == "loki" else flags["road_2d"] | flags["waymo_2d"]
+    duration = (metadata["native_extent_us"][1]-metadata["native_extent_us"][0])/1e6
+    present = np.flatnonzero(position)
+    longest, current = 0, 0
+    for valid in position[present[0]:present[-1]+1] if len(present) else []:
+        current = 0 if valid else current+1
+        longest = max(longest, current)
+    ranges = np.full(n, 4, dtype=np.int64)
+    known = position & arrays["ego_pose_valid"]
+    distance = np.linalg.norm(arrays["ped_position"][known]-arrays["ego_position"][known], axis=1)
+    if not np.isfinite(distance).all():
+        raise ValueError("Nonfinite physical range")
+    ranges[known] = np.searchsorted([10, 20, 40], distance, side="right")
+    proximity = np.full(n, 2, dtype=np.int64)
+    # Integer grid ticks avoid floating-point disagreement at the inclusive 0.4 s boundary.
+    indices = np.flatnonzero(gt)
+    runs = np.split(indices, np.flatnonzero(np.diff(indices) != 1)+1)
+    for run in runs:
+        if len(run) < 2:
+            continue
+        boundaries = (2*run[:-1]+1)[y[run[:-1]] != y[run[1:]]]
+        proximity[run] = 1
+        if len(boundaries):
+            proximity[run[np.min(np.abs(2*run[:, None]-boundaries), axis=1) <= 4]] = 0
+    full = lambda v: np.full(n, v, dtype=np.int64)
+    return {"duration": full(np.searchsorted([1, 5, 10, 15], duration, side="right")),
+            "position-coverage": full(np.searchsorted([.25, .75], position.mean(), side="right")),
+            "gt-count": full(np.searchsorted([2, 5, 20], gt.sum(), side="right")),
+            "track-2d": full(0 if not boxes.any() else 2 if boxes.all() else 1),
+            "internal-position-gap": full(0 if not longest else 1 if longest <= 5 else 2),
+            "position": position.astype(np.int64), "velocity": arrays["ped_velocity_valid"].astype(np.int64),
+            "frame-2d": boxes.astype(np.int64), "range": ranges, "transition": proximity}, flags
 
 
 if __name__ == "__main__":

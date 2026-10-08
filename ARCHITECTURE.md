@@ -52,4 +52,4 @@ The one-off `scripts/audit-road-associations.py` reuses the native reader and pr
 
 `e001_run.py` assembles the fixed optimizer/settings and one persistent training loader, saves local config/provenance/status/history before external logging, reloads the selected checkpoint and evaluates both tests with frozen source statistics. It exports numerical evidence plus plots and logs only config/provenance, metrics, tables and plots to W&B. Checkpoints/full predictions remain local. Logging failures propagate while completed local evidence remains. The explicitly restricted GPU smoke uses source validation only; scientific comparisons use the full source validation/test populations. Fresh directories are required; no resume/restart/retry framework.
 
-Next: complete the separate GPU smoke verification, then execute the 16 planned comparisons in a later increment and inspect failures.
+CPU/CUDA acceptance and the separate W&B GPU smoke are verified. Next: execute the 16 planned comparisons in a later increment and inspect failures.

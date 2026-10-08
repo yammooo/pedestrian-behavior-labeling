@@ -32,12 +32,12 @@ Neither transfer direction is permanently primary (former Q18). E001 compares RO
 
 ## Priorities and gates
 
-1. Finish the separate GPU smoke validation of implemented E001 training/evaluation/checkpoints, then run both directions in the later comparison increment. Framewise MLP/whole-track BiLSTM and padding-invariance acceptance are implemented. Inspect failures before executing the tentative extensions below.
+1. Run both E001 directions in the later comparison increment. Training/evaluation/checkpoints passed CPU/CUDA acceptance and the separate W&B GPU smoke; no comparison result yet. Framewise MLP/whole-track BiLSTM and padding-invariance acceptance are implemented. Inspect failures before executing the tentative extensions below.
 2. Arrange separate backup storage for valuable runs (**TBD**). The frozen LOKI collection/setup are checksum-verified on `aalto` for both-dataset runs. [E001 populations, frozen clip splits and source normalization](../experiments/E001-kinematic-transfer/README.md#real-data-setup-evidence-2026-10-08) are implemented; clip/scenario independence is the accepted user assumption and needs no further approval/audit.
 3. Preserve [ROAD's qualified association acceptance](../experiments/E001-kinematic-transfer/README.md#road-association-acceptance-2026-10-08): a full source/ID/context audit and purposive 33-track review, with inconclusive cases disclosed. This closes the E001 gate, without establishing population-wide visual matching accuracy.
 4. Alongside E001, verify broader physical timing, independent sensor accuracy, RGB projection and map/context usability. [Dataset notes](datasets/README.md) own these unknowns and semantic limitations; they are not new prerequisites for the accepted kinematic diagnostic.
 
-E001's protocol and data/association gates are accepted with recorded limitations. [Models and numerical acceptance](../experiments/E001-kinematic-transfer/README.md#model-implementation-and-acceptance-2026-10-08) are implemented; training/evaluation are implemented; separate GPU smoke verification and comparison execution remain next. Broader methods and architecture remain provisional.
+E001's protocol and data/association gates are accepted with recorded limitations. [Models and numerical acceptance](../experiments/E001-kinematic-transfer/README.md#model-implementation-and-acceptance-2026-10-08) are implemented; training/evaluation and separate GPU smoke verification are complete; comparison execution remains next. Broader methods and architecture remain provisional.
 
 ## Tentative experiment direction
 

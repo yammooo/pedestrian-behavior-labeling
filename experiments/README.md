@@ -1,6 +1,6 @@
 # Experiments
 
-Shared evaluation safeguards and comparison index. No trained-model results. Inspection galleries are evidence about data, not model experiments.
+Shared evaluation safeguards and comparison index. No comparison results; [E001 implementation acceptance and its separate GPU smoke](E001-kinematic-transfer/README.md#trainingevaluation-implementation-and-acceptance-2026-10-08) are recorded. Inspection galleries are evidence about data, not model experiments.
 
 | ID | Question | Status | Result |
 |---|---|---|---|

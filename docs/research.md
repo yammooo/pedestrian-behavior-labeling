@@ -1,6 +1,6 @@
 # Research definition and direction
 
-Status: research-definition stage. Updated 2026-10-06: E001 protocol agreed; follow-on experiments and timeline are tentative. Empirical answers, broader ontology/head choices and final method remain open.
+Status: research-definition stage. Updated 2026-10-08: E001 now compares four kinematic feature sets; follow-on experiments and timeline are tentative. Empirical answers, broader ontology/head choices and final method remain open.
 
 ## Task and scope
 
@@ -18,7 +18,7 @@ The current target ontology is motivated by [LOKI](datasets/loki.md): Moving, St
 
 RQ1 characterizes empirical recoverability, rather than asking whether the data is sufficient. Moving/Stopped may be strongly observable from kinematics; Stopped/Waiting may need road geometry, orientation, barriers, traffic context or the complete future trajectory. Distant, occluded, short or 3D-only observations may make labels weakly identifiable. Poor classification alone cannot prove sensor insufficiency or intrinsic ambiguity: model, protocol and annotation failures remain alternatives.
 
-Start with [E001](../experiments/E001-kinematic-transfer/README.md): joint kinematics/ego MLP → classifier versus the same encoder design → whole-track BiLSTM → the same classifier design. Progressively test scene/LiDAR evidence and RGB/context after inspecting failures. Analyze class-wise performance and observation conditions, not just one global score. A later comparison with human judgments from exactly the same evidence may help distinguish model limitations from ambiguity; it needs a predeclared protocol and is not conclusive by itself. Future observations are limited to the complete observed track, not unknown future behavior.
+Start with [E001](../experiments/E001-kinematic-transfer/README.md): compare motion, added trajectory, added ego-relative interaction and a raw-state control, each with a framewise MLP and whole-track BiLSTM. Progressively test scene/LiDAR evidence and RGB/context after inspecting failures. Analyze class-wise performance and observation conditions, not just one global score. A later comparison with human judgments from exactly the same evidence may help distinguish model limitations from ambiguity; it needs a predeclared protocol and is not conclusive by itself. Future observations are limited to the complete observed track, not unknown future behavior.
 
 **RQ2: Can heterogeneous partial supervision across datasets be used to learn representations that improve cross-dataset pedestrian behavior labeling compared with single-dataset end-task training?**
 
@@ -45,7 +45,7 @@ Keep both RQs as core objectives: characterize useful evidence, then test comple
 
 | Comparison | Question / initial design |
 |---|---|
-| [E001](../experiments/E001-kinematic-transfer/README.md) — agreed baseline | Kinematic MLP versus whole-track BiLSTM, within each dataset and in both transfer directions. |
+| [E001](../experiments/E001-kinematic-transfer/README.md) — agreed baseline | Four kinematic feature sets × MLP/BiLSTM, within each dataset and in both transfer directions. |
 | E002 — Transformer reference | Use the same kinematic evidence and evaluation reference with a full-track Transformer. Reserve one full-versus-restricted-context comparison with consistent feature construction. |
 | E003 — input evidence | On the Transformer, compare kinematics alone, +RGB, +local 3D scene evidence, and +both. Initial candidates are one pedestrian/context RGB crop and one pedestrian-centered LiDAR BEV; exact encodings remain TBD. |
 | E004 — complementary supervision | Fix inference inputs and compare source behavior training, +one additional source with a generic auxiliary objective, and the same observations +semantic supervision. First candidate: nuScenes scene-relation targets, subject to native feasibility. |

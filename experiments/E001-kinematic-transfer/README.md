@@ -1,12 +1,12 @@
 # E001 — Kinematic transfer
 
-Status: **Planned**. Created 2026-10-05 from the 2026-10-02 proposal. Protocol agreed 2026-10-06; native-data verification remains pending. No model implementation, training or results.
+Status: **Planned**. Created 2026-10-05 from the 2026-10-02 proposal. Protocol agreed 2026-10-06; input comparison revised 2026-10-08. Native-data verification remains pending. No model implementation, training or results.
 
 ## Question and controls
 
-Does full-track learned temporal context improve kinematic frame-state labeling within ROAD-Waymo and LOKI and in both transfer directions? This is the first RQ1 recoverability/temporal-context diagnostic and the single-dataset end-task reference for RQ2. It uses a kinematic subset of the [study contract](../../docs/datasets/README.md), without settling the final architecture or contribution. Follow the [shared evaluation rules](../README.md) and [research questions](../../docs/research.md).
+Which kinematic information helps frame-state labeling and cross-dataset transfer, and does full-track learned temporal context improve it? Compare motion, added trajectory, added ego-relative interaction and a raw-state control within ROAD-Waymo and LOKI and in both transfer directions. This is the first RQ1 evidence/temporal-context diagnostic and the single-dataset end-task reference for RQ2. It uses a kinematic subset of the [study contract](../../docs/datasets/README.md), without settling the final architecture or contribution. Follow the [shared evaluation rules](../README.md) and [research questions](../../docs/research.md).
 
-Hold inputs, projection, samples, splits, normalization, classifier design, loss, optimizer, selection rule and budget fixed between A and B. Parameters are independently trained; B adds recurrent capacity. No RGB, raw LiDAR, scene encoder, pedestrian yaw/dimensions, acceleration, factorized heads, extra datasets, distillation, modality dropout or adaptation enters E001.
+For each feature set, hold inputs, projection, samples, splits, normalization, classifier design, loss, optimizer, selection rule and budget fixed between A and B. Across feature sets, change only inputs and the first encoder layer's input dimension; retain the same eligible population and protocol. Parameters are independently trained; B adds recurrent capacity. No RGB, raw LiDAR, scene encoder, pedestrian yaw/dimensions, acceleration, factorized heads, extra datasets, distillation, modality dropout or adaptation enters E001.
 
 ## First two-dataset diagnostic
 
@@ -17,7 +17,7 @@ Hold inputs, projection, samples, splits, normalization, classifier design, loss
 | ROAD-Waymo | Held-out LOKI test | Camera-selected supervision toward a 3D-first population |
 | LOKI | Held-out ROAD-Waymo test | Reverse transfer and possible asymmetry |
 
-Each source-trained model is selected only on its source validation split, then evaluated in both cells. Two variants × two sources give **four training runs and eight evaluation cells**. Target training data, including unlabeled adaptation, and target-based model selection are excluded. Source normalization is reused unchanged at target inference.
+Each source-trained model is selected only on its source validation split, then evaluated on both datasets. Four feature sets × two models × two sources give **16 training runs and 32 evaluation cells**. Target training data, including unlabeled adaptation, and target-based model selection are excluded. Source normalization is reused unchanged at target inference.
 
 ## Samples and eligibility
 
@@ -76,28 +76,37 @@ First apply the verified **full native 3D-to-world transform**. Then express hor
 
 Use native z/roll/pitch where required by the transform, then retain xy model features. Transform in float64, normalize, and cast model inputs to float32. Units are metres, seconds and radians after verification. A pedestrian position is usable only when the required geometry, pose and transforms are valid; ego pose validity covers position and heading. An invalid initial anchor excludes the track.
 
-The **14 input features**, in order, are:
+### Four input configurations
 
-```text
-[ped_x, ped_y, ped_vx, ped_vy, ped_position_valid, ped_velocity_valid,
- ego_x, ego_y, ego_vx, ego_vy, sin(delta_ego_yaw), cos(delta_ego_yaw),
- ego_pose_valid, ego_velocity_valid]
-```
+All vectors below have two components in the fixed ground-plane frame. Derive them from the saved, unnormalized track arrays when constructing model inputs.
 
-Compute each position/velocity feature's mean and population standard deviation over its valid source-training timesteps only; use the same statistics for A/B, validation, test and target. Flags and sine/cosine are unscaled. Use mean 0/scale 1 if a feature has no valid training values and scale 1 for a zero/near-zero standard deviation; record the condition and numerical threshold in the effective config (threshold **TBD**). Fill missing numeric values with **0 after normalization**; missing ego heading has both sine/cosine zero. Validity flags preserve partial missingness. There are no learned missing vectors or separate position/velocity encoders.
+| Feature set | Numeric inputs, in order | Purpose |
+|---|---|---|
+| **K — Motion** | `v_ped` | Pedestrian motion alone |
+| **K+T — Trajectory** | `v_ped`, `delta_p_ped` | Added explicit trajectory geometry |
+| **K+T+R — Interaction** | `v_ped`, `delta_p_ped`, `r`, `v_rel` | Added ego–pedestrian interaction |
+| **RAW — Raw state** | `p_ped`, `v_ped`, `p_ego`, `v_ego` | Control for information lost by structured features |
+
+- `delta_p_ped(t) = p_ped(t) - p_ped(first valid)`, using the first valid pedestrian position in the selected full track.
+- `r(t) = p_ped(t) - p_ego(t)`.
+- `v_rel(t) = v_ped(t) - v_ego(t)`.
+
+Append one unscaled validity flag per vector, in the same order. Displacement requires the current and reference pedestrian positions; relative position/velocity require both corresponding pedestrian and ego measurements. RAW uses the saved position/velocity masks (`ego_pose_valid` for ego position). Missing inputs remain missing before normalization; no gap filling. None of the four sets includes ego yaw or its sine/cosine. Initial ego alignment still supplies an ego-related orientation cue even in K; ego poses remain necessary for native coordinate transforms.
+
+For each source and feature set, compute each numeric column's mean and population standard deviation over its valid source-training timesteps only; reuse those statistics for A/B, validation, test and target. Use mean 0/scale 1 if a feature has no valid training values and scale 1 for a zero/near-zero standard deviation; record the condition and numerical threshold in the effective config (threshold **TBD**). Fill missing numeric values with **0 after normalization**. Validity flags preserve partial missingness. There are no learned missing vectors or separate position/velocity encoders.
 
 Keep padding, 2D/3D/RGB availability, GT and provenance masks separately as metadata. GT validity is not an input. RGB files do not imply an annotated box or a usable crop. Dataset-native `stationary`, behavior/intention fields, vehicle-state labels, destinations and other semantic annotations are excluded from input; velocity is derived by the common rule, not supplied by native semantic fields.
 
 ## First diagnostic baseline
 
 ```text
-Model A: 14 features → joint MLP → classifier → framewise states
-Model B: 14 features → joint MLP → whole-track BiLSTM → classifier → states
+Model A: selected features + masks → joint MLP → classifier → framewise states
+Model B: selected features + masks → joint MLP → whole-track BiLSTM → classifier → states
 ```
 
 | Component | Agreed architecture |
 |---|---|
-| Joint encoder, A and B | Linear 14→64, ReLU, dropout 0.1, linear 64→64, ReLU |
+| Joint encoder, A and B | Linear D→64, ReLU, dropout 0.1, linear 64→64, ReLU; D is the feature-set dimension including masks |
 | BiLSTM, B only | One layer, input 64, hidden 32 **per direction**; concatenate outputs to 64 |
 | Classifier, A and B | Linear 64→32, ReLU, dropout 0.1, linear 32→4 |
 
@@ -120,7 +129,7 @@ For each track, average cross-entropy over its accepted GT frames; average those
 | Gradient clipping | Global gradient norm 1.0 |
 | Budget | At most 30 epochs; stop after 5 consecutive epochs without an improvement in the primary source-validation metric |
 | Checkpoint selection | Highest source-validation track-weighted macro-F1; ties use lower track-averaged validation CE, then earlier epoch |
-| Training seed | **0 only**, shared across the four planned training runs |
+| Training seed | **0 only**, shared across the 16 planned training runs |
 
 Patience resets only for a strict primary-metric improvement; tie-breaking can change the selected checkpoint without resetting patience. Record exact RNG/determinism settings and versions when implemented. A run still improving at epoch 30 is budget-limited; do not silently extend it. Retain failed attempts, selected epoch and stopping reason. No seed sweep, repeated runs, bootstrap or confidence intervals are planned; training variability is not estimated.
 
@@ -128,7 +137,7 @@ Patience resets only for a strict primary-metric improvement; tie-breaking can c
 
 Apply the same **70/15/15 group split** separately to both datasets, using all available clips/scenarios. Keep every track and frame from a clip together. Merge verified shared-recording/temporally overlapping clips into one group where needed; native ID uniqueness or filenames alone do not establish physical independence.
 
-Sort group IDs, shuffle independently within each dataset with **split seed 0**, allocate `ceil(0.15 × N_groups)` to validation and the same number to test, and the remainder to training. Record the shuffle implementation/version and resulting manifests. Preserve ROAD and Waymo native split names as provenance rather than using them as interchangeable experiment splits. Freeze identical manifests for A/B.
+Sort group IDs, shuffle independently within each dataset with **split seed 0**, allocate `ceil(0.15 × N_groups)` to validation and the same number to test, and the remainder to training. Record the shuffle implementation/version and resulting manifests. Preserve ROAD and Waymo native split names as provenance rather than using them as interchangeable experiment splits. Freeze identical manifests for all feature/model combinations.
 
 Before training, audit recording/identity overlap and eligible-track/class support in all splits. Report inadequate support rather than searching for a seed using validation/test scores. Normalization, early stopping and selection use only the source train/validation pools. Both corpora have been examined for research definition; the [strict zero-shot rules](../README.md#strict-zero-shot-access) describe training/selection access, not researcher unfamiliarity. Target-informed later changes are separate comparisons.
 
@@ -194,14 +203,14 @@ At implementation, check: a stationary pedestrian stays stationary under ego tra
 
 ## Variants and runs
 
-Add rows for actual runs or failed attempts; keep negative transfer. No extra ablation is selected.
+Each row below represents four independent runs: A/B × ROAD-Waymo/LOKI source, seed 0, each evaluated on both held-out tests. Add individual rows for actual runs or failed attempts; keep negative transfer.
 
-| Variant | Training source | Held-out test evaluations | Ablation / seed | Status | Failure / result |
-|---|---|---|---|---|---|
-| A: framewise MLP | ROAD-Waymo | ROAD-Waymo; LOKI | Base / 0 | Planned | Not run |
-| B: whole-track BiLSTM | ROAD-Waymo | ROAD-Waymo; LOKI | Temporal context / 0 | Planned | Not run |
-| A: framewise MLP | LOKI | LOKI; ROAD-Waymo | Base / 0 | Planned | Not run |
-| B: whole-track BiLSTM | LOKI | LOKI; ROAD-Waymo | Temporal context / 0 | Planned | Not run |
+| Feature set | Models | Training sources, separately | Status | Failure / result |
+|---|---|---|---|---|
+| K | A; B | ROAD-Waymo; LOKI | Planned | Not run |
+| K+T | A; B | ROAD-Waymo; LOKI | Planned | Not run |
+| K+T+R | A; B | ROAD-Waymo; LOKI | Planned | Not run |
+| RAW | A; B | ROAD-Waymo; LOKI | Planned | Not run |
 
 ## Run provenance
 
@@ -213,5 +222,7 @@ Add rows for actual runs or failed attempts; keep negative transfer. No extra ab
 ## Conclusions, limitations and next step
 
 No measured conclusion. Poor within-dataset performance can reflect limited evidence, annotation ambiguity or data/model/protocol failure, without proving sensor insufficiency. A B gain supports learned temporal context under these features; strong within-dataset results with poor transfer suggest mismatch. Geography, hardware, scene structure, semantics, class frequencies and annotation selection all change, so directional scores cannot isolate selection policy or establish causality/novelty. Study difficult conditions and Stopped/Waiting errors even after strong aggregate scores.
+
+Examine whether added trajectory and interaction information helps Stopped/Waiting and Moving/Crossing, and whether gains survive transfer. RAW is a diagnostic control, not an automatic final representation: structured trajectory variants supply explicit track-start displacement that framewise RAW cannot directly reconstruct. Positive results do not establish safe use by a larger Transformer; negative results do not prove a feature inherently useless. Use observed errors to guide later temporal/multimodal comparisons, without permanently selecting features from this baseline alone.
 
 Next: review the prepared-track evidence, resolve the remaining native/target gates and agree Step 3 target/view tests; then create final population/manifests before model work. Inspect failures before adding modalities, sources or architecture. All broader methods and ontology/head choices remain provisional.

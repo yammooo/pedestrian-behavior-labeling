@@ -202,7 +202,12 @@ def run_attempt(source, configuration, variant, output, device, smoke=False):
                 identity = json.loads(t["locator"])
                 t["group"] = identity.get("clip", identity.get("scenario"))
             return tracks
-        run = wandb.init(entity="yammo-unipd", project="pedestrian-behaviour-labeling", name=output.name,
+        model_name = {"A": "MLP", "B": "BiLSTM"}[variant]
+        attempt_time = datetime.fromisoformat(provenance["started_utc"]).strftime("%Y%m%d-%H%M%S")
+        run_name = f"E001-{source}-{configuration}-{model_name}-seed{SETTINGS['seed']}-{attempt_time}"
+        if smoke:
+            run_name += "-smoke"
+        run = wandb.init(entity="yammo-unipd", project="pedestrian-behaviour-labeling", name=run_name,
                          job_type=status["kind"], config=config | {"provenance": provenance},
                          dir=str(output.resolve()), save_code=False, resume="never", mode="online")
         provenance["wandb"] = {"id": run.id, "url": run.url}

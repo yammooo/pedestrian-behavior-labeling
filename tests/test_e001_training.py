@@ -329,6 +329,7 @@ class E001TrainingTest(unittest.TestCase):
                     pass
             def initialize(**kwargs):
                 self.assertEqual((kwargs["entity"], kwargs["project"]), ("yammo-unipd", "pedestrian-behaviour-labeling"))
+                self.assertRegex(kwargs["name"], r"^E001-loki-K-MLP-seed0-\d{8}-\d{6}$")
                 if stage == "init":
                     raise RuntimeError("init failure")
                 return FakeRun()

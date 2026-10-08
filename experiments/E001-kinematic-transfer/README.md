@@ -306,6 +306,8 @@ Each row below represents four independent runs: A/B × ROAD-Waymo/LOKI source, 
 
 ## W&B workspace and logging
 
+New run names are `E001-<source>-<configuration>-<MLP|BiLSTM>-seed0-<UTC YYYYMMDD-HHMMSS>`, for example `E001-loki-K-MLP-seed0-20261008-170000`. Restricted smoke names add `-smoke`; naming is independent of the output directory.
+
 Use the [manual E001 view](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling?nw=71j6lc3jv4g): three main native curve panels, followed by collapsed final-evaluation and ten-axis observation-strata sections for each dataset. Automatic panel generation is disabled in that saved view. It is separate from the existing personal automatic view; prior runs and their evidence are preserved. The official workspace client was used through a temporary `wandb-workspaces==0.4.13` uv overlay, without a project dependency. Layout/source/readback evidence: ignored `outputs/experiments/E001/wandb-workspace/`.
 
 | W&B metric | Frequency | X-axis |

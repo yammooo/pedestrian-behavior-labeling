@@ -221,7 +221,7 @@ uv run --locked --extra cpu python scripts/train-e001.py \
   --output outputs/experiments/E001/runs/loki-k-a-seed0
 ```
 
-Use `--extra cu118 --device cuda` on `aalto` after Git push/pull and revision verification. Configurations are `K`, `K+T`, `K+T+R`, `RAW`; variants are A/B. Output directories must be fresh, including after failure. No resume/retry or comparison sweep is implemented. W&B errors propagate after saving available local evidence.
+Use `--extra cu118 --device cuda` on `aalto` after Git push/pull and revision verification. Configurations are `K`, `K+T`, `K+T+R`, `RAW`; variants are A/B. W&B names automatically include E001, source, feature configuration, `MLP`/`BiLSTM`, seed and UTC attempt time; see [naming and logging](experiments/E001-kinematic-transfer/README.md#wb-workspace-and-logging). Output directories must be fresh, including after failure. No resume/retry or comparison sweep is implemented. W&B errors propagate after saving available local evidence.
 
 Each attempt contains config/provenance/status, epoch history, per-update `steps.jsonl`, `best.pt`, `last.pt`, dataset-specific `metrics.json` and pickle-free `predictions.npz`, and PNG/SVG plots. Checkpoints and full predictions stay local; W&B receives configuration/provenance, per-update training CE, epoch training/validation curves and final metrics/tables/PNG plots. Provenance and denominators stay in configuration rather than metric history. Before valuable runs, arrange a separate backup; external backup storage remains **TBD**.
 

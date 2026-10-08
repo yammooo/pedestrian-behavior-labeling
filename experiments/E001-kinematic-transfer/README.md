@@ -135,11 +135,11 @@ Patience resets only for a strict primary-metric improvement; tie-breaking can c
 
 ## Splits and access
 
-Apply the same **70/15/15 group split** separately to both datasets. One group is one ROAD-Waymo clip or LOKI scenario containing eligible tracks; keep all eligible tracks from that group together. Recording/identity overlap remains an evidence gate before training: IDs alone do not establish physical independence, and verified overlap would require a documented protocol/manifests revision before any run.
+Apply the same **70/15/15 group split** separately to both datasets. One group is one ROAD-Waymo clip or LOKI scenario containing eligible tracks; keep all eligible tracks from that group together. On 2026-10-08 the user accepted **each clip/scenario as independent** for E001. This is an explicit study assumption, not verified physical independence; it does not require another audit or approval before training. Existing group assignments remain unchanged.
 
 Sort group IDs, shuffle with a fresh Python `random.Random(0)` independently for each dataset, assign the first block to validation and the next to test: allocate `ceil(0.15 × N_groups)` to validation and the same number to test, and the remainder to training. Record the shuffle implementation/version and resulting manifests. Preserve ROAD and Waymo native split names as provenance rather than using them as interchangeable experiment splits. Freeze identical manifests for all feature/model combinations.
 
-Before training, audit recording/identity overlap and eligible-track/class support in all splits. Report inadequate support rather than searching for a seed using validation/test scores. Normalization, early stopping and selection use only the source train/validation pools. Both corpora have been examined for research definition; the [strict zero-shot rules](../README.md#strict-zero-shot-access) describe training/selection access, not researcher unfamiliarity. Target-informed later changes are separate comparisons.
+Before training, report eligible-track/class support in all splits under the accepted clip-independence assumption. Report inadequate support rather than searching for a seed using validation/test scores. Normalization, early stopping and selection use only the source train/validation pools. Both corpora have been examined for research definition; the [strict zero-shot rules](../README.md#strict-zero-shot-access) describe training/selection access, not researcher unfamiliarity. Target-informed later changes are separate comparisons.
 
 ## Evaluation
 
@@ -225,7 +225,7 @@ Protocol choices above are settled for E001; evidence below still gates executio
 | Releases / acquisition / associations | Native notes preserve acquired paths/counts; complete release revisions/checksums and versioned reproducible mapping/extension audit **TBD** |
 | Native identity/context acceptance | Reproduce [ROAD native-ID extension counts](../../docs/datasets/road-waymo.md#native-identity-and-context-audit-2026-10-06), inspect continuity/semantic disagreements/varied associations and declare visual association acceptance **TBD**; all 59 known movement/stop conflicts have accepted overrides |
 | Geometry and time | Full LOKI release transform/marker check and official Waymo pose interpretation support preparation; independent sensor accuracy/RGB projection remain open; physical LOKI timestamps **unknown** |
-| Final population / manifests | Setup implements the accepted projection/eligibility, reports exclusions and split/class support, and freezes clip groups; physical recording/identity independence remains **TBD** |
+| Final population / manifests | Setup implements the accepted projection/eligibility, reports exclusions and split/class support, and freezes clip groups; clip/scenario independence is accepted as an assumption (2026-10-08), not a remaining gate |
 | Normalization guard | Numerical near-zero scale threshold **1e−8**, inclusive; source-training statistics and guarded columns recorded before runs |
 | Implementation / environment | Model code/config/commands **TBD**; [local CPU/remote CUDA uv setup](../../README.md#setup-and-validation) verified 2026-10-07, with no model implementation or training |
 | Low-shot / later ablations | None specified in E001; extensions require explicit labels, access and justification |
@@ -256,4 +256,4 @@ No measured conclusion. Poor within-dataset performance can reflect limited evid
 
 Examine whether added trajectory and interaction information helps Stopped/Waiting and Moving/Crossing, and whether gains survive transfer. RAW is a diagnostic control, not an automatic final representation: structured trajectory variants supply explicit track-start displacement that framewise RAW cannot directly reconstruct. Positive results do not establish safe use by a larger Transformer; negative results do not prove a feature inherently useless. Use observed errors to guide later temporal/multimodal comparisons, without permanently selecting features from this baseline alone.
 
-Next: review the saved native and data-setup evidence, resolve ROAD-Waymo association/recording acceptance, then implement models/training with the agreed loss/F1 and padding-invariance tests. Inspect failures before adding modalities, sources or architecture. All broader methods and ontology/head choices remain provisional.
+Next: review the saved native and data-setup evidence, resolve ROAD-Waymo association acceptance, then implement models/training with the agreed loss/F1 and padding-invariance tests. Inspect failures before adding modalities, sources or architecture. All broader methods and ontology/head choices remain provisional.

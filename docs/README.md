@@ -7,7 +7,7 @@ Updated 2026-10-08. Research-definition stage; no labeling model or trained-mode
 ## Next work
 
 1. Review the sixteen-track native/prepared inspection pack and full inventory audits; resolve ROAD-Waymo association acceptance. The 59 known behavior conflicts have [accepted overrides](../experiments/E001-kinematic-transfer/behavior-overrides.json).
-2. Review [data-setup acceptance/population evidence](../experiments/E001-kinematic-transfer/README.md#saved-tracks-to-batches-2026-10-08), frozen clip splits and source-only normalization; recording/identity independence remains a training gate.
+2. Review [data-setup acceptance/population evidence](../experiments/E001-kinematic-transfer/README.md#saved-tracks-to-batches-2026-10-08), frozen clip splits and source-only normalization; clip/scenario independence is accepted as an E001 assumption.
 3. Implement/run E001's MLP/BiLSTM comparison after its remaining gates; inspect failures before broader methods.
 4. Alongside E001, define the first RGB/3D representations and verify auxiliary-source feasibility; follow the [tentative schedule](research.md#schedule).
 

@@ -6,7 +6,7 @@ Updated 2026-10-08. Research-definition stage; no comparison training or measure
 
 ## Next work
 
-1. Implement E001 training/evaluation/checkpoints with the agreed equal-track loss/F1 checks. Models and padding-invariance acceptance are implemented; native association acceptance is closed for E001 with recorded visual uncertainty.
+1. Implement E001 training/evaluation/checkpoints, observation-condition strata and W&B logging with the agreed equal-track loss/F1 checks. Models and padding-invariance acceptance are implemented; native association acceptance is closed for E001 with recorded visual uncertainty. [W&B destination and login status](../experiments/E001-kinematic-transfer/README.md#run-provenance) are recorded; upload access remains untested.
 2. Transfer the existing LOKI saved collection/setup to `aalto` before comparison runs; reuse the [frozen populations/splits/source statistics](../experiments/E001-kinematic-transfer/README.md#real-data-setup-evidence-2026-10-08).
 3. Run the comparison and inspect failures before broader methods.
 4. Alongside E001, define the first RGB/3D representations and verify auxiliary-source feasibility; follow the [tentative schedule](research.md#schedule).

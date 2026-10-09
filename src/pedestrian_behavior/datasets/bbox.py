@@ -64,10 +64,10 @@ def read_road_boxes(index, groups):
     return boxes
 
 
-def read_waymo_boxes(scene, selected_ids):
+def read_waymo_boxes(scene, selected_ids, waymo_root=None):
     """FRONT camera labels (never projected LiDAR boxes) and calibration sizes."""
     name = scene["segment_context_name"]
-    box_path, calibration = (component_path(scene, c) for c in ("camera_box", "camera_calibration"))
+    box_path, calibration = (component_path(scene, c, waymo_root) for c in ("camera_box", "camera_calibration"))
     if box_path is None or calibration is None or not box_path.is_file() or not calibration.is_file():
         raise ValueError("Missing native camera boxes or image dimensions")
     digest = checksum(box_path)
@@ -91,5 +91,6 @@ def read_waymo_boxes(scene, selected_ids):
         x, y, width, height = (float(row[prefix+k]) for k in ("center.x", "center.y", "size.x", "size.y"))
         corners = (np.array([x-width/2, y-height/2, x+width/2, y+height/2]) / np.tile(size, 2)).tolist()
         unique_row(boxes, (row["key.camera_object_id"], row["key.frame_timestamp_micros"]), corners)
-    return boxes, size, {"camera_box_sha256": digest, "camera_calibration_sha256": checksum(calibration),
+    return boxes, size, {"camera_box_path": str(box_path.resolve()), "camera_calibration_path": str(calibration.resolve()),
+                         "camera_box_sha256": digest, "camera_calibration_sha256": checksum(calibration),
                          "image_sizes": [size.tolist()], "image_size_evidence": "Native FRONT CameraCalibrationComponent"}

@@ -215,6 +215,39 @@ class BboxTest(unittest.TestCase):
                     dataset_from_extension(collection, setup_path, extension, "training", "availability",
                                            record["baseline_normalization"], record["normalization"])
 
+    def test_relocated_waymo_root_preserves_frozen_references_and_checksums(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _, reader = self.fixture(root)
+            collection, setup_path = root/"collection", root/"setup"/"setup.json"
+            self.frozen_setup(reader, collection, setup_path)
+            frozen_hash = checksum(collection/"manifest.json")
+            waymo_root = root/"relocated-waymo"
+            for component in ("camera_box", "camera_calibration"):
+                target = waymo_root/"training"/component/"scene.parquet"
+                target.parent.mkdir(parents=True)
+                (reader.index/(component+".parquet")).rename(target)
+            extension = root/"bbox"
+            record = prepare_bbox_extension(collection, setup_path, reader.index, extension, waymo_root)
+            self.assertEqual(record["waymo_root"], str(waymo_root.resolve()))
+            self.assertEqual(record["scenes"]["clip"]["camera_box_path"],
+                             str(waymo_root/"training/camera_box/scene.parquet"))
+            self.assertEqual(checksum(collection/"manifest.json"), frozen_hash)
+            ds = dataset_from_extension(collection, setup_path, extension, "training", "geometry",
+                                        record["baseline_normalization"], record["normalization"])
+            self.assertTrue(ds[0]["inputs"].isfinite().all())
+            with self.assertRaisesRegex(ValueError, "separate"):
+                prepare_bbox_extension(collection, setup_path, reader.index, waymo_root/"bbox", waymo_root)
+            box_path = waymo_root/"training/camera_box/scene.parquet"
+            rows = pq.read_table(box_path).to_pylist()
+            rows[0]["[CameraBoxComponent].box.center.x"] += 1.
+            pq.write_table(pa.Table.from_pylist(rows), box_path)
+            with self.assertRaisesRegex(ValueError, "differ from frozen"):
+                prepare_bbox_extension(collection, setup_path, reader.index, root/"failed-relocated", waymo_root)
+            failure = json.loads((root/"failed-relocated/manifest.json").read_text())
+            self.assertEqual(failure["status"], "failed")
+            self.assertTrue(failure["e001_unchanged"]["all_sha256_match"])
+
     def test_real_setup_training_only_statistics_and_native_failure_evidence(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

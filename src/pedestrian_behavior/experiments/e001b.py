@@ -53,11 +53,15 @@ def _add_support(record, entry, y, gt, mask):
             record["class_tracks"][label].add(entry["locator"])
 
 
-def prepare_bbox_extension(collection, setup_path, native_input, output):
+def prepare_bbox_extension(collection, setup_path, native_input, output, waymo_root=None):
     collection, setup_path, native_input, output = map(Path, (collection, setup_path, native_input, output))
-    if any(output.resolve().is_relative_to(p.resolve()) for p in (collection, setup_path.parent, native_input)):
+    waymo_root = Path(waymo_root) if waymo_root is not None else None
+    protected_roots = [collection, setup_path.parent, native_input] + ([waymo_root] if waymo_root else [])
+    if any(output.resolve().is_relative_to(p.resolve()) for p in protected_roots):
         raise ValueError("Extension output must be separate from frozen/native data")
     original = load_manifest(collection)
+    if waymo_root is not None and original["dataset"] != "road-waymo":
+        raise ValueError("Waymo root applies only to ROAD-Waymo")
     setup = json.loads(setup_path.read_text())
     if (setup.get("status") != "complete" or setup.get("experiment") != "E001" or setup.get("schema_version") != 1
             or setup["dataset"] != original["dataset"] or checksum(collection/"manifest.json") != setup["collection"]["manifest_sha256"]):
@@ -80,7 +84,8 @@ def prepare_bbox_extension(collection, setup_path, native_input, output):
               "policy": POLICY, "clock": original["clock"], "classes": CLASSES,
               "collection": {"path": str(collection.resolve()), "manifest_sha256": checksum(collection/"manifest.json")},
               "setup": {"path": str(setup_path.resolve()), "sha256": checksum(setup_path)},
-              "native_input": str(native_input.resolve()), "groups": setup["groups"], "population": setup["population"],
+              "native_input": str(native_input.resolve()), "waymo_root": str(waymo_root.resolve()) if waymo_root else None,
+              "groups": setup["groups"], "population": setup["population"],
               "baseline_normalization": setup["normalization"]["K+T+R"], "scenes": {}, "tracks": [], "failures": [],
               "environment": {"python": platform.python_version(), "numpy": np.__version__, "host": platform.node(),
                   "revision": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
@@ -107,7 +112,8 @@ def prepare_bbox_extension(collection, setup_path, native_input, output):
             if road is None:
                 native, provenance = read_loki_boxes(native_input, scene, requested, original["scenes"][scene]["annotation_odometry_sha256"])
             else:
-                waymo, size, provenance = read_waymo_boxes(original["scenes"][scene], {json.loads(e["locator"])["tube_uid"] for e in rows})
+                waymo, size, provenance = read_waymo_boxes(original["scenes"][scene],
+                    {json.loads(e["locator"])["tube_uid"] for e in rows}, waymo_root)
             record["scenes"][scene] = provenance
             for entry in rows:
                 metadata, arrays3d = saved[entry["archive"]]
@@ -255,8 +261,9 @@ def main():
     parser.add_argument("--collection", type=Path, required=True)
     parser.add_argument("--setup", type=Path, required=True)
     parser.add_argument("--native-input", type=Path, required=True)
+    parser.add_argument("--waymo-root", type=Path, help="Actual Waymo v2 root when frozen absolute paths have moved")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    record = prepare_bbox_extension(args.collection, args.setup, args.native_input, args.output)
+    record = prepare_bbox_extension(args.collection, args.setup, args.native_input, args.output, args.waymo_root)
     print(json.dumps({"status": record["status"], "tracks": len(record["tracks"]), "elapsed_seconds": record["elapsed_seconds"],
                       "e001_unchanged": record["e001_unchanged"], "coverage": record["coverage"]}, indent=2))

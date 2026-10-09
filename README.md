@@ -196,9 +196,22 @@ uv run --locked --extra cpu python scripts/prepare-e001b.py \
 
 On `aalto`, use an isolated Git worktree and its own uv environment while E001 runs; do not pull/sync into the active training checkout. Pass absolute E001 collection/setup paths from `/home/user20/projects/pedestrian-behavior-labeling`, use `--extra cu118`, and set `--native-input` to `/media/user20/F47C60057C5FC152/projects/loki_data` or `/home/user20/road_waymo_mapping/merged_pedestrians_20261002`. Write separate E001b outputs. The command requires a fresh directory, retains failure evidence and checks all original collection/setup file hashes before/after.
 
+The dataset partition can mount at `/run/media/user20/F47C60057C5FC152/projects` instead of the older `/media/user20/...` path stored in frozen manifests. Check the actual mount before preparation. On 2026-10-09, native Waymo files were verified under `/run/media/...`. Use the explicit E001b `--waymo-root` override; it retains native checksum checks and does not rewrite E001 references. From the isolated E001b checkout on `aalto`:
+
+```bash
+/home/user20/.local/bin/uv run --locked --extra cu118 python scripts/prepare-e001b.py \
+  --collection /home/user20/projects/pedestrian-behavior-labeling/outputs/experiments/E001/reader-preparation/road-waymo \
+  --setup /home/user20/projects/pedestrian-behavior-labeling/outputs/experiments/E001/data-setup/road-waymo/setup.json \
+  --native-input /home/user20/road_waymo_mapping/merged_pedestrians_20261002 \
+  --waymo-root /run/media/user20/F47C60057C5FC152/projects/waymo_v2 \
+  --output /home/user20/projects/pedestrian-behavior-labeling/outputs/experiments/E001b/bbox-native/road-waymo
+```
+
+For LOKI native reads at this mount, pass `/run/media/user20/F47C60057C5FC152/projects/loki_data` as `--native-input`. Existing saved LOKI caches need no regeneration for a mount-path change. To restore an unmounted partition, run `udisksctl mount --block-device /dev/nvme0n1p3 --options ro` in a terminal on the laptop and use the mount location it reports. An `AlreadyMounted` response reports the current location; it does not mean the stored `/media/...` path exists.
+
 For saved-cache sample construction, call `pedestrian_behavior.experiments.e001b.dataset_from_extension(collection, setup_path, extension, split, configuration, baseline_statistics, bbox_statistics)`, with configuration `availability` or `geometry`. Both statistics come from the **training source**, including for opposite-dataset evaluation. Read the extension's `baseline_normalization` and `normalization` fields. Samples use unchanged E001 targets/references, with 14 or 20 input columns. The E001b training command is deferred.
 
-Use `outputs/experiments/E001b/bbox-native/{loki,road-waymo}/` for the accepted native-only policy: Waymo FRONT boxes without ROAD fallback, and native LOKI boxes. The original ROAD-preferred `bbox/` caches remain historical evidence and fail the current loader policy check. [Source decision and verification](experiments/E001b-2d-bbox-contribution/README.md#native-only-cache-acceptance-2026-10-09) own acceptance: LOKI is verified on both machines; ROAD preparation waits for the native-data partition to be mounted on `aalto`. Its final directory is not yet present. The training runner remains deferred.
+Use `outputs/experiments/E001b/bbox-native/{loki,road-waymo}/` for the accepted native-only policy: Waymo FRONT boxes without ROAD fallback, and native LOKI boxes. The original ROAD-preferred `bbox/` caches remain historical evidence and fail the current loader policy check. [Source decision and verification](experiments/E001b-2d-bbox-contribution/README.md#native-only-cache-acceptance-2026-10-09) own acceptance: LOKI is verified on both machines; ROAD preparation uses the verified `/run/media/...` mount override; its final verification is recorded there. The training runner remains deferred.
 
 ## E001 models
 

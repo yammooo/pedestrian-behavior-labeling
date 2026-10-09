@@ -1,6 +1,6 @@
 # Pedestrian Behavior Labeling
 
-Aalto research workspace for a general offline pedestrian-behavior labeler from existing tracks under the [multimodal study contract](docs/datasets/README.md). Kinematic baseline models and their training/evaluation pipeline are implemented; no comparison results yet. Start with the [research dashboard](docs/README.md); the first kinematic transfer comparison is [E001, Planned](experiments/E001-kinematic-transfer/README.md).
+Aalto research workspace for a general offline pedestrian-behavior labeler from existing tracks under the [multimodal study contract](docs/datasets/README.md). Kinematic models, training/evaluation and a brief single-seed comparison review are implemented. Start with the [research dashboard](docs/README.md); [E001](experiments/E001-kinematic-transfer/README.md) owns the comparison and repetition protocol.
 
 ## Layout
 
@@ -238,11 +238,26 @@ uv run --locked --extra cpu python scripts/train-e001.py \
   --output outputs/experiments/E001/runs/loki-k-a-seed0
 ```
 
-Use `--extra cu118 --device cuda` on `aalto` after Git push/pull and revision verification. Configurations are `K`, `K+T`, `K+T+R`, `RAW`; variants are A/B. W&B names automatically include E001, source, feature configuration, `MLP`/`BiLSTM`, seed and UTC attempt time; see [naming and logging](experiments/E001-kinematic-transfer/README.md#wb-workspace-and-logging). Output directories must be fresh, including after failure. No resume/retry or comparison sweep is implemented. W&B errors propagate after saving available local evidence.
+Use `--extra cu118 --device cuda` on `aalto` after Git push/pull and revision verification. Configurations are `K`, `K+T`, `K+T+R`, `RAW`; variants are A/B. Single attempts accept `--seed`, `--epochs` and `--patience`; defaults retain the original 0/30/5 protocol. W&B names include E001, source, configuration, `MLP`/`BiLSTM`, requested seed and UTC attempt time; see [naming and logging](experiments/E001-kinematic-transfer/README.md#wb-workspace-and-logging). Output directories must be fresh, including after failure. No resume/retry is implemented. W&B errors propagate after saving available local evidence.
 
 Each attempt contains config/provenance/status, epoch history, per-update `steps.jsonl`, `best.pt`, `last.pt`, dataset-specific `metrics.json` and pickle-free `predictions.npz`, and PNG/SVG plots. Checkpoints and full predictions stay local; W&B receives configuration/provenance, per-update training CE, epoch training/validation curves and final metrics/tables/PNG plots. Provenance and denominators stay in configuration rather than metric history. Before valuable runs, arrange a separate backup; external backup storage remains **TBD**.
 
 Open the [manual E001 workspace](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling?nw=71j6lc3jv4g) for the main native curves and collapsible final-evaluation/observation-strata sections. Automatic panel generation is disabled in that saved view. Detailed tables remain available in each run; local numerical files retain all metrics. [Metric names and axes](experiments/E001-kinematic-transfer/README.md#wb-workspace-and-logging) are fixed separately from W&B's internal logging-row counter.
+
+### E001 multiple seeds
+
+The [accepted repetition round](experiments/E001-kinematic-transfer/README.md#multiple-seed-launcher-2026-10-09) uses **75 maximum epochs / patience 8 / training seeds 0–4**: 80 attempts and 160 evaluation cells, including fresh seed-0 runs. Splits and source normalization remain frozen. The launcher defaults to **two separate processes sharing the selected GPU**; each has two CPU compute threads and zero loader workers. `--jobs 1` runs sequentially; `--seeds 0 1 2` gives the smaller 48-attempt matrix. Increasing concurrency may increase GPU/CPU/I/O contention; no throughput gain is promised.
+
+On `aalto`, use the isolated checkout prepared on branch `e001-multiple-seeds`; its ignored E001 output directory links to the existing frozen data/output root. The original checkout and its 50/8 working edit stay intact. Run directly on the GPU laptop, or first connect from the ThinkPad using `ssh -F ~/.ssh/config aalto`:
+
+```bash
+cd /home/user20/projects/pedestrian-behavior-labeling-e001-seeds
+git rev-parse HEAD
+tmux new -s e001-seeds
+uv run --locked --extra cu118 python scripts/train-e001-seeds.py --jobs 2
+```
+
+Detach with **Ctrl-b, then d**; reconnect with `tmux attach -t e001-seeds`. An automatically fresh `outputs/experiments/E001/runs/seeds-<UTC timestamp>/` contains `sweep.json`, per-attempt log files in `logs/`, and separate readable `<source>-<configuration>-<MLP|BiLSTM>-seed<N>/` directories. Supply `--output <fresh-directory>` to name the batch explicitly. If a child fails, the launcher stops new launches, interrupts other active children and exits with failure, preserving available evidence. No automatic retries or resume. Use a fresh batch directory for a manually restarted subset of seeds.
 
 The separate GPU smoke command uses one epoch, two training batches and one source-validation batch. It logs to the same W&B project with `job_type=gpu-smoke`, never accesses held-out tests and is not a comparison result:
 

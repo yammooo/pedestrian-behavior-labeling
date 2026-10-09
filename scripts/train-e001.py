@@ -1,4 +1,4 @@
-"""Run a single E001 attempt with fixed scientific settings."""
+"""Run a single E001 attempt with recorded seed and training budget."""
 import os
 
 # cuBLAS reads this before its first handle is created.

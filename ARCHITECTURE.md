@@ -19,6 +19,7 @@ src/pedestrian_behavior/
   experiments/
     e001.py                 E001 targets, eligibility, models and condition policy
     e001_run.py             Fixed E001 attempt, artifacts, plots and W&B logging
+    e001_sweep.py           E001 seed matrix and bounded child-process launcher
   inspection/               Human inspection tools
 ```
 
@@ -52,6 +53,6 @@ The one-off `scripts/audit-road-associations.py` reuses the native reader and pr
 
 `e001_run.py` assembles the fixed optimizer/settings and one persistent training loader, saves local config/provenance/status/history before external logging, reloads the selected checkpoint and evaluates both tests with frozen source statistics. It exports numerical evidence plus plots and keeps provenance/denominators in W&B configuration, logs per-update CE and epoch curves on separate declared axes, and puts final metrics, strata images and detailed tables in separate namespaces. Step records are appended locally before W&B logging; the saved manual workspace controls which panels appear. Checkpoints/full predictions remain local. Logging failures propagate while completed local evidence remains. The explicitly restricted GPU smoke uses source validation only; scientific comparisons use the full source validation/test populations. Fresh directories are required; no resume/restart/retry framework.
 
-CPU/CUDA acceptance and the separate W&B GPU smoke are verified. Next: execute the 16 planned comparisons in a later increment and inspect failures.
+CPU/CUDA acceptance and the separate W&B GPU smoke are verified; two single-seed comparison rounds received a brief review. `e001_sweep.py` schedules the agreed 75/8 repetition matrix through independent single-attempt subprocesses, with a fresh batch directory, bounded concurrency, logs and failure propagation. The requested seed reaches model initialization, the persistent training loader, checkpoints, provenance and W&B naming. Single-attempt defaults retain the original 0/30/5 settings. No shared model state, altered populations, resume or retry machinery is introduced. [Commands](README.md#e001-multiple-seeds) own tmux and checkout details.
 
 **E001b bbox extension:** `datasets/bbox.py` retrieves native annotated boxes/dimensions and verifies original source checksums; `data/bbox.py` owns geometry, immediate-neighbor speeds, cache validation and numeric input construction. `experiments/e001b.py` owns the ROAD/fallback policy, frozen E001 population references, coverage audit, source-training statistics and additive sample assembly. Separate pickle-free caches reference existing E001 tracks; preparation never rewrites their arrays, setup or splits. Existing E001 imports/runner stay unchanged. [E001b](experiments/E001b-2d-bbox-contribution/README.md) owns protocol/schema/gates; its training runner is deferred.

@@ -47,6 +47,6 @@ def collate_tracks(samples):
             "locators": [s["locator"] for s in samples], "archives": [s["archive"] for s in samples]}
 
 
-def track_batches(dataset, training=False):
+def track_batches(dataset, training=False, seed=0):
     return DataLoader(dataset, batch_size=64, shuffle=training, drop_last=False,
-                      generator=torch.Generator().manual_seed(0), collate_fn=collate_tracks)
+                      generator=torch.Generator().manual_seed(seed), collate_fn=collate_tracks)

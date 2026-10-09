@@ -314,6 +314,7 @@ class E001TrainingTest(unittest.TestCase):
             (destination/"setup.json").write_text(json.dumps(record))
         for stage in ("init", "step", "epoch", "final", "complete"):
             output = self.root/stage
+            attempt_seed = 3 if stage == "complete" else 0
             events = []
             class FakeRun:
                 id, url = "test", "test"
@@ -329,7 +330,8 @@ class E001TrainingTest(unittest.TestCase):
                     pass
             def initialize(**kwargs):
                 self.assertEqual((kwargs["entity"], kwargs["project"]), ("yammo-unipd", "pedestrian-behaviour-labeling"))
-                self.assertRegex(kwargs["name"], r"^E001-loki-K-MLP-seed0-\d{8}-\d{6}$")
+                self.assertRegex(kwargs["name"], rf"^E001-loki-K-MLP-seed{attempt_seed}-\d{{8}}-\d{{6}}$")
+                self.assertEqual(kwargs["config"]["settings"]["seed"], attempt_seed)
                 if stage == "init":
                     raise RuntimeError("init failure")
                 return FakeRun()
@@ -337,8 +339,11 @@ class E001TrainingTest(unittest.TestCase):
                  patch("pedestrian_behavior.experiments.e001_run.wandb.init", side_effect=initialize), \
                  patch.dict("pedestrian_behavior.experiments.e001_run.SETTINGS", {"epochs": 1}):
                 if stage == "complete":
-                    result = run_attempt("loki", "K", "A", output, "cpu")
+                    result = run_attempt("loki", "K", "A", output, "cpu", seed=attempt_seed, epochs=1, patience=8)
                     self.check("successful attempt selects only source validation", [1, "budget"], [result["selection"]["epoch"], result["stopping_reason"]])
+                    config = json.loads((output/"config.json").read_text())
+                    provenance = json.loads((output/"provenance.json").read_text())
+                    self.assertEqual((config["settings"]["seed"], config["settings"]["epochs"], config["settings"]["patience"], provenance["seed"]), (3, 1, 8, 3))
                 else:
                     with self.assertRaisesRegex(RuntimeError, stage+" failure"):
                         run_attempt("loki", "K", "A", output, "cpu")

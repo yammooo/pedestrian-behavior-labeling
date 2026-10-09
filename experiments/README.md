@@ -1,10 +1,10 @@
 # Experiments
 
-Shared evaluation safeguards and comparison index. No comparison results; [E001 implementation acceptance and its separate GPU smoke](E001-kinematic-transfer/README.md#trainingevaluation-implementation-and-acceptance-2026-10-08) are recorded. Inspection galleries are evidence about data, not model experiments.
+Shared evaluation safeguards and comparison index. [E001’s brief single-seed comparison review](E001-kinematic-transfer/README.md#brief-comparison-and-budget-review-2026-10-09) is recorded alongside implementation acceptance. Inspection galleries are evidence about data, not model experiments.
 
 | ID | Question | Status | Result |
 |---|---|---|---|
-| [E001](E001-kinematic-transfer/README.md) | Four kinematic feature sets × MLP/BiLSTM; within and bidirectional ROAD-Waymo/LOKI transfer | User running | Analysis pending |
+| [E001](E001-kinematic-transfer/README.md) | Four kinematic feature sets × MLP/BiLSTM; within and bidirectional ROAD-Waymo/LOKI transfer | 32 attempts complete; five-seed launcher ready | Longer patience helped some BiLSTMs; feature rankings mixed |
 | [E001b](E001b-2d-bbox-contribution/README.md) | Exact K+T+R versus added bbox availability versus added geometry | Preparation verified; geometry-source gate open | Not trained |
 | [E002](../docs/research.md#tentative-experiment-direction) | Kinematic Transformer reference and temporal-context comparison | Tentative | Not run |
 | [E003](../docs/research.md#tentative-experiment-direction) | RGB/local 3D evidence on the Transformer | Tentative | Not run |

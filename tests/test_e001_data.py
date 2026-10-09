@@ -184,6 +184,10 @@ class E001DataTest(unittest.TestCase):
         epoch1 = list(first); epoch2 = list(first)
         self.check("whole-track batch 64 with incomplete final batch", [64, 1], [len(b["lengths"]) for b in epoch1])
         self.check("shuffle reproducible at restart", [b["locators"] for b in epoch1], [b["locators"] for b in restart])
+        seeded = list(track_batches(samples, training=True, seed=1))
+        self.assertNotEqual(epoch1[0]["locators"], seeded[0]["locators"])
+        self.check("nonzero shuffle seed reproducible", [b["locators"] for b in seeded],
+                   [b["locators"] for b in track_batches(samples, training=True, seed=1)])
         self.assertNotEqual(epoch1[0]["locators"], epoch2[0]["locators"])
         self.check("every eligible whole track once", sorted(str(i) for i in range(65)), sorted(n for b in epoch1 for n in b["locators"]))
 

@@ -1,6 +1,6 @@
 # E001 — Kinematic transfer
 
-Status: **User running comparisons** (reported 2026-10-08); analysis pending until completion. Created 2026-10-05 from the 2026-10-02 proposal. Protocol agreed 2026-10-06; input/model comparison revised 2026-10-08. Data preparation/setup, ROAD association acceptance, both models and training/evaluation are implemented with acceptance checks below. Historical acceptance records below retain their then-current execution status. The separate [E001b bbox extension](../E001b-2d-bbox-contribution/README.md) preserves this protocol/data and has no training results.
+Status: **32 comparisons complete; brief single-seed budget/metric review recorded** (2026-10-09); multiple-seed repetition proposed, not started. Created 2026-10-05 from the 2026-10-02 proposal. Protocol agreed 2026-10-06; input/model comparison revised 2026-10-08. Data preparation/setup, ROAD association acceptance, both models and training/evaluation are implemented with acceptance checks below. Historical acceptance records below retain their then-current execution status. The separate [E001b bbox extension](../E001b-2d-bbox-contribution/README.md) preserves this protocol/data and has no training results.
 
 ## Question and controls
 
@@ -133,7 +133,7 @@ Validation at implementation revision `a76b19959c0d22bb70494e584799f0ce32448e47`
 
 ## Batch construction
 
-**Random batches with dynamic padding**, batch size **64 tracks**, for A and B. Shuffle eligible whole tracks each epoch with training seed 0, retain the incomplete final batch, and pad only to that batch's longest sequence. No length bucketing, cropping, fixed context limit or concatenation of independent tracks. Internal missing-input slots remain sequence positions.
+**Random batches with dynamic padding**, batch size **64 tracks**, for A and B. Shuffle eligible whole tracks each epoch with the requested training seed (original default 0), retain the incomplete final batch, and pad only to that batch's longest sequence. No length bucketing, cropping, fixed context limit or concatenation of independent tracks. Internal missing-input slots remain sequence positions.
 
 Exclude padding from recurrent processing as well as loss: loss masking alone would let backward recurrence consume padded timesteps. Length-based recurrent packing is compatible with this rule; packing independent tracks into one context is not. Prediction is argmax over four states at every non-padding slot, including missing-input slots; missing-GT slots are unscored. Measure padding/exposure before reconsidering batching or a later model.
 
@@ -146,11 +146,11 @@ For each track, average cross-entropy over its accepted GT frames; average those
 | Optimizer | AdamW, learning rate 0.001, weight decay 0.0001, betas (0.9, 0.999), epsilon 1e-8 |
 | Schedule / precision | Constant learning rate; float32 |
 | Gradient clipping | Global gradient norm 1.0 |
-| Budget | At most 30 epochs; stop after 5 consecutive epochs without an improvement in the primary source-validation metric |
+| Budget | Original/default: 30 epochs / patience 5. [Accepted repetition](#multiple-seed-launcher-2026-10-09): 75 / 8; the same strict source-validation improvement rule |
 | Checkpoint selection | Highest source-validation track-weighted macro-F1; ties use lower track-averaged validation CE, then earlier epoch |
-| Training seed | **0 only**, shared across the 16 planned training runs |
+| Training seeds | Original rounds: **0**. Accepted repetition: **0–4**, each shared across all 16 combinations |
 
-Patience resets only for a strict primary-metric improvement; tie-breaking can change the selected checkpoint without resetting patience. Seed Python, NumPy, PyTorch and the existing loader generator with 0 before each run. Keep the same shuffled loader across epochs, with zero workers. Enable standard deterministic algorithms (unsupported operations fail), `CUBLAS_WORKSPACE_CONFIG=:4096:8` and cuDNN determinism; disable cuDNN benchmarking and both matmul/cuDNN TF32. Record versions/settings; identical outcomes across platforms are not promised. A run still improving at epoch 30 is budget-limited; do not silently extend it. Retain failed attempts, selected epoch and stopping reason. No seed sweep, repeated runs, bootstrap or confidence intervals are planned; training variability is not estimated.
+Patience resets only for a strict primary-metric improvement; tie-breaking can change the selected checkpoint without resetting patience. Seed Python, NumPy, PyTorch and every loader generator with the requested training seed before each run. Keep the same shuffled loader across epochs, with zero workers. Enable standard deterministic algorithms (unsupported operations fail), `CUBLAS_WORKSPACE_CONFIG=:4096:8` and cuDNN determinism; disable cuDNN benchmarking and both matmul/cuDNN TF32. Record versions/settings; identical outcomes across platforms are not promised. A run reaching its configured ceiling is budget-limited; retain its actual budget. Retain failed attempts, selected epoch and stopping reason. The accepted repetition estimates training-seed variability on frozen splits. No split search, bootstrap or confidence intervals are included.
 
 ## Splits and access
 
@@ -306,7 +306,7 @@ Each row below represents four independent runs: A/B × ROAD-Waymo/LOKI source, 
 
 ## W&B workspace and logging
 
-New run names are `E001-<source>-<configuration>-<MLP|BiLSTM>-seed0-<UTC YYYYMMDD-HHMMSS>`, for example `E001-loki-K-MLP-seed0-20261008-170000`. Restricted smoke names add `-smoke`; naming is independent of the output directory.
+New run names are `E001-<source>-<configuration>-<MLP|BiLSTM>-seed<N>-<UTC YYYYMMDD-HHMMSS>`, for example `E001-loki-K-MLP-seed0-20261008-170000`. Restricted smoke names add `-smoke`; naming is independent of the output directory.
 
 Use the [manual E001 view](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling?nw=71j6lc3jv4g): three main native curve panels, followed by collapsed final-evaluation and ten-axis observation-strata sections for each dataset. Automatic panel generation is disabled in that saved view. It is separate from the existing personal automatic view; prior runs and their evidence are preserved. The official workspace client was used through a temporary `wandb-workspaces==0.4.13` uv overlay, without a project dependency. Layout/source/readback evidence: ignored `outputs/experiments/E001/wandb-workspace/`.
 
@@ -325,10 +325,41 @@ Fresh restricted [logging smoke](https://wandb.ai/yammo-unipd/pedestrian-behavio
 
 The saved workspace was read back through the official API: main curve axes/keys, manual panel generation, section counts and collapsed final sections match the intended layout. Browser rendering was not checked because no browser surface was available.
 
+## Brief comparison and budget review (2026-10-09)
+
+The user completed **16 configurations twice**: the agreed **30 epochs / patience 5**, then a local edit to **50 / 8**. All **32 attempts / 64 test evaluation cells** completed at revision `6424f81877eb56b41a7464d7ce0bed8159b7a77b`, with **seed 0**. Saved diffs change only those two settings. The longer round is a documented protocol deviation, not an additional seed replicate; original settings above remain the predeclared protocol.
+
+Read-only review retrieved configuration, provenance, source diff, history and aggregate metrics from `aalto`. Local ignored evidence: `outputs/experiments/E001/analysis/20261009-budget-review/{runs.json,metrics.csv,verification.json}`. Remote originals: `outputs/experiments/E001/runs/20261008-{135800,145704}-<source>-<configuration>-<variant>/`; W&B URLs are retained in CSV/provenance. All 16 paired histories match exactly over their overlap except timing/stopping fields; dataset/setup/policy references and source statistics match. Saved selected checkpoint epochs agree with validation maxima. No inference, checkpoint reconstruction, cloud readback or full stratum analysis was performed.
+
+Every 30/5 attempt stopped on **patience**, before the cap. At 50/8, **15 stopped on patience**; ROAD RAW BiLSTM reached the cap, selecting epoch **45**. ROAD K BiLSTM validation macro-F1 increased **45.63 → 55.24%**, within-test **44.37 → 54.40%**; ROAD K+T validation **45.51 → 54.08%**, within-test **44.53 → 53.02%**. Six of eight MLP selections were unchanged. Patience 5 cut off useful improvement for some configurations; seed variability remains unknown.
+
+The following are **track-weighted four-class test macro-F1 (%)**, for 50/8 BiLSTMs selected only on source validation:
+
+| Train → evaluate | K+T+R | RAW | RAW minus K+T+R (percentage points) |
+|---|---:|---:|---:|
+| ROAD → ROAD | 51.32 | 53.62 | +2.30 |
+| ROAD → LOKI | 47.73 | 48.47 | +0.74 |
+| LOKI → LOKI | 63.74 | 61.45 | −2.30 |
+| LOKI → ROAD | 42.62 | 45.39 | +2.77 |
+
+RAW is not a consistent winner. LOKI RAW has higher validation F1 (**65.09 versus 63.96%**) but lower within-test F1. ROAD K alone reaches **54.40%** within ROAD, above both. ROAD within-test WAITING_TO_CROSS F1 is **15.88%** for K+T+R, **31.10%** for RAW and **34.00%** for K, indicating a class-specific difference. Several BiLSTMs show decreasing training CE with worsening validation CE after selection. RAW retains pedestrian position relative to the initial ego origin and separate ego/pedestrian state, so its advantage is not inherently an implementation error.
+
+**Proposal at review time; subsequently accepted below:** keep patience **8**, raise the common ceiling to **75** epochs to accommodate late validation improvements, and repeat fixed training seeds **0–4** (three seeds as a smaller exploratory alternative). Retain splits, normalization, models, optimizer and source-only selection; report all seeds and paired differences rather than selecting the best seed. Existing attempts keep their actual budget provenance. The ceiling is a practical proposal, not a demonstrated optimum. Budget reasoning uses source-validation/stopping evidence; test/transfer metrics have now been inspected and this review must be disclosed in later development. Do not use target scores to choose a feature winner or checkpoint. [Prior sequence-tagging research](https://aclanthology.org/D17-1035/) supports comparing repeated executions; its variance magnitude is not an estimate for E001.
+
+## Multiple-seed launcher (2026-10-09)
+
+The user accepted the next repetition round and requested a parallel launcher. Freeze **75 maximum epochs, patience 8, seeds 0–4**, with all 16 source/feature/model combinations per seed: **80 training attempts / 160 evaluation cells**. These are fresh attempts, including seed 0; retain both earlier rounds with their actual budgets. Training randomness changes; group splits, source-training normalization, populations, targets, models, batch size, optimizer, deterministic algorithms and source-validation selection remain unchanged. Prior test/transfer inspection is disclosed in the review above; no feature winner is selected from those scores.
+
+[Launcher](../../src/pedestrian_behavior/experiments/e001_sweep.py) and [commands](../../README.md#e001-multiple-seeds): default two independent subprocesses on one GPU, two CPU compute threads per process, zero loader workers. CLI `--jobs` changes concurrency; `--seeds` allows an explicit subset of the fixed matrix for exploratory/manual attempts. The launcher records its matrix/concurrency/budget and per-attempt commands/status in `sweep.json`, separate logs and fresh attempt directories. The seed reaches Python/NumPy/PyTorch, every loader generator, effective config, checkpoint evidence, provenance and W&B names; it never changes the frozen split seed. Thread settings are recorded in provenance and controlled using [PyTorch's documented environment variables](https://docs.pytorch.org/docs/stable/threading_environment_variables.html). The single-attempt command retains its original default 0/30/5; the launcher passes 75/8 explicitly.
+
+Failure/interrupt stops the queue and interrupts other active children; available evidence remains. No retry, resume, automatic restart, adaptive resource scheduler or distributed training. Runtime/peak memory under concurrency must be interpreted alongside the recorded job count; throughput improvements are not established by the small numerical check. The original `aalto` checkout and user's 50/8 working edit remain intact; use the isolated `pedestrian-behavior-labeling-e001-seeds` Git worktree, with its own uv environment and an ignored link to the existing frozen E001 output root. Comparison execution is left to the user.
+
+Acceptance: seed-dependent/reproducible batch order, nonzero-seed config/provenance/W&B naming, exact 80-attempt matrix and explicit budget arguments, actual child-process overlap at jobs 1/2, retained logs, fresh-directory rejection and failure queue containment. A CUDA-only check compares two synthetic BiLSTM optimizer updates for seeds 0/1 under serial versus two-process execution, requiring identical final state hashes for each seed and different hashes between seeds. No held-out inference, W&B comparison run or full repetition is part of these checks. Validation logs are saved under ignored `outputs/experiments/E001/multiple-seeds/`.
+
 ## Conclusions, limitations and next step
 
-No measured conclusion. Poor within-dataset performance can reflect limited evidence, annotation ambiguity or data/model/protocol failure, without proving sensor insufficiency. A B gain supports learned temporal context under these features; strong within-dataset results with poor transfer suggest mismatch. Geography, hardware, scene structure, semantics, class frequencies and annotation selection all change, so directional scores cannot isolate selection policy or establish causality/novelty. Study difficult conditions and Stopped/Waiting errors even after strong aggregate scores.
+The review above is single-seed evidence, not a stable feature ranking. Poor within-dataset performance can reflect limited evidence, annotation ambiguity or data/model/protocol failure, without proving sensor insufficiency. A B gain supports learned temporal context under these features; strong within-dataset results with poor transfer suggest mismatch. Geography, hardware, scene structure, semantics, class frequencies and annotation selection all change, so directional scores cannot isolate selection policy or establish causality/novelty. Study difficult conditions and Stopped/Waiting errors even after strong aggregate scores.
 
 Examine whether added trajectory and interaction information helps Stopped/Waiting and Moving/Crossing, and whether gains survive transfer. RAW is a diagnostic control, not an automatic final representation: structured trajectory variants supply explicit track-start displacement that framewise RAW cannot directly reconstruct. Positive results do not establish safe use by a larger Transformer; negative results do not prove a feature inherently useless. Use observed errors to guide later temporal/multimodal comparisons, without permanently selecting features from this baseline alone.
 
-Next: arrange a separate backup, then run the 16 comparisons in a later increment. The frozen LOKI collection/setup are now available on `aalto` with checksum verification. Model padding invariance is verified; ROAD association acceptance and clip/scenario independence need no further approval. Inspect failures before adding modalities, sources or architecture. All broader methods and ontology/head choices remain provisional.
+Next: run the accepted repetition launcher and arrange a separate backup for valuable outputs. No new runs were launched during review. The frozen LOKI collection/setup are now available on `aalto` with checksum verification. Model padding invariance is verified; ROAD association acceptance and clip/scenario independence need no further approval. Inspect failures before adding modalities, sources or architecture. All broader methods and ontology/head choices remain provisional.

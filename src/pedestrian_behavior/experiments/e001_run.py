@@ -1,4 +1,4 @@
-"""One fixed E001 attempt: train → source selection → two held-out evaluations."""
+"""One E001 attempt: train → source selection → two held-out evaluations."""
 
 import argparse
 from datetime import datetime, timezone
@@ -147,7 +147,10 @@ def log_final(run, evaluations, plot_paths, provenance):
     run.log(payload)
 
 
-def run_attempt(source, configuration, variant, output, device, smoke=False):
+def run_attempt(source, configuration, variant, output, device, smoke=False, seed=None, epochs=None, patience=None):
+    settings = SETTINGS | {k: v for k, v in {"seed": seed, "epochs": epochs, "patience": patience}.items() if v is not None}
+    if not 0 <= settings["seed"] < 2**32 or settings["epochs"] < 1 or settings["patience"] < 1:
+        raise ValueError("Seed must be in [0, 2**32); epochs and patience must be positive")
     output, device = Path(output), torch.device(device)
     output.mkdir(parents=True, exist_ok=False)
     started = time.monotonic()
@@ -160,7 +163,7 @@ def run_attempt(source, configuration, variant, output, device, smoke=False):
             raise ValueError("CUDA requested but unavailable")
         if smoke and (source != "road-waymo" or variant != "B" or device.type != "cuda"):
             raise ValueError("Smoke requires ROAD BiLSTM on CUDA")
-        deterministic = seed_run(SETTINGS["seed"])
+        deterministic = seed_run(settings["seed"])
         if device.type == "cuda":
             torch.cuda.reset_peak_memory_stats(device)
         base = E001_ROOT
@@ -169,7 +172,7 @@ def run_attempt(source, configuration, variant, output, device, smoke=False):
         records = {d: json.loads(p.read_text()) for d, p in setups.items()}
         statistics = records[source]["normalization"][configuration]
         config = {"experiment": "E001", "source": source, "configuration": configuration, "variant": variant,
-                  "model": MODEL_SETTINGS, "classes": CLASSES, "settings": SETTINGS, "determinism": deterministic,
+                  "model": MODEL_SETTINGS, "classes": CLASSES, "settings": settings, "determinism": deterministic,
                   "device": str(device), "kind": status["kind"], "smoke_limits": {"epochs": 1, "training_batches": 2, "validation_batches": 1, "held_out_tests": False} if smoke else None}
         write_json(output/"config.json", config)
         diff = subprocess.check_output(["git", "diff", "HEAD"])
@@ -180,7 +183,8 @@ def run_attempt(source, configuration, variant, output, device, smoke=False):
             dependency_lock_sha256=checksum("uv.lock"), pyproject_sha256=checksum("pyproject.toml"),
             cuda_build=torch.version.cuda, cudnn=torch.backends.cudnn.version(), host=platform.node(),
             hardware={"platform": platform.platform(), "cpu": platform.processor() or "unknown", "gpu": torch.cuda.get_device_name(device) if device.type == "cuda" else None},
-            seed=0, determinism=deterministic, source_statistics=statistics,
+            seed=settings["seed"], determinism=deterministic, source_statistics=statistics,
+            cpu_threads={"torch": torch.get_num_threads(), "environment": {k: os.environ.get(k) for k in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS")}},
             datasets={d: {"setup_path": str(setups[d]), "setup_sha256": checksum(setups[d]),
                          "collection_path": str(collections[d]), "collection_sha256": checksum(collections[d]/"manifest.json"),
                          "policy_sha256": hashlib.sha256(json.dumps(records[d]["policy"], sort_keys=True).encode()).hexdigest(),
@@ -190,8 +194,8 @@ def run_attempt(source, configuration, variant, output, device, smoke=False):
         write_json(output/"provenance.json", provenance)
         def dataset(d, split):
             return dataset_from_setup(collections[d], setups[d], split, configuration, statistics)
-        training = track_batches(dataset(source, "training"), training=True)
-        validation = track_batches(dataset(source, "validation"))
+        training = track_batches(dataset(source, "training"), training=True, seed=settings["seed"])
+        validation = track_batches(dataset(source, "validation"), seed=settings["seed"])
         # The same training loader survives every epoch; smoke only restricts iteration.
         class SmokeBatches:
             def __iter__(self):
@@ -204,7 +208,7 @@ def run_attempt(source, configuration, variant, output, device, smoke=False):
             return tracks
         model_name = {"A": "MLP", "B": "BiLSTM"}[variant]
         attempt_time = datetime.fromisoformat(provenance["started_utc"]).strftime("%Y%m%d-%H%M%S")
-        run_name = f"E001-{source}-{configuration}-{model_name}-seed{SETTINGS['seed']}-{attempt_time}"
+        run_name = f"E001-{source}-{configuration}-{model_name}-seed{settings['seed']}-{attempt_time}"
         if smoke:
             run_name += "-smoke"
         run = wandb.init(entity="yammo-unipd", project="pedestrian-behaviour-labeling", name=run_name,
@@ -226,15 +230,15 @@ def run_attempt(source, configuration, variant, output, device, smoke=False):
                      "val/loss": row["validation_ce"], "val/macro_f1": row["validation_f1"]})
         fitted = fit(model, SmokeBatches() if smoke else training,
                      lambda m: prediction_metrics(validation_predictions(m), len(CLASSES)),
-                     torch.optim.AdamW(model.parameters(), **SETTINGS["optimizer"]), device, output,
+                     torch.optim.AdamW(model.parameters(), **settings["optimizer"]), device, output,
                      {"config": config, "normalization": statistics, "provenance_file": "provenance.json"}, on_epoch,
-                     epochs=1 if smoke else SETTINGS["epochs"], patience=SETTINGS["patience"], clip_norm=SETTINGS["clip_norm"], on_step=on_step)
+                     epochs=1 if smoke else settings["epochs"], patience=settings["patience"], clip_norm=settings["clip_norm"], on_step=on_step)
         selected = reload_checkpoint(output/"best.pt", model, device)
         evaluations = {}
         for d in ([source] if smoke else list(setups)):
             destination = output/(d+"-validation-smoke" if smoke else d+"-test")
             destination.mkdir()
-            tracks = validation_predictions(model) if smoke else predict(model, track_batches(dataset(d, "test")), device)
+            tracks = validation_predictions(model) if smoke else predict(model, track_batches(dataset(d, "test"), seed=settings["seed"]), device)
             for t in tracks:
                 metadata, arrays = load_track(t["archive"])
                 identity = json.loads(t["locator"])
@@ -285,5 +289,8 @@ def main():
     parser.add_argument("--variant", choices=("A", "B"), required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--device", choices=("cpu", "cuda"), required=True)
+    parser.add_argument("--seed", type=int, default=SETTINGS["seed"])
+    parser.add_argument("--epochs", type=int, default=SETTINGS["epochs"])
+    parser.add_argument("--patience", type=int, default=SETTINGS["patience"])
     parser.add_argument("--smoke", action="store_true", help="Separate ROAD B CUDA smoke: 1 epoch, 2 training/1 validation batches, no tests")
     run_attempt(**vars(parser.parse_args()))

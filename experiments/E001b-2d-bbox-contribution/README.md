@@ -24,7 +24,7 @@ LOKI boxes use native `left, top, width, height` and dimensions from each select
 
 `bbox_valid` requires finite coordinates and positive width/height. Nonfinite/degenerate boxes are masked and reported; an invalid native box is not replaced by a ROAD box. ROAD presence remains provenance, not a geometry input. Preserve `loki_2d`, `road_2d` and `waymo_2d` annotation-presence flags separately: presence alone is not verified numeric usability, visibility, occlusion or a behavior target.
 
-`bbox_velocity_valid` requires a valid box at the current slot and an immediate valid neighbor from the **same annotation source**. Never bridge missing slots or source changes; never interpolate. Two neighbors use E001's unequal-time weighting, one neighbor uses its secant and a singleton has no velocity. This short temporal preprocessing is available to both architectures and to both new configurations.
+`bbox_velocity_valid` requires a valid box at the current slot and an immediate valid neighbor from the **same annotation source**. Never bridge missing slots or source changes; never interpolate. Two neighbors use E001's unequal-time weighting, one neighbor uses its secant and a singleton has no velocity. Both new configurations receive the same short temporal preprocessing and validity flags.
 
 Standardize each continuous column using valid **source-training context**, including unlabeled context, only. Reuse the existing population-standard-deviation/guard rule; missing numbers become zero after standardization. Do not standardize flags. B and C receive exactly the same flags. Source baseline and bbox statistics must both be supplied explicitly for opposite-dataset evaluation. Image-size normalization does not compensate for focal length or camera mounting differences; intrinsics are not required.
 
@@ -93,7 +93,13 @@ Evidence: ignored `native-box-verification.json` and `box-review/case-{1,2,3}.pn
 
 ### Native-only cache acceptance (2026-10-09)
 
-Rebuild both dataset caches under `bbox-native/` with the accepted policy. LOKI geometry is unchanged; ROAD uses source code 3 for every selected box and never source code 2. Box velocities and source-training statistics are recomputed, since former ROAD/Waymo source switches no longer interrupt native velocities. Checks cover missing/invalid Waymo boxes with ROAD GT retained, unlabeled native context, differing source geometry, and rejection of old-policy manifests. E001b training remains a later increment.
+At revision `a3a67c20cdc1ce40a36dc49266fc9ba29f3fb8ac`, revised preparation uses `bbox-native/` with the accepted policy. LOKI geometry is unchanged; ROAD uses source code 3 for every selected box and never source code 2. Box velocities and source-training statistics are recomputed, since former ROAD/Waymo source switches no longer interrupt native velocities. Checks cover missing/invalid Waymo boxes with ROAD GT retained, unlabeled native context, differing source geometry, and rejection of old-policy manifests. E001b training remains a later increment.
+
+**LOKI is complete locally and on `aalto`; ROAD-Waymo rebuild is pending native-data access.** LOKI preparation took 65.0 s locally. All 12,364 archives are byte-identical to the prototype and verified after transfer; population, class/box coverage and source-training statistics are unchanged. Independent reconstruction checked 182,202 bbox derivatives (maximum error 2.22e−16), training moments and two finite, unscored 64-track availability/geometry batches. All 13,368 protected E001 collection/setup hashes match.
+
+The full local CPU suite passed **49 tests / three CUDA skips**; the isolated `aalto` cu118 environment passed all **six E001b tests**, without CUDA allocation. GPU tests were not rerun alongside active training. Both original and active seed-sweep checkout revisions, source/script/dependency-file hashes and working diffs match before/after. Evidence: ignored `native-only/acceptance-cpu.log`, `verification-local.json`, `verify-local.py`, `verification-loki-aalto.json` and `active-training-{before,after,verification}.json`; remote acceptance log is `native-only/acceptance-aalto.log`.
+
+ROAD preparation stopped before any scene/track was saved because `/media/user20/F47C60057C5FC152` is unmounted; mounting its known partition requires interactive OS authentication. All 9,576 protected ROAD E001 files matched afterward. The failed attempt is preserved on `aalto` under `native-only/failed-road-unmounted/` and `.log`; the final `bbox-native/road-waymo/` path remains absent. No substituted/reconstructed geometry is used. Mount native data, then run fresh preparation and independent numerical/coverage checks before accepting ROAD inputs.
 
 ## Interpretation and current evidence
 

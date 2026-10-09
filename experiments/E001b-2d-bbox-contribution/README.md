@@ -1,6 +1,6 @@
 # E001b — 2D bounding-box contribution
 
-Diagnostic extension of [E001](../E001-kinematic-transfer/README.md), agreed 2026-10-08 while the user runs E001. **Native Waymo FRONT geometry only, without ROAD fallback, accepted on 2026-10-09** after visual review. The original ROAD-preferred prototype remains historical evidence. No E001b training or test scores. Preparation is additive: the frozen E001 collections, setup, populations, splits and kinematics remain unchanged.
+Diagnostic extension of [E001](../E001-kinematic-transfer/README.md), agreed 2026-10-08 while the user runs E001. **Native Waymo FRONT geometry only, without ROAD fallback, accepted on 2026-10-09** after visual review. The original ROAD-preferred prototype remains historical evidence. The shared runner and five-seed launcher are implemented; full comparison runs have not started. Preparation is additive: the frozen E001 collections, setup, populations, splits and kinematics remain unchanged.
 
 ## Question and frozen comparison
 
@@ -36,7 +36,7 @@ Current ignored output: `outputs/experiments/E001b/bbox-native/<dataset>/`; the 
 
 `manifest.json` records preparation status/failures, policy, native/source and original collection/setup checksums, per-track bbox/original checksums, source provenance, code/environment, times, source-training statistics and split-level coverage. Creation requires a fresh output directory and retains failures. Original E001 manifest/audit/setup and **all candidate archives**, including excluded candidates, are checksummed before/after preparation. Loading rejects stale, corrupted, incomplete or misaligned extensions and any population change.
 
-`dataset_from_extension()` retains the existing sample/collation interface and appends 2 or 8 float32 columns to exact K+T+R inputs. Runtime uses saved caches; it does not access native data or fit statistics. E001's existing feature, loader and runner code is unchanged. The E001b training command and final plotting/logging wiring are a later increment; this command only prepares evidence.
+`dataset_from_extension()` retains the existing sample/collation interface and appends 2 or 8 float32 columns to exact K+T+R inputs. Runtime uses saved caches; it does not access native data or fit statistics. E001's existing feature/loading/model/training semantics are unchanged; its attempt and scheduler operations are now shared with E001b. The preparation command still only prepares evidence. [Training commands](../../README.md#e001b-training-and-evaluation) use verified saved caches.
 
 ## Execution gate and acceptance
 
@@ -93,7 +93,7 @@ Evidence: ignored `native-box-verification.json` and `box-review/case-{1,2,3}.pn
 
 ### Native-only cache acceptance (2026-10-09)
 
-At revision `a3a67c20cdc1ce40a36dc49266fc9ba29f3fb8ac`, revised preparation uses `bbox-native/` with the accepted policy. LOKI geometry is unchanged; ROAD uses source code 3 for every selected box and never source code 2. Box velocities and source-training statistics are recomputed, since former ROAD/Waymo source switches no longer interrupt native velocities. Checks cover missing/invalid Waymo boxes with ROAD GT retained, unlabeled native context, differing source geometry, and rejection of old-policy manifests. E001b training remains a later increment.
+At revision `a3a67c20cdc1ce40a36dc49266fc9ba29f3fb8ac`, revised preparation uses `bbox-native/` with the accepted policy. LOKI geometry is unchanged; ROAD uses source code 3 for every selected box and never source code 2. Box velocities and source-training statistics are recomputed, since former ROAD/Waymo source switches no longer interrupt native velocities. Checks cover missing/invalid Waymo boxes with ROAD GT retained, unlabeled native context, differing source geometry, and rejection of old-policy manifests. The initial increment deferred training; the later shared-runner increment is recorded below.
 
 **Both native-only caches are complete and verified locally and on `aalto`.** LOKI preparation took 65.0 s locally. All 12,364 archives are byte-identical to the prototype and verified after transfer; population, class/box coverage and source-training statistics are unchanged. Independent reconstruction checked 182,202 bbox derivatives (maximum error 2.22e−16), training moments and two finite, unscored 64-track availability/geometry batches. All 13,368 protected E001 collection/setup hashes match.
 
@@ -107,8 +107,18 @@ Independent native Parquet comparison checked every **507,144** ROAD context slo
 
 The final path-override revision passed **50 CPU tests / three CUDA skips**, **seven E001b tests** in the remote cu118 environment, and local links/`git diff --check`. Both E001 checkout revisions, source/script/dependency-file hashes and working diffs matched before/after ROAD preparation. Evidence on both machines: `native-only/acceptance-root-override-{cpu,aalto}.log`, `preparation-road-native-aalto.log`, updated `verification-local.json`, `verification-native-road-aalto.json` and `road-training-{before,after,verification}.json`. The local one-off `native-only/verify-local.py` retains the independent normalization/derivative/transfer-batch reconstruction. GPU tests were not repeated while E001 training was active.
 
+### Shared runner and launcher (2026-10-09)
+
+Implemented through shared `experiments/run.py` and `sweep.py`, with thin E001/E001b wrappers. E001b fixes BiLSTM, uses 14/20 inputs and retains source-only baseline/bbox statistics in config/provenance/checkpoints; both dataset/cache manifests and policies are referenced by hashes. Old-policy/stale caches fail validation before external logging. Run names are `E001b-<source>-<availability|geometry>-BiLSTM-seed<N>-<timestamp>`, with `-smoke` for restricted validation-only checks. Output is ignored `outputs/experiments/E001b/runs/`; W&B stays in `yammo-unipd/pedestrian-behaviour-labeling` with the existing tidy namespaces and no uploaded model/prediction artifacts.
+
+**Diagnostics frozen before E001b test results:** preserve all ten E001 axes, and add `frame-bbox` and `bbox-velocity` (`missing`, `valid`) plus `track-bbox` (`never`, `partial`, `complete`). They use numerically verified native boxes over full resampled context; presence flags remain separate provenance. Save their per-slot membership, validity/source arrays and bbox archive/hash references with unpadded predictions. Shared slice logic recomputes equal-track weights, reports supported classes/denominators and leaves empty slices unscored. No GT/condition metadata enters model inputs.
+
+Acceptance uses the combined [expected/actual report](../../scripts/check-e001-data.py), [E001b runner tests](../../tests/test_e001b_training.py) and shared scheduling checks. Local CPU suite passed **56 tests / four CUDA skips**. Three captured pre-refactor E001 attempts (K MLP, K BiLSTM and K+T+R BiLSTM, source LOKI, seed 3, two epochs) matched exactly after extraction: best/last model tensors, selected epochs, source normalization, changing-weight history except runtime, saved prediction arrays/conditions and both test metrics. Synthetic E001b checks cover both sources and inputs, checkpoint prediction equality, source statistics for transfer, saved-metric regeneration, numeric-box/empty strata, 20-run matrix/bounded scheduling, and cache/W&B failures with retained local evidence. Evidence lives under ignored `outputs/experiments/E001b/training-acceptance/`; CUDA and restricted real GPU smoke verification follow separately.
+
+Full comparisons remain user-controlled: **20 additional training attempts / 40 test cells**, 75 epochs, patience 8, seeds 0–4. Reuse the 10 matching K+T+R BiLSTM source/seed baseline attempts only when shared settings/populations/statistics agree. Prior E001 test inspection and native source review remain disclosed; this increment does not select settings from E001b held-out results.
+
 ## Interpretation and current evidence
 
 Availability above baseline may reflect annotation-selection shortcuts. Geometry above availability supports an additional geometric contribution under this observation/model contract. Within-domain improvement with transfer degradation suggests camera/annotation/dataset dependence. Little geometry gain does not establish that RGB appearance or scene context is useless. Missing 2D annotations must not be interpreted as evidence of a particular behavior.
 
-The native-only source policy is accepted; current cache verification is recorded above. Independent visual accuracy of every native box remains unknown. No E001b training, model metrics, W&B runs or comparison results. Checkpoints/predictions for later valuable runs still need separate backup; external storage is TBD.
+The native-only source policy is accepted; current cache verification is recorded above. Independent visual accuracy of every native box remains unknown. No full E001b comparison runs or held-out test results. Synthetic acceptance and clearly labeled source-validation smokes are implementation checks. Checkpoints/predictions for later valuable runs still need separate backup; external storage is TBD.

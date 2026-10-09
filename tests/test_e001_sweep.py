@@ -10,6 +10,7 @@ from unittest.mock import patch
 import torch
 
 from pedestrian_behavior.experiments.e001_sweep import attempts, attempt_command, run_sweep
+from pedestrian_behavior.experiments.sweep import run_sweep as execute_sweep
 
 
 CHILD = """
@@ -106,6 +107,14 @@ class E001SweepTest(unittest.TestCase):
             for jobs, seeds in ((0, [0]), (2, []), (2, [0, 0]), (2, [-1]), (2, [2**32])):
                 with self.assertRaises(ValueError):
                     run_sweep(output, jobs=jobs, seeds=seeds)
+                self.assertFalse(output.exists())
+
+    def test_shared_scheduler_rejects_duplicate_or_escaping_names(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp)/'invalid-plan'
+            for names in ([], ['a', 'a'], [''], ['..'], ['a/b']):
+                with self.assertRaises(ValueError):
+                    execute_sweep(output, [{'name': name} for name in names], lambda *args: [])
                 self.assertFalse(output.exists())
 
     @unittest.skipUnless(torch.cuda.is_available(), 'CUDA unavailable')

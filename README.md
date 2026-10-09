@@ -210,9 +210,9 @@ cd /home/user20/projects/pedestrian-behavior-labeling-e001b
 
 For LOKI native reads at this mount, pass `/run/media/user20/F47C60057C5FC152/projects/loki_data` as `--native-input`. Existing saved LOKI caches need no regeneration for a mount-path change. To restore an unmounted partition, run `udisksctl mount --block-device /dev/nvme0n1p3 --options ro` in a terminal on the laptop and use the mount location it reports. An `AlreadyMounted` response reports the current location; it does not mean the stored `/media/...` path exists.
 
-For saved-cache sample construction, call `pedestrian_behavior.experiments.e001b.dataset_from_extension(collection, setup_path, extension, split, configuration, baseline_statistics, bbox_statistics)`, with configuration `availability` or `geometry`. Both statistics come from the **training source**, including for opposite-dataset evaluation. Read the extension's `baseline_normalization` and `normalization` fields. Samples use unchanged E001 targets/references, with 14 or 20 input columns. The E001b training command is deferred.
+For saved-cache sample construction, call `pedestrian_behavior.experiments.e001b.dataset_from_extension(collection, setup_path, extension, split, configuration, baseline_statistics, bbox_statistics)`, with configuration `availability` or `geometry`. Both statistics come from the **training source**, including for opposite-dataset evaluation. Read the extension's `baseline_normalization` and `normalization` fields. Samples use unchanged E001 targets/references, with 14 or 20 input columns. The [E001b training commands](#e001b-training-and-evaluation) reuse the shared attempt runner.
 
-Use `outputs/experiments/E001b/bbox-native/{loki,road-waymo}/` for the accepted native-only policy: Waymo FRONT boxes without ROAD fallback, and native LOKI boxes. The original ROAD-preferred `bbox/` caches remain historical evidence and fail the current loader policy check. [Source decision and verification](experiments/E001b-2d-bbox-contribution/README.md#native-only-cache-acceptance-2026-10-09) own acceptance; both native-only caches are complete on both machines. ROAD preparation uses the verified `/run/media/...` mount override. The training runner remains deferred.
+Use `outputs/experiments/E001b/bbox-native/{loki,road-waymo}/` for the accepted native-only policy: Waymo FRONT boxes without ROAD fallback, and native LOKI boxes. The original ROAD-preferred `bbox/` caches remain historical evidence and fail the current loader policy check. [Source decision and verification](experiments/E001b-2d-bbox-contribution/README.md#native-only-cache-acceptance-2026-10-09) own acceptance; both native-only caches are complete on both machines. ROAD preparation uses the verified `/run/media/...` mount override. Use the [E001b training commands](#e001b-training-and-evaluation) after acceptance checks.
 
 ## E001 models
 
@@ -292,3 +292,27 @@ strata = stratified_metrics(tracks, len(CLASSES), STRATA)
 ```
 
 `experiments.e001_run.plots()` can regenerate PNG/SVG exports from these results plus saved history/selection. Saved arrays retain every non-padding prediction, targets/GT masks, offsets, identities, archive references, source/grid times, condition memberships and individual 2D provenance flags.
+
+## E001b training and evaluation
+
+[E001b](experiments/E001b-2d-bbox-contribution/README.md) reuses E001 training/evaluation/reporting through thin wrappers. The two inputs are `availability` (14 columns) and `geometry` (20); both use BiLSTM only. Defaults are seed 0, 75 epochs and patience 8; the sweep declares seeds 0–4, two sources and two inputs: **20 training runs / 40 evaluation cells**, reusing matching E001 K+T+R BiLSTM baselines. Numeric baseline/bbox normalization comes from the training source for both tests. Existing E001 commands/defaults stay unchanged.
+
+Use the isolated checkout `/home/user20/projects/pedestrian-behavior-labeling-e001b` on `aalto`. Its own ignored output links point to the original checkout's generated E001/E001b artifacts; the active E001 training checkout/environment is never updated. Code transfer is Git fetch/checkout with verified revision. From the isolated checkout, one fresh attempt:
+
+```bash
+/home/user20/.local/bin/uv run --locked --extra cu118 python scripts/train-e001b.py \
+  --source road-waymo --configuration geometry --device cuda --seed 0 \
+  --output outputs/experiments/E001b/runs/road-geometry-seed0
+```
+
+After E001 completes, run the full E001b matrix on the laptop:
+
+```bash
+cd /home/user20/projects/pedestrian-behavior-labeling-e001b
+tmux new -s e001b \
+  '/home/user20/.local/bin/uv run --locked --extra cu118 python scripts/train-e001b-seeds.py --jobs 2'
+```
+
+Detach with `Ctrl-b d`; reconnect with `tmux attach -t e001b`. The launcher creates a timestamped fresh directory, per-attempt logs and `sweep.json`; failures stop the queue and propagate. No resume or retries. `--output`, `--jobs`, `--seeds` and `--device` are explicit overrides. Single-attempt `--epochs`/`--patience` changes are recorded deviations; the sweep fixes 75/8. Commands read saved caches; native mounts are needed only to prepare them.
+
+A separate ROAD CUDA smoke uses `--smoke` with either configuration and a fresh output directory: one epoch, at most two training batches and one source-validation batch, with actual W&B logging and local checkpoint/plot checks. It never evaluates held-out tests or counts as a comparison result. Full checkpoints/predictions stay local. W&B keeps E001's step/epoch/evaluation namespaces, with additional verified-bbox strata and metadata in config. [Implementation and acceptance](experiments/E001b-2d-bbox-contribution/README.md#shared-runner-and-launcher-2026-10-09) record evidence.

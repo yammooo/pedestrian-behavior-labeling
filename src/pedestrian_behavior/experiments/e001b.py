@@ -234,16 +234,23 @@ class BboxTrackDataset(TrackDataset):
         return sample
 
 
-def dataset_from_extension(collection, setup_path, extension, split, configuration, baseline_statistics, bbox_statistics):
-    """Pass both frozen SOURCE statistics explicitly, including for transfer."""
-    if configuration not in POLICY["configurations"]:
-        raise ValueError("Unknown E001b configuration")
+def load_extension(collection, setup_path, extension):
+    """Validate cache policy and frozen collection/setup references before use."""
     extension = Path(extension)
     record = json.loads((extension/"manifest.json").read_text())
     if (record.get("schema_version") != 1 or record.get("experiment") != "E001b" or record.get("status") != "complete"
             or record["policy"] != json.loads(json.dumps(POLICY)) or checksum(setup_path) != record["setup"]["sha256"]
             or checksum(Path(collection)/"manifest.json") != record["collection"]["manifest_sha256"]):
         raise ValueError("Incomplete or mismatched bbox extension")
+    return record
+
+
+def dataset_from_extension(collection, setup_path, extension, split, configuration, baseline_statistics, bbox_statistics):
+    """Pass both frozen SOURCE statistics explicitly, including for transfer."""
+    if configuration not in POLICY["configurations"]:
+        raise ValueError("Unknown E001b configuration")
+    extension = Path(extension)
+    record = load_extension(collection, setup_path, extension)
     baseline = dataset_from_setup(collection, setup_path, split, "K+T+R", baseline_statistics)
     extension_entries = {e["locator"]: e for e in record["tracks"] if e["split"] == split}
     if set(extension_entries) != {e["locator"] for e in baseline.entries}:

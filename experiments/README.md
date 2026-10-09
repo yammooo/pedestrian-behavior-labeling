@@ -5,7 +5,7 @@ Shared evaluation safeguards and comparison index. No comparison results; [E001 
 | ID | Question | Status | Result |
 |---|---|---|---|
 | [E001](E001-kinematic-transfer/README.md) | Four kinematic feature sets × MLP/BiLSTM; within and bidirectional ROAD-Waymo/LOKI transfer | User running | Analysis pending |
-| [E001b](E001b-2d-bbox-contribution/README.md) | Exact K+T+R versus added bbox availability versus added geometry | Preparing separate bbox extension | Not trained |
+| [E001b](E001b-2d-bbox-contribution/README.md) | Exact K+T+R versus added bbox availability versus added geometry | Preparation verified; geometry-source gate open | Not trained |
 | [E002](../docs/research.md#tentative-experiment-direction) | Kinematic Transformer reference and temporal-context comparison | Tentative | Not run |
 | [E003](../docs/research.md#tentative-experiment-direction) | RGB/local 3D evidence on the Transformer | Tentative | Not run |
 | [E004](../docs/research.md#tentative-experiment-direction) | One complementary supervision source with an additional-data control | Tentative | Not run |

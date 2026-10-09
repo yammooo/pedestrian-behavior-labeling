@@ -198,6 +198,8 @@ On `aalto`, use an isolated Git worktree and its own uv environment while E001 r
 
 For saved-cache sample construction, call `pedestrian_behavior.experiments.e001b.dataset_from_extension(collection, setup_path, extension, split, configuration, baseline_statistics, bbox_statistics)`, with configuration `availability` or `geometry`. Both statistics come from the **training source**, including for opposite-dataset evaluation. Read the extension's `baseline_normalization` and `normalization` fields. Samples use unchanged E001 targets/references, with 14 or 20 input columns. The E001b training command is deferred.
 
+Both caches and numerical checks are complete. The [geometry-source review](experiments/E001b-2d-bbox-contribution/README.md#geometry-source-review-and-open-gate-2026-10-09) found shifted ROAD boxes; the current ROAD-preferred cache is retained as evidence and is not accepted for E001b training. Agree the source rule before preparing revised inputs or wiring its training command.
+
 ## E001 models
 
 The [model protocol](experiments/E001-kinematic-transfer/README.md#first-diagnostic-baseline) defines A (framewise MLP) and B (one-layer BiLSTM), with the same encoder/linear-head structure and independent weights. Generate data/model expected/actual acceptance evidence in a fresh directory:

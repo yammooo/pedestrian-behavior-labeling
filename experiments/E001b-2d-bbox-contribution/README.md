@@ -1,6 +1,6 @@
 # E001b — 2D bounding-box contribution
 
-Planned diagnostic extension of [E001](../E001-kinematic-transfer/README.md), agreed 2026-10-08 while the user runs E001. No E001b training or test scores. Preparation is additive: the frozen E001 collections, setup, populations, splits and kinematics remain unchanged.
+Planned diagnostic extension of [E001](../E001-kinematic-transfer/README.md), agreed 2026-10-08 while the user runs E001. **Preparation and numerical verification complete; the geometry-source gate remains open** after visual review on 2026-10-09. No E001b training or test scores. Preparation is additive: the frozen E001 collections, setup, populations, splits and kinematics remain unchanged.
 
 ## Question and frozen comparison
 
@@ -42,10 +42,57 @@ Ignored output: `outputs/experiments/E001b/bbox/<dataset>/`. One pickle-free `tr
 
 Before training, verify coordinates, dimensions, timestamps and same-frame native IDs; quantify full/valid/missing/velocity-valid support and 2D-without-3D context on frozen populations. Report supporting groups/tracks/context frames/accepted GT/class frames and class groups/tracks, plus never/partial/complete usable-box track cohorts. Coverage is observation evidence, not held-out predictive performance. No arbitrary coverage threshold is introduced; inspect documented limitations before authorizing training. Freeze additional settings before E001b test scores.
 
-[Five acceptance scenarios](../../tests/test_e001b.py) cover hand-calculated image geometry/unequal-time derivatives; gaps/singletons/source changes/invalid dimensions; identical masks and missing-zero/source normalization; both native formats through cache reload and 14/20-column batches with unchanged kinematics/targets and checksum/corruption failures; and actual E001 setup with held-out-value independence and retained native-mismatch failure evidence. Full CPU/CUDA regression checks and real collection evidence are recorded below when available.
+[Five acceptance scenarios](../../tests/test_e001b.py) cover hand-calculated image geometry/unequal-time derivatives; gaps/singletons/source changes/invalid dimensions; identical masks and missing-zero/source normalization; both native formats through cache reload and 14/20-column batches with unchanged kinematics/targets and checksum/corruption failures; and actual E001 setup with held-out-value independence and retained native-mismatch failure evidence. At implementation revision `858519e222572092bbfb7d77bfe80d90481e9748`, the full suite ran **43 tests**: CPU **41 passed / two CUDA skips**, remote CUDA **43 passed**. Logs remain under ignored `outputs/experiments/E001b/acceptance-{cpu,cuda}.log`. Dependencies are unchanged; no extra dependency was introduced.
+
+### Real preparation and numerical verification (2026-10-08)
+
+Both caches are complete locally and on `aalto`, under `outputs/experiments/E001b/bbox/{loki,road-waymo}/`. The remote commands ran in `/home/user20/projects/pedestrian-behavior-labeling-e001b`, an isolated Git worktree at the implementation revision above with its own uv environment, writing only new E001b outputs in the original checkout. Low CPU/I/O priority was used; preparation allocated no CUDA tensors. E001 code/environment, saved kinematics, labels, populations and splits were not changed by this work. Before/after hashes matched for **13,368 LOKI / 9,576 ROAD-Waymo original collection/setup files**, including excluded candidates.
+
+| Frozen eligible population | LOKI | ROAD-Waymo |
+|---|---:|---:|
+| Tracks | 12,364 | 6,608 |
+| Context slots | 403,813 | 507,144 |
+| Accepted GT frames | 391,569 | 254,156 |
+| Numerically usable bbox slots | 183,815 | 257,573 |
+| Accepted GT frames with usable bbox | 174,266 | 254,156 |
+| Usable bbox-velocity slots | 182,202 | 256,976 |
+| Tracks with no usable bbox | 4,139 | 0 |
+| Partial / complete usable-box tracks | 7,471 / 754 | 5,967 / 641 |
+| Bbox slots without usable 3D position | 9,549 | 41,670 |
+
+Zero nonfinite/degenerate selected boxes were found. LOKI selected PNG headers all report **1920 × 1208**; ROAD FRONT calibration dimensions all report **1920 × 1280**, independently matched to RGB headers in three reviewed clips. LOKI has no selected out-of-bounds boxes; ROAD-Waymo has **12**, retained without clipping. ROAD supplies **254,263** selected boxes and native FRONT fallback supplies **3,310**. Preparation took **76.8 s locally / 71.0 s remotely for LOKI**, and **48.7 s remotely for ROAD-Waymo**; these are preparation times, not training throughput.
+
+| Dataset / split | All accepted GT | GT with usable bbox | Bbox GT classes: moving / stopped / waiting / crossing |
+|---|---:|---:|---|
+| LOKI training | 262,071 | 118,451 | 68,524 / 9,303 / 15,834 / 24,790 |
+| LOKI validation | 60,231 | 24,784 | 14,654 / 1,502 / 3,969 / 4,659 |
+| LOKI test | 69,267 | 31,031 | 19,454 / 2,759 / 3,600 / 5,218 |
+| ROAD-Waymo training | 167,280 | 167,280 | 86,095 / 39,059 / 11,336 / 30,790 |
+| ROAD-Waymo validation | 45,388 | 45,388 | 24,018 / 11,232 / 3,317 / 6,821 |
+| ROAD-Waymo test | 41,488 | 41,488 | 21,239 / 10,631 / 3,523 / 6,095 |
+
+Full group/track/context/GT/class denominators for each coverage cohort remain in each manifest. These are label/observation-support audits, not model evaluation. Source-training numerical counts are **124,961** per box column / **123,936** per velocity column for LOKI, and **169,660 / 169,286** for ROAD-Waymo; neither source has guarded columns.
+
+Independent local verification reloaded **all 18,972** eligible original/bbox pairs, checked every archive checksum and exact population/group assignments, directly reconstructed source-training means/stds, and checked all **439,178** usable bbox derivatives against a separate formula (maximum error **2.22e−16**). Eight 64-track test-split batches covering both source normalizations × both datasets × both new inputs were finite float32 with 14/20 columns; they were **not inferred or scored**. All **12,364** local/remote LOKI bbox archives are byte-identical. Evidence/reproduction: ignored `verification-local.json`, `verify-local.py`, `loki-remote-checksums.json`, `manifest-loki-remote.json` and preparation logs under `outputs/experiments/E001b/`. The remote LOKI manifest retains committed-revision provenance; its local precursor retains its earlier revision/code hashes.
+
+### Geometry-source review and open gate (2026-10-09)
+
+Across **254,263** selected same-ID/time ROAD/native FRONT pairs, **252,727** match within **1e−6** in each image-relative coordinate. The remaining **1,536 (0.604%)** span **1,231 tracks / 334 clips**; clipping explains none. Worst per-track coordinate differences have median **8.13 px** and maximum **109.67 px**; **85 tracks** exceed 20 px and **six** exceed 50 px. Pixel thresholds here describe severity only; they do not filter tracks or change inputs.
+
+Three purposively chosen largest discrepancies in distinct clips were visually reviewed against the exact native RGB timestamp, with ROAD yellow and Waymo cyan overlays:
+
+| Case | Selected identity and slot | Observation |
+|---|---|---|
+| 1 | `train_00216`, `25aa091d-1547-45d0-b9bb-45c4d40b619a`, slot 49 | ROAD box lies below the visible high-visibility-clothing pedestrian and encloses road surface. Native Waymo box encloses the person: clear ROAD geometry misplacement at this frame. |
+| 2 | `train_00175`, `8189d569-f441-4e60-ae42-abc945b0f64a`, slot 0 | Equal-size boxes have shifted centers among adjacent pedestrians. Native Waymo follows the person more closely; one frame does not establish an identity error or its cause. |
+| 3 | `train_00340`, `d3e7eb65-8538-4f77-b96e-066b5a482f04`, slot 53 | Dark/noisy scene with vertically shifted boxes; independent actor extent is inconclusive. |
+
+Evidence: ignored `native-box-verification.json` and `box-review/case-{1,2,3}.png`, retained on both machines. JSON preserves coordinates/timestamps, affected identities, sampled image-size checks, reviewer findings and image hashes. This purposive review is not a population visual error rate; the difference count alone does not establish which source is correct in every pair. The cause of ROAD shifts remains **unknown**.
+
+**The current ROAD-preferred geometry cache is not accepted for E001b training.** `bbox_valid` in that cache certifies numeric usability/source association, not visually correct actor enclosure. Recommendation for the next agreed increment: prefer native FRONT camera geometry when available and audit any ROAD-only fallback separately; freeze that source rule before E001b results. This recommendation has **not** changed the caches, masks, source statistics, splits or E001 data. Preserve the current preparation/review evidence; use a fresh output directory if a revised policy is accepted. This issue concerns the new 2D input and does not modify E001's accepted kinematic association policy.
 
 ## Interpretation and current evidence
 
 Availability above baseline may reflect annotation-selection shortcuts. Geometry above availability supports an additional geometric contribution under this observation/model contract. Within-domain improvement with transfer degradation suggests camera/annotation/dataset dependence. Little geometry gain does not establish that RGB appearance or scene context is useless. Missing 2D annotations must not be interpreted as evidence of a particular behavior.
 
-Real preparation/coverage verification: in progress. Independent visual accuracy of every native box remains unknown. No E001b training, metrics, W&B runs or comparison results. Checkpoints/predictions for later valuable runs still need separate backup; external storage is TBD.
+Preparation/numerical verification are complete; geometry-source acceptance remains open as described above. Independent visual accuracy of every native box remains unknown. No E001b training, model metrics, W&B runs or comparison results. Checkpoints/predictions for later valuable runs still need separate backup; external storage is TBD.

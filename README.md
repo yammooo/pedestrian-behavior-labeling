@@ -248,7 +248,7 @@ Open the [manual E001 workspace](https://wandb.ai/yammo-unipd/pedestrian-behavio
 
 The [accepted repetition round](experiments/E001-kinematic-transfer/README.md#multiple-seed-launcher-2026-10-09) uses **75 maximum epochs / patience 8 / training seeds 0–4**: 80 attempts and 160 evaluation cells, including fresh seed-0 runs. Splits and source normalization remain frozen. The launcher defaults to **two separate processes sharing the selected GPU**; each has two CPU compute threads and zero loader workers. `--jobs 1` runs sequentially; `--seeds 0 1 2` gives the smaller 48-attempt matrix. Increasing concurrency may increase GPU/CPU/I/O contention; no throughput gain is promised.
 
-On `aalto`, use the isolated checkout prepared on branch `e001-multiple-seeds`; its ignored E001 output directory links to the existing frozen data/output root. The original checkout and its 50/8 working edit stay intact. Run directly on the GPU laptop, or first connect from the ThinkPad using `ssh -F ~/.ssh/config aalto`:
+On `aalto`, use the isolated checkout prepared at the revision from branch `e001-multiple-seeds`; its ignored E001 output directory links to the existing frozen data/output root. The original checkout and its 50/8 working edit stay intact. Run directly on the GPU laptop, or first connect from the ThinkPad using `ssh -F ~/.ssh/config aalto`:
 
 ```bash
 cd /home/user20/projects/pedestrian-behavior-labeling-e001-seeds

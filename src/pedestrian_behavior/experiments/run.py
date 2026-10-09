@@ -53,8 +53,8 @@ def plots(output, history, selection, evaluations, classes):
         plt.close(figure)
     epochs = [r["epoch"] for r in history]
     fig, ax = plt.subplots(figsize=(7, 4))
-    ax.plot(epochs, [r["training_ce"] for r in history], label="training (changing weights)")
-    ax.plot(epochs, [r["validation_ce"] for r in history], label="source validation")
+    ax.plot(epochs, [r["training_ce"] for r in history], marker="o", label="training (changing weights)")
+    ax.plot(epochs, [r["validation_ce"] for r in history], marker="o", label="source validation")
     ax.set(xlabel="Epoch", ylabel="Track CE")
     ax.legend()
     save("loss", fig)
@@ -94,7 +94,7 @@ def plots(output, history, selection, evaluations, classes):
                 if value is not None:
                     ax.bar(i, value)
                 ax.text(i, (value or 0)+.025, f'G/T/F={d["groups"]}/{d["tracks"]}/{d["gt_frames"]}\nclasses={supported}\nGT={d["class_frames"]}', ha="center", fontsize=8)
-            ax.set(xticks=range(len(slices)), xticklabels=list(slices), ylim=(0, 1.25),
+            ax.set(xticks=range(len(slices)), xticklabels=list(slices), xlim=(-.5, len(slices)-.5), ylim=(0, 1.25),
                    ylabel="Supported-class track-weighted macro-F1", title=dataset+": "+axis)
             save(dataset+"-"+axis, fig)
     return paths

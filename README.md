@@ -191,14 +191,14 @@ Prepare [E001b](experiments/E001b-2d-bbox-contribution/README.md) separately; th
 uv run --locked --extra cpu python scripts/prepare-e001b.py \
   --collection outputs/experiments/E001/reader-preparation/loki \
   --setup outputs/experiments/E001/data-setup/loki/setup.json \
-  --native-input data/loki_data --output outputs/experiments/E001b/bbox/loki
+  --native-input data/loki_data --output outputs/experiments/E001b/bbox-native/loki
 ```
 
 On `aalto`, use an isolated Git worktree and its own uv environment while E001 runs; do not pull/sync into the active training checkout. Pass absolute E001 collection/setup paths from `/home/user20/projects/pedestrian-behavior-labeling`, use `--extra cu118`, and set `--native-input` to `/media/user20/F47C60057C5FC152/projects/loki_data` or `/home/user20/road_waymo_mapping/merged_pedestrians_20261002`. Write separate E001b outputs. The command requires a fresh directory, retains failure evidence and checks all original collection/setup file hashes before/after.
 
 For saved-cache sample construction, call `pedestrian_behavior.experiments.e001b.dataset_from_extension(collection, setup_path, extension, split, configuration, baseline_statistics, bbox_statistics)`, with configuration `availability` or `geometry`. Both statistics come from the **training source**, including for opposite-dataset evaluation. Read the extension's `baseline_normalization` and `normalization` fields. Samples use unchanged E001 targets/references, with 14 or 20 input columns. The E001b training command is deferred.
 
-Both caches and numerical checks are complete. The [geometry-source review](experiments/E001b-2d-bbox-contribution/README.md#geometry-source-review-and-open-gate-2026-10-09) found shifted ROAD boxes; the current ROAD-preferred cache is retained as evidence and is not accepted for E001b training. Agree the source rule before preparing revised inputs or wiring its training command.
+Use `outputs/experiments/E001b/bbox-native/{loki,road-waymo}/` for the accepted native-only policy: Waymo FRONT boxes without ROAD fallback, and native LOKI boxes. The original ROAD-preferred `bbox/` caches remain historical evidence and fail the current loader policy check. [Source decision and verification](experiments/E001b-2d-bbox-contribution/README.md#native-only-cache-acceptance-2026-10-09) own acceptance; the training runner remains deferred.
 
 ## E001 models
 

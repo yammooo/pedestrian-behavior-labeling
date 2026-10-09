@@ -71,18 +71,19 @@ class BboxTest(unittest.TestCase):
         missing_statistics = fit_normalization([normalization_sample(all_missing)])
         np.testing.assert_array_equal(bbox_inputs(all_missing, "geometry", missing_statistics), np.zeros((1, 8)))
 
-    def fixture(self, root):
+    def fixture(self, root, camera=None):
         people = {"person": {0: [10, 5, 1], 2: [12, 5, 1]}, "three-only": {0: [5, 1, 1]},
                   "two-only": {}}
         loki, road = native_readers(root, [0, 200000, 400000], [pose()]*3, people,
-            camera={"person": {0, 1, 2}, "three-only": set(), "two-only": {1}}, road_times={"person": {0, 2}})
+            camera=camera if camera is not None else {"person": {0, 1, 2}, "three-only": set(), "two-only": {1}},
+            road_times={"person": {0, 2}})
         for i in range(3):
             Image.new("RGB", (200, 100)).save(loki.root/"scenario_000"/f"image_{i*2:04d}.png")
         camera_path = road.index/"camera_box.parquet"
         rows = pq.read_table(camera_path).to_pylist()
         for row in rows:
             row.update({"[CameraBoxComponent].box."+k: v for k, v in
-                        zip(("center.x", "center.y", "size.x", "size.y"), (40., 30., 40., 20.))})
+                        zip(("center.x", "center.y", "size.x", "size.y"), (50., 30., 40., 20.))})
         pq.write_table(pa.Table.from_pylist(rows), camera_path)
         calibration = road.index/"camera_calibration.parquet"
         pq.write_table(pa.Table.from_pylist([{"key.segment_context_name": "scene", "key.camera_name": 1,
@@ -153,9 +154,11 @@ class BboxTest(unittest.TestCase):
                     # 2D survives the middle slot with no 3D or GT.
                     self.assertEqual(record["coverage"]["training"]["bbox-valid-without-3d"]["context_frames"], 1)
                     if reader.dataset == "road-waymo":
-                        self.assertEqual(arrays["bbox_source"].tolist(), [2, 3, 2])
-                        self.assertFalse(arrays["bbox_velocity_valid"].any())
-                        np.testing.assert_allclose(arrays["bbox_features"][:, :4], [[.2, .4, .2, .2]]*3)
+                        self.assertEqual(arrays["bbox_source"].tolist(), [3, 3, 3])
+                        self.assertTrue(arrays["bbox_velocity_valid"].all())
+                        np.testing.assert_allclose(arrays["bbox_features"][:, :4], [[.25, .4, .2, .2]]*3)
+                        np.testing.assert_allclose(arrays["bbox_features"][:, 4:], 0)
+                        self.assertEqual(arrays["road_2d"].tolist(), [True, False, True])
                     else:
                         np.testing.assert_allclose(arrays["bbox_features"][:, :4], [[.0125, .06, .015, .04]]*3)
                         self.assertEqual(record["coverage"]["training"]["track-never"]["tracks"], 1)
@@ -169,6 +172,48 @@ class BboxTest(unittest.TestCase):
                     np.savez_compressed(extension/"tracks"/person["archive"], metadata=np.array(json.dumps(reference)), **arrays)
                     with self.assertRaisesRegex(ValueError, "missingness"):
                         load_bbox(extension/"tracks"/person["archive"], metadata, person["e001_sha256"])
+
+    def test_waymo_only_no_missing_or_invalid_fallback_and_old_policy_rejection(self):
+        for mode in ("missing", "invalid"):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                camera = {"person": {1, 2} if mode == "missing" else {0, 1, 2},
+                          "three-only": set(), "two-only": {1}}
+                _, reader = self.fixture(root, camera)
+                if mode == "invalid":
+                    path = reader.index/"camera_box.parquet"
+                    rows = pq.read_table(path).to_pylist()
+                    for row in rows:
+                        if row["key.camera_object_id"] == "person" and row["key.frame_timestamp_micros"] == 0:
+                            row["[CameraBoxComponent].box.size.x"] = 0.
+                    pq.write_table(pa.Table.from_pylist(rows), path)
+                    reader = RoadReader(reader.index)
+                collection, setup_path, extension = root/"collection", root/"setup"/"setup.json", root/"bbox"
+                self.frozen_setup(reader, collection, setup_path)
+                record = prepare_bbox_extension(collection, setup_path, reader.index, extension)
+                entry = next(e for e in record["tracks"] if json.loads(e["locator"])["tube_uid"] == "person")
+                metadata, _ = load_track(collection/"tracks"/entry["archive"])
+                _, arrays = load_bbox(extension/"tracks"/entry["archive"], metadata, entry["e001_sha256"])
+                self.assertEqual(arrays["bbox_source"].tolist(), [0 if mode == "missing" else 3, 3, 3])
+                self.assertEqual(arrays["bbox_valid"].tolist(), [False, True, True])
+                self.assertEqual(arrays["bbox_velocity_valid"].tolist(), [False, True, True])
+                self.assertTrue(arrays["road_2d"][0])
+                self.assertTrue(np.isnan(arrays["bbox_features"][0]).all())
+                baseline = dataset_from_setup(collection, setup_path, "training", "K+T+R", record["baseline_normalization"])
+                ds = dataset_from_extension(collection, setup_path, extension, "training", "geometry",
+                                            record["baseline_normalization"], record["normalization"])
+                for i in range(len(ds)):
+                    np.testing.assert_array_equal(ds[i]["targets"], baseline[i]["targets"])
+                    np.testing.assert_array_equal(ds[i]["gt_valid"], baseline[i]["gt_valid"])
+                sample = next(ds[i] for i in range(len(ds)) if ds.entries[i]["locator"] == entry["locator"])
+                self.assertTrue(sample["gt_valid"][0])
+                np.testing.assert_array_equal(sample["inputs"][0, 12:], np.zeros(8))
+                record = json.loads((extension/"manifest.json").read_text())
+                record["policy"]["road_source_rule"] = "ROAD when present; native FRONT camera box only when ROAD is absent"
+                (extension/"manifest.json").write_text(json.dumps(record))
+                with self.assertRaisesRegex(ValueError, "mismatched bbox extension"):
+                    dataset_from_extension(collection, setup_path, extension, "training", "availability",
+                                           record["baseline_normalization"], record["normalization"])
 
     def test_real_setup_training_only_statistics_and_native_failure_evidence(self):
         with tempfile.TemporaryDirectory() as temporary:

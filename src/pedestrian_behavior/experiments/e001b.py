@@ -23,7 +23,7 @@ from .e001 import CLASSES, dataset_from_setup, targets
 
 POLICY = {"baseline": "K+T+R", "configurations": ["availability", "geometry"],
           "numeric_columns": COLUMNS, "flags": ["bbox_valid", "bbox_velocity_valid"], "sources": SOURCES,
-          "road_source_rule": "ROAD when present; native FRONT camera box only when ROAD is absent",
+          "road_source_rule": "native Waymo FRONT camera boxes only; no ROAD fallback; independent of behavior GT",
           "coordinates": "image-relative xyxy; retain native extents without clipping",
           "invalid_box": "nonfinite or nonpositive width/height: masked and reported; no fallback substitution",
           "derivatives": "E001 immediate-neighbor rule using selected source times; no gaps or source switches",
@@ -137,9 +137,7 @@ def prepare_bbox_extension(collection, setup_path, native_input, output):
                         dimensions[i] = size
                         if (road_box is not None) != presence["road_2d"][i] or (waymo_box is not None) != presence["waymo_2d"][i]:
                             raise ValueError("Native ROAD/Waymo presence differs from E001")
-                        if road_box is not None:
-                            corners[i], source[i] = road_box, 2
-                        elif waymo_box is not None:
+                        if waymo_box is not None:
                             corners[i], source[i] = waymo_box, 3
                         if road_box is not None and waymo_box is not None:
                             delta = np.abs(np.asarray(road_box)-waymo_box)

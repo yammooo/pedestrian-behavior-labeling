@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+import shutil
 import tempfile
 import unittest
 
@@ -151,6 +152,32 @@ class E001cTest(unittest.TestCase):
             self.assertFalse(arrays["box2d_valid"][0])
             self.assertTrue(np.isnan(arrays["values"][0, 9:17]).all())
             self.assertIn(str(relocated), record["scenes"]["clip"]["lidar_box_path"])
+
+    def test_real_split_normalization_excludes_validation_and_test(self):
+        from pedestrian_behavior.datasets.loki import TrackReader
+        from pedestrian_behavior.data.preparation import prepare_collection
+        from pedestrian_behavior.data.splits import split_groups
+        from pedestrian_behavior.experiments.e001 import setup as make_setup
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _, (reader, _) = self.fixture(root)
+            for number in (1, 2):
+                shutil.copytree(reader.root/"scenario_000", reader.root/f"scenario_{number:03d}")
+            for scene, split in split_groups([f"scenario_{number:03d}" for number in range(3)]).items():
+                if split != "training":
+                    for path in (reader.root/scene).glob("label2d_*.json"):
+                        data = json.loads(path.read_text())
+                        for person in data["Pedestrian"].values():
+                            person["box"]["left"] += 1000
+                        path.write_text(json.dumps(data))
+            reader = TrackReader(reader.root, root/"fixture-transform.json")
+            collection, setup = root/"collection", root/"setup"/"setup.json"
+            prepare_collection(reader, collection)
+            make_setup(collection, reader.root, setup.parent, None)
+            result = prepare_boxes(collection, setup, reader.root, root/"boxes", loki_transform=root/"fixture-transform.json")
+            self.assertAlmostEqual(result["normalization"]["mean"][9], .0125)
+            self.assertEqual(result["normalization"]["count"][9], 3)
+            self.assertEqual(sum(row["full"]["tracks"] for row in result["coverage"].values()), 6)
 
 
 if __name__ == "__main__":

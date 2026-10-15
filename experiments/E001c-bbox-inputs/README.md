@@ -33,4 +33,19 @@ Manifest: frozen setup/collection hashes/entries/splits, native component/annota
 
 [Tests](../../tests/test_e001c.py): centers/XYZ transforms, size velocities, irregular timestamps, gaps/singletons, invalid sizes, unequal-mask refusal, source moments/missing zeros, identical flags across 13/21/24 inputs, both native formats, frozen targets/populations, no ROAD fallback, relocated components, persistence/corruption/failure evidence. Full regression protects E001/E001b after shared normalization gains explicit per-column validity.
 
-Real rebuild/verification: **pending**. Record counts, paths, revision and checks here after completion. Cache coverage is not a model result; no E001c training has run.
+### Native rebuild (2026-10-15)
+
+Both caches completed on `aalto` at preparation revision `850b9fd88e6b7f82552d90671b220c1b79925d69`, from isolated checkout `/home/user20/projects/pedestrian-behavior-labeling-e001c`. Outputs are under `/home/user20/projects/pedestrian-behavior-labeling/outputs/experiments/E001c/box-cache/`; the local copy uses the same relative output root. No native numeric inputs were reused from older caches.
+
+| Dataset | Tracks | Context slots | Accepted GT | Usable 3D | 3D velocity | Usable 2D | 2D velocity |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| LOKI | 12,364 | 403,813 | 391,569 | 391,569 | 391,399 | 183,815 | 182,202 |
+| ROAD-Waymo | 6,608 | 507,144 | 254,156 | 459,626 | 459,600 | 257,573 | 257,122 |
+
+All native center/size usability masks coincide: the four proposed flags suffice. Both datasets have zero invalid selected native 2D boxes. Across **all splits**, no track changes 3D dimensions above 1e−8 m. Maximum absolute 3D size velocity is **0 LOKI / 1.49e−10 m/s ROAD**; ROAD residuals are numerical noise. Source scales are guarded at one. The size-velocity configuration therefore adds no meaningful observed information; retain requested cache columns, but revisit this redundant training comparison before launching it. Any difference between 21- and 24-input models would not establish a useful size-velocity signal.
+
+Preparation took **155.0 s LOKI / 111.3 s ROAD**. Every **22,944** protected E001 collection/setup file and **18,974** E001b cache file matched before/after; all three existing remote checkout revisions/diffs matched. CPU regression: **63 tests, four CUDA skips**. Initial remote CUDA regression: **62 tests, all passed**; the seventh E001c test, covering real split exclusion from normalization, was added afterward and passed locally. Final remote check is pending recording below. Cache coverage is not a model result; no E001c training, inference or W&B logging occurred.
+
+Independent reconstruction checked **all 18,972 tracks / 910,957 context slots**: archive hashes, frozen entries/splits/targets, all ten velocity components, original planar velocities, E001b box conversion to geometric center, source-training moments and every configuration under **both** source normalizations. Maximum derivative reconstruction error is **zero** using integer source-time differences. The first read-only audit accidentally cast absolute Waymo timestamps to float seconds before differencing; correcting that audit recovered exact equality without changing cache code/data (`audit-note.txt`).
+
+Ignored evidence: `outputs/experiments/E001c/verification/` contains preparation logs, CPU/CUDA test logs, `protected-before.json`, `protected-verification.json`, `reconstruction.json` and `audit-note.txt`. The two cache manifests contain split/class coverage, moments, frozen/native references and all per-archive hashes. LOKI native vertical-anchor/axis semantics remain qualified above.

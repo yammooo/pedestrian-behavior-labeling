@@ -6,6 +6,7 @@ Shared evaluation safeguards and comparison index. [E001’s brief single-seed c
 |---|---|---|---|
 | [E001](E001-kinematic-transfer/README.md) | Four kinematic feature sets × MLP/BiLSTM; within and bidirectional ROAD-Waymo/LOKI transfer | 32 attempts complete; five-seed launcher ready | Longer patience helped some BiLSTMs; feature rankings mixed |
 | [E001b](E001b-2d-bbox-contribution/README.md) | Exact K+T+R versus added bbox availability versus added geometry | Native-only caches and shared runner/launcher verified on CPU/CUDA | Two validation-only smokes; full comparisons not run |
+| [E001c](E001c-bbox-inputs/README.md) | Native 3D/2D centers, dimensions and velocities, with matched availability flags | 18,972 native tracks rebuilt/verified; training not implemented | 3D dimensions constant within tracks; size velocities redundant; no model results |
 | [E002](../docs/research.md#tentative-experiment-direction) | Kinematic Transformer reference and temporal-context comparison | Tentative | Not run |
 | [E003](../docs/research.md#tentative-experiment-direction) | RGB/local 3D evidence on the Transformer | Tentative | Not run |
 | [E004](../docs/research.md#tentative-experiment-direction) | One complementary supervision source with an additional-data control | Tentative | Not run |

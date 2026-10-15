@@ -45,7 +45,21 @@ Manifest: frozen setup/collection hashes/entries/splits, native component/annota
 
 [Single attempt](../../scripts/train-e001c.py) and [five-seed launcher](../../scripts/train-e001c-seeds.py) reuse the existing BiLSTM, shared training/checkpoint/evaluation/W&B lifecycle and bounded process scheduler. No new model architecture or training algorithm. `BoxTrackDataset` checks original/cache hashes, identity/alignment and cached versus frozen targets; full cache policy/population validation precedes external logging. Evaluation adds the same three verified-box axes as E001b after inference, preserving the ten E001 axes and native source flags. Checkpoints retain the source's full frozen box statistics; no unused K+T+R columns enter the model.
 
-Outputs: `outputs/experiments/E001c/runs/` with the existing history/steps/status/provenance/checkpoints, both test prediction/metric archives and PNG/SVG plots. Restricted ROAD CUDA smokes evaluate source validation only. Acceptance results and remote command readiness are pending final recording; no full comparisons launched.
+Outputs: `outputs/experiments/E001c/runs/` with the existing history/steps/status/provenance/checkpoints, both test prediction/metric archives and PNG/SVG plots. Restricted ROAD CUDA smokes evaluate source validation only. The isolated `aalto` checkout has its own uv environment and ignored E001/E001c links to existing outputs; the [manual launcher command](../../README.md#e001c-training-and-evaluation) is ready. No full comparisons launched.
+
+At implementation revision `973eb31f58ec100910c14829fe0ad4347dda2e75`, CPU regression passed **69 tests, five CUDA skips**; CUDA passed **all 69**. Twelve real validation samples covered both source normalizations × both datasets × all three configurations without inference/scoring. Synthetic full-attempt tests cover all six source/configuration combinations and both test directions; these are implementation fixtures, not scientific comparison results.
+
+Three separately labeled real ROAD GPU smokes each completed **one epoch, two training updates (128 tracks), one source-validation batch (64 tracks), no held-out tests**:
+
+| Configuration | Parameters | Runtime (s) | W&B validation-only smoke |
+|---|---:|---:|---|
+| `boxes` | 30,788 | 17.61 | [wo8i5sw0](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/wo8i5sw0) |
+| `boxes-2d-size-vel` | 30,916 | 17.13 | [qziyj40o](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/qziyj40o) |
+| `boxes-2d-3d-size-vel` | 31,108 | 17.98 | [4tqbofog](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/4tqbofog) |
+
+All best checkpoints reproduce saved CUDA logits exactly and retain source statistics. Saved predictions regenerate primary/all 13-axis metrics; each smoke exports **20 PNG + 20 SVG** plots. Actual W&B readback confirms two `train/loss_step` records, one epoch record containing `train/loss_epoch`, `val/loss`, `val/macro_f1`, all 13 stratum plots and no uploaded `.pt`/`.npz` files. The shared uploader remains unchanged; W&B's table/media artifacts are numerical summaries and plots, not model/full-prediction artifacts.
+
+All **80,831** files under protected E001 collection/setup, E001b native-box and E001c box-cache roots matched before/after. The original three remote checkout revision/diff snapshots also match. Checked 482 local links/anchors and `git diff --check`; inspected exported loss/box-stratum plots. Evidence on both machines: ignored `outputs/experiments/E001c/training-acceptance/` contains CPU/CUDA logs, per-smoke logs, `frozen-before.json`, `frozen-verification.json`, `real-sample-validation.json` and `verification-gpu-smokes.json`. Smoke outputs use `runs/acceptance-973eb31-<configuration>-gpu-smoke/`. These checks do not provide comparison scores or a concurrency benchmark. Separate backup storage for valuable future checkpoints/predictions remains TBD.
 
 ### Native rebuild (2026-10-15)
 

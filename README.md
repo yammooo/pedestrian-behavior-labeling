@@ -96,6 +96,17 @@ uv run --locked --extra cu118 python scripts/track-statistics.py --dataset road-
 
 Each scan writes `tracks.csv` and `summary.json`, including whole-track duration, observed/missing frames, modality masks, overlapping action cohorts and conservative 5 Hz window capacities. [LOKI](docs/datasets/loki.md#track-extents-and-gaps-2026-10-05) and [ROAD-Waymo](docs/datasets/road-waymo.md#track-extents-and-gaps-2026-10-05) own interpretation and limitations.
 
+## Review completed E001 comparisons
+
+The [joint E001/E001b/E001c review](experiments/E001b-2d-bbox-contribution/results-review.md) covers 130 five-seed attempts / 260 test cells. Rebuild its numerical tables and all ten PNG/SVG figure pairs from the retained metadata snapshot:
+
+```bash
+uv run --locked --extra cpu python scripts/review-e001-results.py \
+  --output outputs/experiments/E001b/analysis/20261015-seed-review
+```
+
+This does not run inference or edit the Markdown conclusions. The script's `--collect --prior-verification <previous-audit.json> --output <fresh-directory>` mode runs on Aalto to snapshot the three named frozen sweeps and audit saved E001c logits against earlier identities/GT/conditions; full predictions/checkpoints stay there. The [review evidence](experiments/E001b-2d-bbox-contribution/results-review.md#e001c-extension-evidence-2026-10-15) records exact scope, source paths and reproducibility checks. Neither mode modifies original run artifacts or W&B.
+
 ## Inspect model predictions
 
 Run the browser viewer on `aalto` from its isolated checkout. It reads completed E001/E001b/E001c test predictions, including runs that finish while it is open after **Refresh runs**. No inference, training or W&B connection is needed.

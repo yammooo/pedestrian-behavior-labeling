@@ -1,6 +1,6 @@
 # E001b — 2D bounding-box contribution
 
-Diagnostic extension of [E001](../E001-kinematic-transfer/README.md), agreed 2026-10-08 while the user runs E001. **Native Waymo FRONT geometry only, without ROAD fallback, accepted on 2026-10-09** after visual review. The original ROAD-preferred prototype remains historical evidence. The shared runner and five-seed launcher are implemented; full comparison runs have not started. Preparation is additive: the frozen E001 collections, setup, populations, splits and kinematics remain unchanged.
+Diagnostic extension of [E001](../E001-kinematic-transfer/README.md), agreed 2026-10-08. **20 five-seed attempts / 40 evaluation cells complete**; the [joint results review](results-review.md) (2026-10-10; extended with E001c on 2026-10-15) reports all directions, class errors and observation strata. **Native Waymo FRONT geometry only, without ROAD fallback, accepted on 2026-10-09** after visual review. The original ROAD-preferred prototype remains historical evidence. Preparation is additive: the frozen E001 collections, setup, populations, splits and kinematics remain unchanged. Historical acceptance records below retain their then-current execution status.
 
 ## Question and frozen comparison
 

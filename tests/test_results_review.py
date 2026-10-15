@@ -16,6 +16,8 @@ class ResultsReviewTest(unittest.TestCase):
         summary=review.moments(a)
         self.assertAlmostEqual(summary["mean"],30)
         self.assertAlmostEqual(summary["std"],np.sqrt(250))
+        self.assertEqual(summary["mean"],100*np.mean(a))
+        self.assertEqual(summary["std"],100*np.std(a,ddof=1))
         delta=review.paired(a,b)
         self.assertAlmostEqual(delta["mean"],3)
         self.assertAlmostEqual(delta["std"],np.sqrt(2.5))

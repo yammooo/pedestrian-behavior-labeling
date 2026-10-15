@@ -37,12 +37,13 @@ def write(path, value):
 
 
 def moments(values, scale=100):
+    assert len(values) == 5
     if all(v is None for v in values):
         return {"mean": None, "std": None, "seeds": values}
-    assert len(values) == 5 and all(v is not None for v in values)
-    values = np.asarray(values, dtype=np.float64)*scale
+    assert all(v is not None for v in values)
+    values = np.asarray(values, dtype=np.float64)
     assert np.isfinite(values).all()
-    return {"mean": float(values.mean()), "std": float(values.std(ddof=1)), "seeds": values.tolist()}
+    return {"mean": float(scale*values.mean()), "std": float(scale*values.std(ddof=1)), "seeds": (scale*values).tolist()}
 
 
 def paired(before, after):
@@ -195,6 +196,7 @@ def analyze(root):
             assert "no ROAD fallback" in config["cache_policy"]["sources2d"]
         runs.append({"experiment": exp, "source": source, "configuration": feature, "model": "MLP" if variant == "A" else "BiLSTM", "seed": seed,
                      "revision": provenance["revision"], "selected_epoch": best["epoch"], "completed_epochs": len(history),
+                     "validation_macro_f1": best["f1"], "validation_ce": best["ce"],
                      "stopping_reason": provenance["stopping_reason"], "parameters": provenance["parameters"], "runtime_seconds": provenance["elapsed_seconds"],
                      "wandb_url": provenance["wandb"]["url"], "remote_path": item["remote_path"], "local_metadata": item["local_path"]})
         for target in ("loki", "road-waymo"):
@@ -249,6 +251,7 @@ def report(root):
                 for i in range(4):
                     classes.append(identifiers | {"weighting": weighting, "class": i,
                         "gt_frames": records[0]["primary"]["denominators"]["class_frames"][i],
+                        "supporting_tracks": records[0]["primary"]["denominators"]["class_tracks"][i],
                         **{field: moments([r["primary"][weighting][field][i] for r in records]) for field in ("precision", "recall", "f1")}})
             row.update({field: moments([r["primary"][field] for r in records], 1 if field == "track_ce" else 100) for field in ("track_ce", "mean_track_accuracy", "median_track_accuracy")})
             secondary.append(row)
@@ -264,9 +267,11 @@ def report(root):
             row = {"before": title(before), "after": title(after), "source": direction[0], "target": direction[1]}
             paired_rows.append(row | paired(values(before, direction), values(after, direction)))
             for axis, bins in results(after, direction)[0]["strata"].items():
+                if axis not in results(before, direction)[0]["strata"]:
+                    continue
                 for label, first in bins.items():
                     slice_pairs.append(row | {"axis": axis, "bin": label, "denominators": first["denominators"],
-                        **paired(values(before, direction, axis=axis, label=label), values(after, direction, axis=axis, label=label))}) if axis in results(before, direction)[0]["strata"] else None
+                        **paired(values(before, direction, axis=axis, label=label), values(after, direction, axis=axis, label=label))})
     for name, rows in (("summary", primary), ("per-class-summary", classes), ("secondary-summary", secondary), ("strata-summary", strata), ("confusion-summary", confusion), ("paired-differences", paired_rows), ("stratum-differences", slice_pairs)):
         write(root/(name+".json"), rows)
         csv_file(root, name+".csv", [{k:json.dumps(v) if isinstance(v, (dict, list)) else v for k,v in row.items()} for row in rows])

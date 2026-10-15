@@ -1,12 +1,12 @@
 # Experiments
 
-Shared evaluation safeguards and comparison index. [E001’s brief single-seed comparison review](E001-kinematic-transfer/README.md#brief-comparison-and-budget-review-2026-10-09) is recorded alongside implementation acceptance. Inspection galleries are evidence about data, not model experiments.
+Shared evaluation safeguards and comparison index. The [joint five-seed E001/E001b/E001c review](E001b-2d-bbox-contribution/results-review.md) records 130 completed attempts / 260 test cells; the earlier single-seed budget review remains in E001. Inspection galleries are evidence about data, not model experiments.
 
 | ID | Question | Status | Result |
 |---|---|---|---|
-| [E001](E001-kinematic-transfer/README.md) | Four kinematic feature sets × MLP/BiLSTM; within and bidirectional ROAD-Waymo/LOKI transfer | 32 attempts complete; five-seed launcher ready | Longer patience helped some BiLSTMs; feature rankings mixed |
-| [E001b](E001b-2d-bbox-contribution/README.md) | Exact K+T+R versus added bbox availability versus added geometry | Native-only caches and shared runner/launcher verified on CPU/CUDA | Two validation-only smokes; full comparisons not run |
-| [E001c](E001c-bbox-inputs/README.md) | Native 3D/2D centers, dimensions and velocities, with matched availability flags | Caches and 30-run launcher implemented; full comparisons user-launched | 3D dimensions constant within tracks; size velocities retained as redundant-input control; no comparison results |
+| [E001](E001-kinematic-transfer/README.md) | Four kinematic feature sets × MLP/BiLSTM; within and bidirectional ROAD-Waymo/LOKI transfer | 80 five-seed attempts complete; earlier 32 retained | BiLSTM consistently improves on MLP; RAW versus K+T+R depends on direction |
+| [E001b](E001b-2d-bbox-contribution/README.md) | Exact K+T+R versus added bbox availability versus added geometry | 20 five-seed attempts complete | Geometry helps LOKI → ROAD in all seeds, mainly Stopped; other directions mixed |
+| [E001c](E001c-bbox-inputs/README.md) | Native 3D/2D centers, dimensions and velocities, with matched availability flags | 30 five-seed attempts complete | Basic boxes average below E001b geometry in all directions; no systematic 2D size-velocity gain; 3D size velocities remain a redundant-input control |
 | [E002](../docs/research.md#tentative-experiment-direction) | Kinematic Transformer reference and temporal-context comparison | Tentative | Not run |
 | [E003](../docs/research.md#tentative-experiment-direction) | RGB/local 3D evidence on the Transformer | Tentative | Not run |
 | [E004](../docs/research.md#tentative-experiment-direction) | One complementary supervision source with an additional-data control | Tentative | Not run |

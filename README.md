@@ -214,6 +214,28 @@ For saved-cache sample construction, call `pedestrian_behavior.experiments.e001b
 
 Use `outputs/experiments/E001b/bbox-native/{loki,road-waymo}/` for the accepted native-only policy: Waymo FRONT boxes without ROAD fallback, and native LOKI boxes. The original ROAD-preferred `bbox/` caches remain historical evidence and fail the current loader policy check. [Source decision and verification](experiments/E001b-2d-bbox-contribution/README.md#native-only-cache-acceptance-2026-10-09) own acceptance; both native-only caches are complete on both machines. ROAD preparation uses the verified `/run/media/...` mount override. Use the [E001b training commands](#e001b-training-and-evaluation) after acceptance checks.
 
+## E001c bbox cache
+
+Recompute native inputs while preserving E001/E001b. Run at the intended Git revision on `aalto`; outputs must be fresh. [Protocol/schema/acceptance](experiments/E001c-bbox-inputs/README.md).
+
+```bash
+uv run --locked --extra cu118 python scripts/prepare-e001c.py \
+  --collection /home/user20/projects/pedestrian-behavior-labeling/outputs/experiments/E001/reader-preparation/loki \
+  --setup /home/user20/projects/pedestrian-behavior-labeling/outputs/experiments/E001/data-setup/loki/setup.json \
+  --native-input /run/media/user20/F47C60057C5FC152/projects/loki_data \
+  --loki-transform configs/loki-transform.json \
+  --output /home/user20/projects/pedestrian-behavior-labeling/outputs/experiments/E001c/box-cache/loki
+
+uv run --locked --extra cu118 python scripts/prepare-e001c.py \
+  --collection /home/user20/projects/pedestrian-behavior-labeling/outputs/experiments/E001/reader-preparation/road-waymo \
+  --setup /home/user20/projects/pedestrian-behavior-labeling/outputs/experiments/E001/data-setup/road-waymo/setup.json \
+  --native-input /home/user20/road_waymo_mapping/merged_pedestrians_20261002 \
+  --waymo-root /run/media/user20/F47C60057C5FC152/projects/waymo_v2 \
+  --output /home/user20/projects/pedestrian-behavior-labeling/outputs/experiments/E001c/box-cache/road-waymo
+```
+
+These commands prepare caches only. The [native mount guidance](#e001b-bbox-extension) still applies. Local checks: `uv run --locked --extra cpu python -m unittest discover -s tests -p test_e001c.py`.
+
 ## E001 models
 
 The [model protocol](experiments/E001-kinematic-transfer/README.md#first-diagnostic-baseline) defines A (framewise MLP) and B (one-layer BiLSTM), with the same encoder/linear-head structure and independent weights. Generate data/model expected/actual acceptance evidence in a fresh directory:

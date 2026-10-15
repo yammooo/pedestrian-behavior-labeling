@@ -45,6 +45,8 @@ Future RGB/LiDAR representations can retrieve native observations through existi
 
 ## Keep it tidy
 
+**E001c native box rebuild:** `datasets/boxes.py` reuses native readers/transforms and frozen associations; `data/boxes.py` constructs center/size/velocity features, validates archives and standardizes model inputs; `experiments/e001c.py` owns the fixed population, policy, coverage/source statistics and fresh-output lifecycle. [E001c](experiments/E001c-bbox-inputs/README.md) owns schema and acceptance. Shared normalization accepts either existing xy-vector masks or explicit per-column validity. Existing training/sample interfaces and caches remain unchanged; no E001c training integration is included.
+
 - Shared operations live in data/models/training/evaluation; experiment modules own target semantics, eligibility, selected components and run settings. Shared modules do not import experiment modules; pass ordinary functions/settings where a policy differs.
 - Reuse existing functions, dictionaries, NumPy and PyTorch. Add abstractions only when concrete implementations require them; no plugin registry, speculative base classes or empty scaffolding.
 - Group models by family. Keep the two kinematic baselines and shared components together; add a new family file when implemented.

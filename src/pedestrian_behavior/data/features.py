@@ -24,10 +24,10 @@ def features(arrays, configuration):
 
 
 def fit_normalization(samples):
-    """Merge float64 centered moments; samples contain numerical values and flags."""
+    """Merge moments with one flag per xy vector, or explicit per-column validity."""
     count = mean = m2 = None
     for values, flags in samples:
-        valid = np.repeat(flags, 2, axis=1)
+        valid = flags if flags.shape == values.shape else np.repeat(flags, 2, axis=1)
         if values.dtype != np.float64 or valid.shape != values.shape or not np.isfinite(values[valid]).all():
             raise ValueError("Invalid physical features")
         if count is None:
@@ -59,7 +59,7 @@ def normalize(values, flags, statistics):
     if (mean.shape != (values.shape[1],) or scale.shape != mean.shape
             or not np.isfinite(mean).all() or not np.isfinite(scale).all() or (scale <= 0).any()):
         raise ValueError("Invalid frozen normalization")
-    valid = np.repeat(flags, 2, axis=1)
+    valid = flags if flags.shape == values.shape else np.repeat(flags, 2, axis=1)
     numerical = np.where(valid, (values-mean)/scale, 0.)
     result = np.concatenate((numerical, flags), axis=1).astype(np.float32)
     if not np.isfinite(result).all():

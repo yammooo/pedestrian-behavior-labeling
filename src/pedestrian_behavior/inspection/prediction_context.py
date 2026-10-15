@@ -185,7 +185,8 @@ class ContextCache:
         stamps = [(str(p.resolve()), p.stat().st_size, p.stat().st_mtime_ns) for p in sorted(set(files))]
         evidence = {"archive_sha256": checksum(archive), "manifest_sha256": checksum(manifest_path),
                     "source_files": stamps, "renderer": {p.name: checksum(p) for p in
-                    (Path(__file__), Path(__file__).with_name("prepared_tracks.py"), Path(__file__).with_name("render.py"))}}
+                    (Path(__file__), Path(__file__).with_name("prepared_tracks.py"), Path(__file__).with_name("render.py"),
+                     Path(loki.__file__), Path(road.__file__), Path(loki.__file__).with_name("bbox.py"))}}
         key = hashlib.sha256(json.dumps(evidence, sort_keys=True).encode()).hexdigest()
         destination = self.cache/"context"/key
         if (destination/"context.json").is_file():

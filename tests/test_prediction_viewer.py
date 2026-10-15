@@ -186,6 +186,30 @@ class PredictionViewerTest(unittest.TestCase):
         self.assertTrue(info['native_box2d']);self.assertTrue(info['road_box2d'])
         self.assertNotEqual((self.root/'0001-rgb.jpg').read_bytes(),(self.root/'0001-rgb-road.jpg').read_bytes())
 
+    def test_media_worker_reuses_context_across_models_and_manual_retry(self):
+        viewer=Viewer(run_fixture(self.root,2),self.root/'cache',AXES);self.addCleanup(viewer.close)
+        runs=[r['id'] for r in viewer.index.catalog()['runs']]
+        locator=next(iter(viewer.index.load(runs[0],'loki')['tracks']))
+        ready=threading.Event();release=threading.Event()
+        def prepare(*args,**kwargs):
+            ready.set();self.assertTrue(release.wait(2));return {'key':'test','frames':[]}
+        with patch.object(viewer.context,'prepare',side_effect=prepare) as render:
+            first=viewer.media(runs[0],'loki',locator);self.assertTrue(ready.wait(2))
+            other=viewer.media(runs[1],'loki',locator)
+            self.assertEqual(first['job'],other['job'])
+            release.set();viewer.futures[first['job']].result(timeout=2)
+            self.assertEqual(viewer.media(runs[1],'loki',locator)['status'],'ready')
+            self.assertEqual(render.call_count,1)
+        viewer.jobs.clear();viewer.futures.clear()
+        with patch.object(viewer.context,'prepare',side_effect=FileNotFoundError('unmounted')) as render:
+            first=viewer.media(runs[0],'loki',locator);viewer.futures[first['job']].result(timeout=2)
+            self.assertEqual(viewer.jobs[first['job']]['status'],'unavailable')
+            self.assertEqual(render.call_count,1)
+        with patch.object(viewer.context,'prepare',return_value={'key':'remounted'}) as render:
+            retry=viewer.media(runs[0],'loki',locator);viewer.futures[retry['job']].result(timeout=2)
+            self.assertEqual(viewer.jobs[retry['job']]['status'],'ready')
+            self.assertEqual(render.call_count,1)
+
     def test_native_loki_cache_alignment_reuse_and_source_invalidation(self):
         reader,_=native_readers(self.root,[0,200000],[pose(),pose()],{'p':{0:[1,2,0],1:[2,2,0]}})
         scenario=reader.root/'scenario_000'
@@ -196,6 +220,9 @@ class PredictionViewerTest(unittest.TestCase):
         counts=[];first=cache.prepare('loki',str(archive),metadata['track_locator'],lambda i,n:counts.append((i,n)))
         self.assertEqual(counts,[(1,2),(2,2)])
         self.assertTrue(first['frames'][0]['rgb']);self.assertFalse(first['frames'][0]['lidar'])
+        with self.assertRaisesRegex(ValueError,'timestamps differ'):
+            cache.prepare('loki',str(archive),metadata['track_locator'],lambda *_:None,
+                          expected={'grid_times_us':[1,2],'source_times_us':[0,200000]})
         with patch('pedestrian_behavior.inspection.prediction_context.native_frames',side_effect=AssertionError('decoded again')):
             second=cache.prepare('loki',str(archive),metadata['track_locator'],lambda *_:None)
         self.assertTrue(second['cache_hit']);self.assertEqual(first['key'],second['key'])

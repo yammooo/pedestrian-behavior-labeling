@@ -44,7 +44,7 @@ class Viewer:
         track = self.index.load(run, dataset)["tracks"][locator]
         key = hashlib.sha256(json.dumps([dataset, locator, track["archive"]]).encode()).hexdigest()
         with self.lock:
-            if key not in self.jobs or self.jobs[key]["status"] == "cancelled":
+            if key not in self.jobs or self.jobs[key]["status"] in ("cancelled", "unavailable"):
                 for old, future in self.futures.items():
                     if future.cancel():
                         self.jobs[old] = {"status": "cancelled"}
@@ -99,7 +99,7 @@ def handler(viewer):
             self.send_response(status)
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(data)))
-            self.send_header("Cache-Control", "no-store" if content_type == "application/json" else "private, max-age=3600")
+            self.send_header("Cache-Control", "private, max-age=3600" if content_type == "image/jpeg" else "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
             self.end_headers()
             self.wfile.write(data)

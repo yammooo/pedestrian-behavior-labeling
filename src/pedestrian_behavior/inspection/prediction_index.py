@@ -40,15 +40,15 @@ def track_scores(track, selected=None):
 
 def prepare_track(track, classes, cached_score=None):
     y, gt, logits = track["targets"], track["gt_valid"], track["logits"]
-    if (y.ndim != 1 or gt.shape != y.shape or gt.dtype != bool or not gt.any()
+    if (y.ndim != 1 or y.dtype.kind not in "iu" or gt.shape != y.shape or gt.dtype != bool or not gt.any()
             or logits.shape != (len(y), classes) or not np.isfinite(logits).all()
             or ((y[gt] < 0) | (y[gt] >= classes)).any()):
         raise ValueError("Invalid/empty-GT prediction track")
     for key in ("grid_times_us", "source_times_us"):
         if len(track[key]) != len(y):
             raise ValueError("Prediction timestamp length mismatch")
-    if any(np.asarray(v).shape != y.shape for v in track["conditions"].values()):
-        raise ValueError("Condition length mismatch")
+    if any(np.asarray(v).shape != y.shape for v in (*track["conditions"].values(), *track["source_flags"].values())):
+        raise ValueError("Condition/source-flag length mismatch")
     track["predicted"] = logits.argmax(1)
     scores = logits.astype(np.float64)
     scores -= scores.max(1, keepdims=True)

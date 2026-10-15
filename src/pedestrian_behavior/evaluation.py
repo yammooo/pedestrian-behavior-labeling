@@ -122,13 +122,15 @@ def save_predictions(path, tracks):
 def load_predictions(path):
     import json
     with np.load(path, allow_pickle=False) as saved:
-        metadata = json.loads(str(saved["metadata"]))
+        # NPZ access decompresses a complete field: do it once, not once per track.
+        arrays = {key: saved[key] for key in saved.files}
+        metadata = json.loads(str(arrays["metadata"]))
         tracks = []
         for i, entry in enumerate(metadata):
-            start, end = saved["offsets"][i:i+2]
-            track = entry | {k: saved[k][start:end].copy() for k in ("logits", "targets", "gt_valid")}
-            track["conditions"] = {k.removeprefix("condition_"): saved[k][start:end].copy() for k in saved.files if k.startswith("condition_")}
-            track["source_flags"] = {k.removeprefix("source_"): saved[k][start:end].copy() for k in saved.files if k.startswith("source_")}
+            start, end = arrays["offsets"][i:i+2]
+            track = entry | {k: arrays[k][start:end].copy() for k in ("logits", "targets", "gt_valid")}
+            track["conditions"] = {k.removeprefix("condition_"): value[start:end].copy() for k, value in arrays.items() if k.startswith("condition_")}
+            track["source_flags"] = {k.removeprefix("source_"): value[start:end].copy() for k, value in arrays.items() if k.startswith("source_")}
             tracks.append(track)
     return tracks
 

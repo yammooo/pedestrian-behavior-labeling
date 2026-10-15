@@ -22,6 +22,9 @@ cu118 = ["torch==2.7.1"]
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+"pedestrian_behavior.inspection" = ["*.html", "*.js"]
+
 [tool.uv]
 python-preference = "only-managed"
 environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]

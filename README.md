@@ -96,6 +96,34 @@ uv run --locked --extra cu118 python scripts/track-statistics.py --dataset road-
 
 Each scan writes `tracks.csv` and `summary.json`, including whole-track duration, observed/missing frames, modality masks, overlapping action cohorts and conservative 5 Hz window capacities. [LOKI](docs/datasets/loki.md#track-extents-and-gaps-2026-10-05) and [ROAD-Waymo](docs/datasets/road-waymo.md#track-extents-and-gaps-2026-10-05) own interpretation and limitations.
 
+## Inspect model predictions
+
+Run the browser viewer on `aalto` from its isolated checkout. It reads completed E001/E001b/E001c test predictions, including runs that finish while it is open after **Refresh runs**. No inference, training or W&B connection is needed.
+
+```bash
+cd /home/user20/projects/pedestrian-behavior-labeling-viewer
+uv run --locked --extra cu118 python -m pedestrian_behavior.inspection.predictions \
+  --loki-root /run/media/user20/F47C60057C5FC152/projects/loki_data \
+  --road-index /home/user20/road_waymo_mapping/merged_pedestrians_20261002 \
+  --waymo-root /run/media/user20/F47C60057C5FC152/projects/waymo_v2
+```
+
+From the ThinkPad, forward the loopback port and open [the viewer](http://127.0.0.1:8765):
+
+```bash
+ssh -F /home/yammo/.ssh/config -N -L 8765:127.0.0.1:8765 aalto
+```
+
+Choose the evaluation dataset and up to four runs (A–D); the run search matches experiment, training source, architecture, configuration, seed, budget and attempt name. The track table shows **one metric at a time**: accuracy, mean CE, supported-class macro-F1, or a selected GT→prediction confusion rate. Sort any model or its signed difference from A; accuracy/F1 differences use percentage points, CE differences use loss units. Smaller scores are worse for accuracy/F1; larger scores are worse for CE/confusion rate. These per-track diagnostics do not replace the experiment's four-class track-weighted primary score.
+
+An optional observation-axis/value filter selects tracks with matching context. **Matching frames** scores only accepted GT in that condition; **Whole track** retains complete-track scores. The table always distinguishes scored, matching and total GT counts. Unscored slices show `—`; minimum scored GT defaults to zero. Specific-confusion views show numerator/support and retain tracks where at least one selected model makes that error. Only identically defined/matching condition memberships shared by selected predictions are offered; E001's annotated-2D flags are not a substitute for verified E001b/E001c boxes.
+
+Click a track for synchronized RGB/crop/LiDAR BEV, GT and model timelines, probability values and a confusion matrix. Click a prediction row to choose the model for next/previous error navigation. Predictions on unlabeled context stay visible and unscored. Native boxes are yellow; the optional ROAD annotation overlay is cyan and never supplies missing Waymo input boxes or crops. LOKI source times are nominal; Waymo source times are physical. Missing observations are never interpolated. The trajectory view uses the fixed prepared coordinate frame separately from the native BEV.
+
+Native previews prepare once per track in a background worker, then reuse a separate cache across models/seeds. The first native visit can take time; progress and loading-frame status remain explicit. Missing native storage leaves scores/timelines usable. **Save case** records the run/prediction hashes, track/time, browsing state, reason and note in `outputs/inspection/prediction-viewer/reviews.json`; changed predictions prevent saved-case reopening. Browser links retain the current selection. This is retrospective test inspection: disclose it in subsequent research decisions; do not use it to retrospectively select seeds/checkpoints.
+
+`--outputs-root`, `--cache` and `--port` override local paths/port. Defaults are `outputs`, `outputs/inspection/prediction-viewer` and loopback 8765. The isolated remote checkout links its ignored `outputs` to the original machine-specific outputs; model results remain read-only. Locally use `--extra cpu` and available native roots. Neither model checkpoints nor prediction archives are copied into the viewer cache.
+
 ## Prepare and inspect complete tracks
 
 Steps 1–2 save every native candidate's complete 5 Hz extent, kinematics, masks and unchanged native supervision. Output directories must be fresh. The [schema](docs/datasets/README.md#reader-and-prepared-track-schema) and [E001 protocol](experiments/E001-kinematic-transfer/README.md) own interpretation. This does not train a model or project targets.

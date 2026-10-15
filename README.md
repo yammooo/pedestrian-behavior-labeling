@@ -236,6 +236,29 @@ uv run --locked --extra cu118 python scripts/prepare-e001c.py \
 
 These commands prepare caches only. The [native mount guidance](#e001b-bbox-extension) still applies. Local checks: `uv run --locked --extra cpu python -m unittest discover -s tests -p test_e001c.py`.
 
+## E001c training and evaluation
+
+Use the existing frozen E001 collections/setups and E001c `box-cache/{loki,road-waymo}/`; native storage is unnecessary. The [final protocol](experiments/E001c-bbox-inputs/README.md#inputs-and-bounded-comparison) fixes BiLSTM and `boxes` (19 inputs), `boxes-2d-size-vel` (21), `boxes-2d-3d-size-vel` (24). All share four flags, source-only normalization and E001/E001b's 13 evaluation axes.
+
+On `aalto`, the isolated checkout `/home/user20/projects/pedestrian-behavior-labeling-e001c` links its ignored E001/E001c output roots to the existing data. After pulling/verifying the intended `e001c-box-cache` revision, run:
+
+```bash
+cd /home/user20/projects/pedestrian-behavior-labeling-e001c
+uv run --locked --extra cu118 python scripts/train-e001c-seeds.py --jobs 2
+```
+
+This launches **30 attempts / 60 test cells**, seeds 0–4, max 75 epochs/patience 8, with two concurrent processes and two CPU threads per process. `--jobs 1` is sequential; `--seeds 0` runs six attempts. A fresh timestamped `outputs/experiments/E001c/runs/seeds-<UTC>/` contains `sweep.json`, per-attempt logs and readable source/configuration/BiLSTM/seed directories. Optional `--output <fresh-directory>` names the batch. Failures stop the queue and propagate, preserving evidence; no resume/retry. Reuse the [E001 tmux guidance](#e001-multiple-seeds) if needed.
+
+For one attempt:
+
+```bash
+uv run --locked --extra cu118 python scripts/train-e001c.py \
+  --source road-waymo --configuration boxes --seed 0 --device cuda \
+  --output outputs/experiments/E001c/runs/road-boxes-seed0
+```
+
+Single attempts default to 75/8 and accept `--seed`, `--epochs`, `--patience`. Local commands use `--extra cpu --device cpu`. `--smoke` restricts a ROAD CUDA attempt to one epoch, two training batches and one source-validation batch; it never evaluates held-out tests. Comparisons reload the source-validation-selected checkpoint, then evaluate both tests. Local checkpoints/predictions, PNG/SVG plots and tidy W&B step/epoch/final namespaces reuse the shared runner. W&B names include E001c/source/final configuration/BiLSTM/seed/UTC time; no model or prediction artifacts are uploaded. The 3D size-velocity variant remains a redundant-input control, as documented in the protocol. Full comparisons remain user-launched.
+
 ## E001 models
 
 The [model protocol](experiments/E001-kinematic-transfer/README.md#first-diagnostic-baseline) defines A (framewise MLP) and B (one-layer BiLSTM), with the same encoder/linear-head structure and independent weights. Generate data/model expected/actual acceptance evidence in a fresh directory:

@@ -10,7 +10,7 @@ import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from pedestrian_behavior.data.boxes import CONFIGURATIONS, FLAGS, box_features, box_inputs, column_validity, load_boxes
+from pedestrian_behavior.data.boxes import CONFIGURATIONS, FLAGS, INPUT_COLUMNS, box_features, box_inputs, column_validity, load_boxes
 from pedestrian_behavior.data.features import fit_normalization
 from pedestrian_behavior.data.preparation import checksum, load_track
 from pedestrian_behavior.datasets.road_waymo import TrackReader as RoadReader
@@ -69,6 +69,16 @@ class E001cTest(unittest.TestCase):
         shifted["values"][:2, 0] += 10
         np.testing.assert_allclose(box_inputs(shifted, "box3d", statistics)[:2, 0], [9, 11])
         self.assertEqual(statistics["mean"][0], 1)
+
+    def test_final_column_selection_is_15_17_20_plus_same_four_flags(self):
+        arrays = box_features([[0, 0, 0]]*2, [[1, 1, 2]]*2, [[0, 0, 1, 2]]*2, [0, 200000], pose())
+        arrays["values"][:] = np.arange(1, 21)
+        statistics = {"mean": [0]*20, "scale": [1]*20}
+        for configuration, count in INPUT_COLUMNS.items():
+            actual = box_inputs(arrays, configuration, statistics)
+            np.testing.assert_array_equal(actual[:, :count], [np.arange(1, count+1)]*2)
+            np.testing.assert_array_equal(actual[:, count:], np.ones((2, 4)))
+            self.assertEqual(actual.shape[1], count+4)
 
     def fixture(self, root, camera=None):
         helper = test_e001b.BboxTest()

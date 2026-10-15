@@ -24,6 +24,8 @@ src/pedestrian_behavior/
     e001_sweep.py           E001 seed matrix and command
     e001b_run.py            Bbox data/settings assembly and verified-bbox strata
     e001b_sweep.py          E001b BiLSTM-only seed matrix and command
+    e001c_run.py            E001c native-box inputs and shared-run assembly
+    e001c_sweep.py          E001c three-configuration BiLSTM seed matrix
   inspection/               Human inspection tools
 ```
 
@@ -45,7 +47,7 @@ Future RGB/LiDAR representations can retrieve native observations through existi
 
 ## Keep it tidy
 
-**E001c native box rebuild:** `datasets/boxes.py` reuses native readers/transforms and frozen associations; `data/boxes.py` constructs center/size/velocity features, validates archives and standardizes model inputs; `experiments/e001c.py` owns the fixed population, policy, coverage/source statistics and fresh-output lifecycle. [E001c](experiments/E001c-bbox-inputs/README.md) owns schema and acceptance. Shared normalization accepts either existing xy-vector masks or explicit per-column validity. Existing training/sample interfaces and caches remain unchanged; no E001c training integration is included.
+**E001c native boxes:** `datasets/boxes.py` reuses native readers/transforms and frozen associations; `data/boxes.py` constructs/validates physical features and selects 15/17/20 numeric columns plus identical four flags. Preparation-era selections remain available for frozen cache compatibility. `experiments/e001c.py` owns the cache policy, full-population/reference validation and a `TrackDataset` adapter that replaces all kinematic inputs with cached boxes, verifying cached targets against frozen GT. `e001c_run.py` supplies source-only statistics, 19/21/24-input BiLSTMs and E001/E001b's 13 diagnostics to unchanged `run.py`; saved predictions retain cache references and validity/source evidence. `e001c_sweep.py` supplies 30 attempts to unchanged `sweep.py`. [E001c](experiments/E001c-bbox-inputs/README.md) owns protocol and acceptance. Existing sample interfaces, models, training/evaluation algorithms and caches remain unchanged; no native cache regeneration is needed.
 
 - Shared operations live in data/models/training/evaluation; experiment modules own target semantics, eligibility, selected components and run settings. Shared modules do not import experiment modules; pass ordinary functions/settings where a policy differs.
 - Reuse existing functions, dictionaries, NumPy and PyTorch. Add abstractions only when concrete implementations require them; no plugin registry, speculative base classes or empty scaffolding.

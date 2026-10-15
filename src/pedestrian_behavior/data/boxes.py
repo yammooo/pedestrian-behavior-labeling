@@ -12,6 +12,7 @@ COLUMNS = ("x", "y", "z", "length", "width", "height", "vx", "vy", "vz",
            "velocity_width2d", "velocity_height2d", "velocity_length", "velocity_width", "velocity_height")
 FLAGS = ("box3d_valid", "box3d_velocity_valid", "box2d_valid", "box2d_velocity_valid")
 CONFIGURATIONS = {"box3d": 9, "box3d-2d": 17, "box3d-2d-size-velocity": 20}
+INPUT_COLUMNS = {"boxes": 15, "boxes-2d-size-vel": 17, "boxes-2d-3d-size-vel": 20}
 
 
 def column_validity(arrays):
@@ -57,7 +58,8 @@ def box_features(world_centers, sizes, corners, times, anchor):
 
 
 def box_inputs(arrays, configuration, statistics):
-    count = CONFIGURATIONS[configuration]
+    # Keep preparation-era selections available without changing frozen cache policy.
+    count = (CONFIGURATIONS | INPUT_COLUMNS)[configuration]
     numeric = normalize(arrays["values"], column_validity(arrays), statistics)[:, :count]
     flags = np.column_stack([arrays[name] for name in FLAGS])
     return np.concatenate((numeric, flags), axis=1).astype(np.float32)

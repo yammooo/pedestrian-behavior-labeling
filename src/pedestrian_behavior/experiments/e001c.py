@@ -1,4 +1,4 @@
-"""Recompute E001c bbox inputs from native data on the frozen E001 population."""
+"""E001c native cache preparation and samples on the frozen E001 population."""
 
 import argparse
 from collections import defaultdict
@@ -12,13 +12,15 @@ import sys
 import time
 
 import numpy as np
+import torch
 
-from pedestrian_behavior.data.boxes import COLUMNS, CONFIGURATIONS, FLAGS, box_features, box_inputs, column_validity, load_boxes
+from pedestrian_behavior.data.boxes import COLUMNS, CONFIGURATIONS, FLAGS, INPUT_COLUMNS, box_features, box_inputs, column_validity, load_boxes
 from pedestrian_behavior.data.features import fit_normalization
+from pedestrian_behavior.data.loading import TrackDataset
 from pedestrian_behavior.data.preparation import checksum, load_manifest, load_track, source_times
 from pedestrian_behavior.datasets.boxes import read_loki_geometry, read_waymo_geometry
 from pedestrian_behavior.datasets.loki import TrackReader as LokiReader
-from .e001 import CLASSES, targets
+from .e001 import CLASSES, dataset_from_setup, targets
 
 POLICY = {"numeric_columns": COLUMNS, "flags": FLAGS, "configurations": CONFIGURATIONS,
           "coordinates3d": "native box position transformed to world, initial ego xyz subtracted, initial yaw removed",
@@ -192,6 +194,59 @@ def prepare_boxes(collection, setup_path, native_input, output, waymo_root=None,
         if not unchanged:
             raise ValueError("Frozen E001 files changed during preparation")
     return record
+
+
+def load_cache(collection, setup_path, cache):
+    """Validate frozen policy and the full population before W&B initialization."""
+    record = json.loads((Path(cache)/"manifest.json").read_text())
+    setup = json.loads(Path(setup_path).read_text())
+    if (record.get("schema_version") != 1 or record.get("experiment") != "E001c" or record.get("status") != "complete"
+            or record["policy"] != json.loads(json.dumps(POLICY)) or record["dataset"] != setup["dataset"]
+            or checksum(setup_path) != record["setup"]["sha256"]
+            or checksum(Path(collection)/"manifest.json") != record["collection"]["manifest_sha256"]
+            or record["groups"] != setup["groups"] or record["population"] != setup["population"]):
+        raise ValueError("Incomplete or mismatched E001c cache")
+    expected = {e["locator"]: e for e in setup["tracks"] if not e["exclusions"]}
+    actual = {e["locator"]: e for e in record["tracks"]}
+    if (len(actual) != len(record["tracks"]) or set(actual) != set(expected)
+            or len({e["archive"] for e in actual.values()}) != len(actual)
+            or any(any(actual[key].get(k) != v for k, v in entry.items()) for key, entry in expected.items())):
+        raise ValueError("E001c cache changes frozen population/splits")
+    return record
+
+
+class BoxTrackDataset(TrackDataset):
+    """Use only recomputed box inputs; retain the existing sample interface."""
+
+    def __getitem__(self, index):
+        entry = self.entries[index]
+        original = self.collection/"tracks"/entry["archive"]
+        archive = self.cache/"tracks"/entry["archive"]
+        if checksum(original) != entry["e001_sha256"] or checksum(archive) != entry["boxes_sha256"]:
+            raise ValueError("E001c or original archive changed after preparation")
+        metadata, _ = load_track(original)
+        if metadata["track_locator"] != entry["locator"]:
+            raise ValueError("E001c setup/archive identity mismatch")
+        _, arrays = load_boxes(archive, metadata, entry["e001_sha256"])
+        y, gt = self.target_policy(metadata)
+        if not gt.any() or not np.array_equal(y, arrays["targets"]) or not np.array_equal(gt, arrays["gt_valid"]):
+            raise ValueError("E001c targets differ from frozen E001")
+        return {"inputs": torch.from_numpy(box_inputs(arrays, self.configuration, self.statistics)),
+                "targets": torch.from_numpy(y), "gt_valid": torch.from_numpy(gt),
+                "locator": metadata["track_locator"], "archive": str(original)}
+
+
+def dataset_from_cache(collection, setup_path, cache, split, configuration, statistics):
+    """Always receive the training SOURCE statistics, including for transfer."""
+    if configuration not in INPUT_COLUMNS:
+        raise ValueError("Unknown E001c configuration")
+    record = load_cache(collection, setup_path, cache)
+    frozen = dataset_from_setup(collection, setup_path, split, configuration, statistics)
+    by_locator = {e["locator"]: e for e in record["tracks"]}
+    entries = [by_locator[e["locator"]] for e in frozen.entries]
+    dataset = BoxTrackDataset(collection, entries, configuration, statistics, frozen.target_policy)
+    dataset.cache = Path(cache)
+    return dataset
 
 
 def main():

@@ -107,6 +107,16 @@ class FeatureProbeTest(unittest.TestCase):
         first.square().sum().backward()
         self.assertEqual(values.grad[0, 3:].count_nonzero(), 0)
 
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA unavailable")
+    def test_cuda_readout_finite_backward_and_pair_order(self):
+        torch.manual_seed(0)
+        model = ProbeReadout(128, 4).cuda().eval()
+        tokens = torch.randn(257, 68, device="cuda", requires_grad=True)
+        result = model(tokens)
+        torch.testing.assert_close(result, model(tokens.flip(0)), atol=1e-5, rtol=1e-4)
+        result.square().mean().backward()
+        self.assertTrue(torch.isfinite(tokens.grad).all())
+
 
 if __name__ == "__main__":
     unittest.main()

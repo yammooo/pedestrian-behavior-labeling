@@ -9,10 +9,12 @@ RGB_MEAN = np.array([.485, .456, .406], dtype=np.float32)
 RGB_STD = np.array([.229, .224, .225], dtype=np.float32)
 
 
-def square_crop(image, box, *, expansion=1.5):
+def square_crop(image, box, *, expansion=1.5, output_size=256):
     """Image-relative xyxy → centered expanded square; never shift at the border."""
     if not np.isfinite(expansion) or expansion <= 0:
         raise ValueError("Crop expansion must be finite and positive")
+    if not isinstance(output_size, int) or output_size <= 0:
+        raise ValueError("Crop output size must be a positive integer")
     if image is None or box is None:
         return None, {"valid": False, "reason": "missing-image-or-box"}
     b = np.asarray(box, dtype=np.float64) * np.tile(image.size, 2)
@@ -26,12 +28,12 @@ def square_crop(image, box, *, expansion=1.5):
     center = (b[:2]+b[2:])/2
     bounds = np.r_[center-side/2, center+side/2]
     # Sampling in output coordinates avoids allocating a huge out-of-image canvas.
-    scale = side/256
+    scale = side/output_size
     raw = np.asarray(image.convert("RGB"), dtype=np.float32)/255
     channels = []
     for c in range(3):
         channel = Image.fromarray(raw[:, :, c], mode="F")
-        channel = channel.transform((256, 256), Image.Transform.AFFINE,
+        channel = channel.transform((output_size, output_size), Image.Transform.AFFINE,
                                     (scale, 0, bounds[0], 0, scale, bounds[1]),
                                     resample=Image.Resampling.BICUBIC, fillcolor=float(RGB_MEAN[c]))
         channels.append(np.asarray(channel))

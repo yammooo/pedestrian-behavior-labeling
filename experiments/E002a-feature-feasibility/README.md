@@ -155,4 +155,19 @@ Completed at revision `792c9050653b74305758d9bb3853a9f96ece1b50` in **97.7 s** o
 
 The original native06/native07 and DINO gallery pages also link these side-by-side crop panels and expandable feature comparisons. Their numerical/provenance records retain the original 1.5× evidence; the 2×/3× data live only in `dino-crop-scales/`. The E002 working crop choice remains 1.5× pending a behavior-based comparison.
 
+### Whole-track window videos — 2026-10-19
+
+Authorized qualitative extension: **ten complete pedestrian tracks, five per dataset**, drawn only from the existing probe's development groups. Prefer tracks with the most paired native 2D/3D slots and distinct scenes, breaking ties by paired coverage and stable identity. This is purposive observation coverage, not a representative sample or behavior-based selection. Preserve every frozen 5 Hz slot through each full native track extent, including unlabeled/missing context; no interpolation, trimming or last-frame reuse.
+
+Left: one centered **3× max-box-side RGB window**, native target box in white, thin 1.5×/2×/3× crop outlines in cyan/yellow/magenta. Display samples to640² for readability; model crops/defaults remain256²/1.5×. Right: the pinned frozen nuScenes D-DITR semantic head on each full native scan, then pedestrian-centered BEV of decoded 5 cm voxel points within **30 m horizontal radius**, no height cutoff. Draw **15/20/30 m radius circles**, the native target cuboid footprint and class legend. Use the same fixed initial ego-heading/world-horizontal coordinates as E002a; up is initial forward, screen-right is initial right. Scene inference uses the original axis/strength/pose contracts. The views are synchronized by saved native references and labeled grid/native times. Missing RGB or usable 3D observations produce explicit placeholders independently.
+
+```bash
+probe_root="$PWD/outputs/experiments/E002a"
+uv run --no-project --python "$probe_root/extractor-env/bin/python" python scripts/video-e002a-tracks.py \
+  --probe "$probe_root/native-probe-07" \
+  --output "$probe_root/track-window-videos" --device cuda
+```
+
+Fresh outputs: ten H.264 MP4s at1440×900/5fps, first/middle/last PNGs, `index.html`, per-video encoder logs and `videos.json` with track selection, per-frame identities/times/crop bounds/support, checkpoint/revision references and failure evidence. `ffprobe` must confirm one encoded frame per frozen slot and5fps. Protected archives/setup/manifests/checkpoint/config are hashed before/after. Geometry tests use known nested squares and metric offsets/radius boundaries; missing observations never inherit another timestep. No DINO feature extraction, training, held-out access or segmentation accuracy claim. Execution/acceptance results pending.
+
 Retained earlier manual attempts: `dino-visual-check` failed the CLS comparison because single-crop FP16 inference changed batch composition; `dino-visual-check-02` reproduced all LOKI examples but failed on a serialized native-root string passed to the ROAD reader. Matching original batches and restoring a `Path` fixed those failures; regression checks cover both. No automatic retry or overwritten evidence. Full CPU **91 tests / six CUDA skips**, CUDA **91**, and final isolated extractor **13** checks pass; numerical fixtures reconstruct cosine maps and all four questioned ROAD counts, and documentation links/`git diff --check` pass. Logs: `outputs/experiments/E002a/dino-visual-{cpu,cuda,extractor}-acceptance.log`.

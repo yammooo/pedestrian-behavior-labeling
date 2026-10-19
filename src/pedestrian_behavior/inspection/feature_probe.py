@@ -77,13 +77,13 @@ def dino_sheet(crop, colors, similarity, seed, output):
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     fig, axes = plt.subplots(1, 4, figsize=(14, 4))
-    axes[0].imshow(crop)
+    axes[0].imshow(np.clip(crop, 0, 1))
     axes[0].plot((seed[1]+.5)*16, (seed[0]+.5)*16, "r+", markersize=14)
     axes[1].imshow(colors, interpolation="nearest", extent=(0, 256, 256, 0))
     heat = axes[2].imshow(similarity, cmap="viridis", vmin=-1, vmax=1, interpolation="nearest")
     axes[2].plot(seed[1], seed[0], "r+", markersize=14)
     fig.colorbar(heat, ax=axes[2], fraction=.046)
-    axes[3].imshow(crop)
+    axes[3].imshow(np.clip(crop, 0, 1))
     axes[3].imshow(similarity, cmap="viridis", vmin=-1, vmax=1, interpolation="nearest",
                    extent=(0, 256, 256, 0), alpha=.5)
     for ax, title in zip(axes, ("Exact crop; box-centre patch", "Per-crop PCA (arbitrary colors)",

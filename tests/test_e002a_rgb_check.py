@@ -42,7 +42,7 @@ class DinoVisualCheckTest(unittest.TestCase):
             weights.write_bytes(b"fixture")
             source = {"status": "complete", "protected": {}, "config": {
                 "dino_code": "fixture", "dino_weights": str(weights), "loki_root": None,
-                "road_index": None, "waymo_root": None}, "frames": [{"dataset": "loki", "group": "group",
+                "road_index": None, "waymo_root": "/fixture/waymo"}, "frames": [{"dataset": "loki", "group": "group",
                     "key": "0000", "split": "training", "rendered": True, "tracks": tracks}]}
             source_path = probe/"probe.json"
             source_path.write_text(json.dumps(source))
@@ -64,11 +64,12 @@ class DinoVisualCheckTest(unittest.TestCase):
             reader = SimpleNamespace(sources={"sha256": "fixture"})
             output = probe.parent/"visual-check"
             with patch(module+"ImageEncoder", Encoder), patch(module+"loki.TrackReader", return_value=reader), \
-                 patch(module+"road_waymo.TrackReader", return_value=reader), \
+                 patch(module+"road_waymo.TrackReader", return_value=reader) as road_reader, \
                  patch(module+"native_camera", return_value=iter([("0000", image, boxes)])), \
                  patch(module+"crop_sheet"), patch(module+"dino_sheet"), \
                  patch(module+"patch_maps", return_value=(np.zeros((16, 16, 3)), np.ones((16, 16)))):
                 run(SimpleNamespace(probe=probe, output=output, device="cpu"))
+            self.assertIsInstance(road_reader.call_args.args[1], Path)
             result = json.loads((output/"visual-check.json").read_text())
             self.assertEqual(result["status"], "complete")
             self.assertEqual(batches, [16, 16, 1])

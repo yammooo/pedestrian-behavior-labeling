@@ -87,7 +87,8 @@ def run(args):
             if dataset == "loki":
                 reader = loki.TrackReader(config["loki_root"] or manifest["sources"]["root"], probe/"loki-transform.json")
             else:
-                reader = road_waymo.TrackReader(config["road_index"] or manifest["sources"]["index"], config["waymo_root"])
+                waymo_root = Path(config["waymo_root"]) if config["waymo_root"] else None
+                reader = road_waymo.TrackReader(config["road_index"] or manifest["sources"]["index"], waymo_root)
                 if reader.sources["sha256"] != manifest["sources"]["sha256"]:
                     raise ValueError("Frozen ROAD index changed")
             grouped = defaultdict(dict)

@@ -63,7 +63,10 @@ class PointEncoder:
         self.model = nn.Module()
         self.model.backbone = point_cls(**backbone)
         self.model.seg_head = nn.Linear(64, 16)
-        state = torch.load(checkpoint, map_location="cpu", weights_only=True)["state_dict"]
+        # The verified author checkpoint includes NumPy scalar metric metadata.
+        with torch.serialization.safe_globals([(np._core.multiarray.scalar, "numpy.core.multiarray.scalar"),
+                                               np.dtype, np.dtypes.Float64DType, np.dtypes.Float32DType]):
+            state = torch.load(checkpoint, map_location="cpu", weights_only=True)["state_dict"]
         state = {key.removeprefix("module."): value for key, value in state.items()}
         self.model.load_state_dict(state, strict=True)
         self.model.requires_grad_(False).eval().to(device)
@@ -82,6 +85,8 @@ class PointEncoder:
         from pointcept.models.utils.structure import Point
         with torch.inference_mode(), torch.autocast(device_type="cuda", dtype=torch.float16, enabled=str(self.device).startswith("cuda")):
             output = self.model.backbone(Point(data))
+            if not torch.equal(output.coord, coord):
+                raise ValueError("Decoded feature coordinates changed order")
             features = output.feat
             logits = self.model.seg_head(features)
         if features.shape != (len(selected), 64) or not torch.isfinite(features).all() or not torch.isfinite(logits).all():

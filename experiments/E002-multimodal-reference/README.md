@@ -20,7 +20,7 @@ Existing [experiment partitions](../E001-kinematic-transfer/README.md#splits-and
 
 ## RGB branch
 
-Frozen **DINOv3 ViT-B/16 LVD-1689M**, 256² RGB input and its **768-channel normalized CLS descriptor**. One centered square crop of side `1.5 × max(native bbox width, height)`; preserve its intended location at image boundaries and pad with pretrained RGB mean. No image intersection of the target box means missing RGB; retain partial boxes and record crop padding/intersection. Numeric bbox geometry remains unclipped. Project CLS to256. No full-image branch, crop augmentation or patch retrieval initially. [Official model/interfaces/transforms](https://github.com/facebookresearch/dinov3); actual checkpoint access and native extraction are E002a gates, not assumed success. Web-pretraining overlap remains unknown.
+Frozen **DINOv3 ViT-B/16 LVD-1689M**, 256² RGB input and its **768-channel normalized CLS descriptor**. One centered square crop of side `1.5 × max(native bbox width, height)`; preserve its intended location at image boundaries and pad with pretrained RGB mean. No image intersection of the target box means missing RGB; retain partial boxes and record crop padding/intersection. Numeric bbox geometry remains unclipped. Project CLS to256. No full-image branch, crop augmentation or patch retrieval initially. [Official model/interfaces/transforms](https://github.com/facebookresearch/dinov3); checkpoint/native extraction passed the bounded [E002a probe](../E002a-feature-feasibility/README.md#rgb-checkpoint-completion--2026-10-19); descriptor utility remains untested. Web-pretraining overlap remains unknown.
 
 ## Point-cloud branch
 
@@ -71,4 +71,4 @@ Retain AdamW betas(.9,.999), epsilon1e-8, weight decay1e-4, clip1 and equal-trac
 
 Execute only [E002a](../E002a-feature-feasibility/README.md): verify actual encoder/native contracts, semantic BEV/box alignment and RGB crops; preserve point-coordinate correspondence; measure all-token readout/whole-track shapes and cache/storage estimates. Review evidence before full preparation or training implementation. Unsupported operations and logging/extraction failures remain visible; do not silently substitute checkpoints, truncate tracks or change native populations.
 
-**Results:** no behavior runs. Native extraction/resource results belong to E002a; remaining decisions are cache representation/resource limits/internal spatial width after that report, plus verified RGB weight access. An empirical paper does not require a new architecture; any later mechanism claim needs a falsifiable matched comparison.
+**Results:** no behavior runs. Native extraction/resource results belong to E002a; remaining decisions are cache representation/resource limits/internal spatial width after that report, with both frozen encoder interfaces now verified on the bounded native sample. An empirical paper does not require a new architecture; any later mechanism claim needs a falsifiable matched comparison.

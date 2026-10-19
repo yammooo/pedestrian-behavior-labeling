@@ -30,7 +30,9 @@ Use a **15 m horizontal cylinder**, no height cutoff, centered on the observed n
 
 Readout: shared learned **unconditioned** seed tokens, one cross-attention block with four heads and an FFN, followed by concatenation of seed outputs and projection to256. Geometry/RGB do not condition these seeds initially. Probe internal widths128/256 and one/four seeds for resources; later source-validation pilot compares one/four seeds at a fixed chosen width. No full point-to-point self-attention adapter. This PMA-style aggregation is established [Set Transformer machinery](https://proceedings.mlr.press/v97/lee19d.html), not a novel method claim.
 
-Fixed mean/max is a cheap possible control, not the chosen default: it discards explicit feature-position associations, whereas the proposed readout retains them until task-trained aggregation. DINO CLS is itself learned compression, not a guarantee of retaining behavior-relevant scene relations. Full-track-conditioned spatial retrieval remains a conditional E003 hypothesis, not required for this reference.
+### Spatial readout objection and revised proposal (2026-10-16)
+
+The 16 October discussion replaced mandatory mean/max pooling with coordinate-bearing spatial access; it considered fixed grids or geometry-conditioned seeds. On 19 October the user chose shared **unconditioned** seeds initially, with conditioning deferred. Fixed mean/max is a cheap possible control, not the chosen default: it discards explicit feature-position associations, whereas the proposed readout retains them until task-trained aggregation. DINO CLS is itself learned compression, not a guarantee of retaining behavior-relevant scene relations. Full-track-conditioned spatial retrieval remains a conditional E003 hypothesis, not required for this reference.
 
 ## Fusion and temporal head
 

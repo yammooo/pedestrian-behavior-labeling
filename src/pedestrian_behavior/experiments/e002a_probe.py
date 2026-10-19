@@ -8,6 +8,7 @@ import faulthandler
 import hashlib
 import html
 import json
+from importlib.metadata import distributions
 import os
 from pathlib import Path
 import platform
@@ -196,6 +197,7 @@ def run(args):
     max_slots = 0
     started = time.perf_counter()
     write_json(output/"probe.json", record)
+    write_json(output/"dependencies.json", {d.metadata["Name"]: d.version for d in distributions()})
     def protect(path):
         protected[str(path.resolve())] = checksum(path)
     try:

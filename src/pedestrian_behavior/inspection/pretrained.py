@@ -64,7 +64,8 @@ class PointEncoder:
         self.model.backbone = point_cls(**backbone)
         self.model.seg_head = nn.Linear(64, 16)
         # The verified author checkpoint includes NumPy scalar metric metadata.
-        with torch.serialization.safe_globals([(np._core.multiarray.scalar, "numpy.core.multiarray.scalar"),
+        with torch.serialization.safe_globals([np._core.multiarray.scalar,
+                                               (np._core.multiarray.scalar, "numpy.core.multiarray.scalar"),
                                                np.dtype, np.dtypes.Float64DType, np.dtypes.Float32DType]):
             state = torch.load(checkpoint, map_location="cpu", weights_only=True)["state_dict"]
         state = {key.removeprefix("module."): value for key, value in state.items()}

@@ -411,4 +411,4 @@ The [DINO patch visual check](experiments/E002a-feature-feasibility/README.md#di
 
 Add `--compare-crop-scales` with a fresh output directory for the [1.5×/2×/3× side-by-side diagnostic](experiments/E002a-feature-feasibility/README.md#crop-size-visual-comparison--2026-10-19); every crop remains 256×256. This does not change the E002 training proposal's 1.5× input.
 
-For [ten full-track window videos](experiments/E002a-feature-feasibility/README.md#whole-track-window-videos--2026-10-19), use `scripts/video-e002a-tracks.py --help` in the same isolated GPU environment. Each combines a3× RGB crop with nested1.5×/2×/3× outlines and target-centered semantic LiDAR with15/20/30m radius rings.
+For [ten full-track window videos](experiments/E002a-feature-feasibility/README.md#whole-track-window-videos--2026-10-19), use `scripts/video-e002a-tracks.py --help` in the same isolated GPU environment. Each combines a 3× RGB crop with nested 1.5×/2×/3× outlines and target-centered semantic LiDAR with 15/20/30 m radius rings.

@@ -11,7 +11,7 @@ import numpy as np
 from PIL import Image
 import torch
 
-from pedestrian_behavior.experiments.e002a_rgb_check import run
+from pedestrian_behavior.experiments.e002a_rgb_check import refresh_probe_gallery, run
 from pedestrian_behavior.inspection.feature_probe import square_crop
 
 
@@ -82,6 +82,26 @@ class DinoVisualCheckTest(unittest.TestCase):
                 self.assertEqual(saved["patches"].shape, (16, 16, 768))
                 np.testing.assert_array_equal(saved["cls"], original[0])
             self.assertIn("17/20 valid crops", (output/"index.html").read_text())
+            # The original 3D gallery must show the BEV and corrected crops,
+            # while preserving numerical evidence and the old presentation.
+            (probe/"index.html").write_text("original gallery")
+            (probe/"panels").mkdir()
+            image.save(probe/"panels"/(label+"-bev.png"))
+            for example in frame["examples"]:
+                image.save(output/"panels"/(example["name"]+"-crop.png"))
+            refresh_probe_gallery(probe, output)
+            page = (probe/"index.html").read_text()
+            self.assertIn("Native RGB + LiDAR checks", page)
+            self.assertIn("17/20 valid crops", page)
+            self.assertIn("Missing target crop — scene context only", page)
+            self.assertNotIn("Existing LiDAR BEV</summary>", page)
+            self.assertEqual((probe/"index-before-crop-fix.html").read_text(), "original gallery")
+            self.assertEqual(source_path.read_bytes(), before)
+            result["frames"][0]["valid_crops"] = 0
+            (output/"visual-check.json").write_text(json.dumps(result))
+            with self.assertRaises(ValueError):
+                refresh_probe_gallery(probe, output)
+            self.assertEqual((probe/"index.html").read_text(), page)
 
 
 if __name__ == "__main__":

@@ -24,26 +24,66 @@ from pedestrian_behavior.inspection.pretrained import ImageEncoder
 from .e002a_probe import write_json
 
 
-def gallery(record, output, probe):
-    lines = ['<!doctype html><html lang="en"><meta charset="utf-8"><title>DINO development checks</title>',
+def gallery(record, output, probe, *, panels=None, native=False):
+    panels = panels or output
+    title = "Native RGB + LiDAR checks" if native else "DINO patch sanity checks"
+    lines = [f'<!doctype html><html lang="en"><meta charset="utf-8"><title>{title}</title>',
         '<style>body{font:16px system-ui;background:#202020;color:white;margin:24px}a{color:#8cf}img{max-width:100%}article{margin-bottom:35px}summary{cursor:pointer}</style>',
-        '<h1>DINO patch sanity checks</h1><p>Development crops only. PCA colors are fitted independently per crop and cannot be compared across examples. Similarity is to the marked box-centre patch, which may contain background or occlusion. These are neither segmentation nor behavior predictions. Patch resolution is 16×16; overlays only enlarge it.</p>',
+        f'<h1>{title}</h1>',
         '<p>Counts cover represented eligible tracks on their frozen grids, not every person in the image. Valid crops appear first; one missing example follows. A scene RGB image can exist without a target FRONT box.</p>']
+    if native:
+        lines.append('<p>Original 3D semantic predictions with corrected target-crop selection. Missing-crop examples are collapsed scene context, not empty pedestrian crops. No encoder inference was repeated.</p>')
+    else:
+        lines.append('<p>Development crops only. PCA colors are fitted independently per crop and cannot be compared across examples. Similarity is to the marked box-centre patch, which may contain background or occlusion. These are neither segmentation nor behavior predictions. Patch resolution is 16×16; overlays only enlarge it.</p>')
     for frame in record["frames"]:
         label = frame["label"]
         lines.append(f'<article><h2>{html.escape(label)}</h2><p><b>{frame["valid_crops"]}/{frame["tracks"]} valid crops</b>; {len(frame["examples"])} displayed examples.</p>')
         bev = probe/"panels"/(label+"-bev.png")
         if bev.exists():
             link = html.escape(os.path.relpath(bev, output), quote=True)
-            lines.append(f'<details><summary>Existing LiDAR BEV</summary><img loading="lazy" src="{link}"></details>')
+            image = f'<a href="{link}"><img loading="lazy" src="{link}"></a>'
+            lines.append(image if native else f'<details><summary>Existing LiDAR BEV</summary>{image}</details>')
+        if not frame["valid_crops"]:
+            lines.append('<p><b>No valid target FRONT/RGB crop at this timestamp.</b></p>')
         for example in frame["examples"]:
             name = example["name"]
+            missing = not example["crop"]["valid"]
+            if missing:
+                lines.append('<details><summary>Missing target crop — scene context only</summary>')
             lines.append(f'<p>{html.escape(example["locator"])} — {html.escape(example["crop"].get("reason", "valid crop"))}</p>')
-            for suffix in (["crop", "dino"] if example["crop"]["valid"] else ["crop"]):
-                path = f"panels/{name}-{suffix}.png"
+            for suffix in (["crop", "dino"] if not missing and not native else ["crop"]):
+                path = html.escape(os.path.relpath(panels/"panels"/f"{name}-{suffix}.png", output), quote=True)
                 lines.append(f'<a href="{path}"><img loading="lazy" src="{path}"></a>')
+            if missing:
+                lines.append('</details>')
         lines.append('</article>')
     (output/"index.html").write_text("\n".join(lines)+"</html>\n")
+
+
+def refresh_probe_gallery(probe, visual):
+    """Replace only presentation HTML, retaining the former gallery as evidence."""
+    probe, visual = Path(probe), Path(visual)
+    source = json.loads((probe/"probe.json").read_text())
+    corrected = json.loads((visual/"visual-check.json").read_text())
+    if source["status"] != "complete" or corrected["status"] != "complete":
+        raise ValueError("Only completed probe/visual evidence can refresh a gallery")
+    frames = {f"{f['dataset']}-{f['group']}-{f['key']}": f for f in source["frames"] if f.get("rendered")}
+    if set(frames) != {f["label"] for f in corrected["frames"]}:
+        raise ValueError("Probe and corrected gallery frame sets differ")
+    for frame in corrected["frames"]:
+        original = frames[frame["label"]]["tracks"]
+        by_id = {t["locator"]: t for t in original}
+        if frame["tracks"] != len(original) or frame["valid_crops"] != sum(t["crop"]["valid"] for t in original):
+            raise ValueError("Corrected crop counts differ from original numerical evidence")
+        for example in frame["examples"]:
+            if example["crop"] != by_id[example["locator"]]["crop"]:
+                raise ValueError("Corrected example differs from original native crop")
+            if not (visual/"panels"/(example["name"]+"-crop.png")).is_file():
+                raise ValueError("Missing corrected crop panel")
+    snapshot = probe/"index-before-crop-fix.html"
+    if not snapshot.exists():
+        snapshot.write_bytes((probe/"index.html").read_bytes())
+    gallery(corrected, probe, probe, panels=visual, native=True)
 
 
 def run(args):

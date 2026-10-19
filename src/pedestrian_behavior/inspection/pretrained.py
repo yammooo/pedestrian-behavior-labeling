@@ -148,16 +148,18 @@ class PointEncoder:
 class ImageEncoder:
     def __init__(self, code, checkpoint, device):
         code = verify_code(code, DINO_REVISION)
+        # hubconf eagerly imports unrelated segmentation heads/torchmetrics.
+        sys.path.insert(0, str(code))
+        factory = importlib.import_module("dinov3.hub.backbones").dinov3_vitb16
         if Path(checkpoint).suffix == ".safetensors":
             if checksum(checkpoint) != DINO_HF_SHA256:
                 raise ValueError("Unexpected official HF DINOv3 ViT-B/16 checkpoint checksum")
             from safetensors.torch import load_file
-            self.model = torch.hub.load(str(code), "dinov3_vitb16", source="local", pretrained=False)
+            self.model = factory(pretrained=False)
             state = image_state_from_hf(load_file(str(checkpoint)), self.model.state_dict())
             self.model.load_state_dict(state, strict=True)
         else:
-            self.model = torch.hub.load(str(code), "dinov3_vitb16", source="local", pretrained=True,
-                                        weights=str(Path(checkpoint).resolve()))
+            self.model = factory(pretrained=True, weights=str(Path(checkpoint).resolve()))
         self.model.requires_grad_(False).eval().to(device)
         self.device = device
 

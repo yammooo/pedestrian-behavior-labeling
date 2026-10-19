@@ -28,11 +28,13 @@ Save raw-height BEV, semantic BEV and an oblique height-preserving point view wi
 
 ## Resource workload and estimates
 
-Temporary benchmark graph only; no optimizer updates or trained behavior labeler. Shared unconditioned learned seeds, one spatial cross-attention block/four heads/FFN; internal widths 128/256 × one/four seeds; output256. Geometry64 + RGB256 + LiDAR256 + three flags =579 →256. Two bidirectional pre-norm temporal layers, width256/four heads/FFN1024/dropout0.1, sinusoidal elapsed grid time, four-class readout. Profile FP32 forward/backward for whole-track microbatch shapes 1/2/4/8. Repeat the largest observed neighborhood at every slot of the longest eligible training track: this conservative shape test is **not measured training throughput or actual complete-track extraction**. Record OOMs without retry/truncation.
+Temporary benchmark graph only; no optimizer updates or trained behavior labeler. Shared unconditioned learned seeds, one spatial cross-attention block/four heads/FFN; internal widths 128/256 × one/four seeds; output256. Geometry64 + RGB256 + LiDAR256 + three flags =579 →256. Two bidirectional pre-norm temporal layers, width 256/four heads/FFN1024/dropout0.1, sinusoidal elapsed grid time, four-class readout. Profile FP32 forward/backward for whole-track microbatch shapes 1/2/4/8. Repeat the largest observed neighborhood at every slot of the longest eligible training track: this conservative shape test is **not measured training throughput or actual complete-track extraction**. Record OOMs without retry/truncation.
 
 Estimate training/validation float32 payload and point-GPU extraction time per dataset using the random sample, scaling frame means by eligible scene-slot counts then averaging sampled group totals. Compare whole-scene sharing, per-frame neighborhood union sharing and duplicated pedestrian neighborhoods. Report RGB separately. Estimates exclude test preparation, index/inverse-map overhead, compression and native I/O; warm/cold kernel effects and small sample uncertainty limit precision. Cache representation, spatial width, any token limit and disk ceiling remain undecided until this report is reviewed.
 
 ## Environment and command
+
+Official HF `model.safetensors` is also accepted: SHA256 `9a21ac3df0c63839d62612dda6f454d816c25611cc7a52966ed5a5a94921dc8b` at model revision `5931719e67bbdb9737e363e781fb0c67687896bc`. Its parameter names are converted back using the [official Transformers mapping](https://github.com/huggingface/transformers/blob/main/src/transformers/models/dinov3_vit/convert_dinov3_vit_to_hf.py), then strictly loaded into the pinned original backbone. Reconstruct only deterministic RoPE/bias-mask buffers and the masked zero key bias; learned weights must all be present. No alternate model implementation or Transformers dependency is introduced.
 
 Use an isolated ignored `outputs/experiments/E002a/extractor-env`; never change E001 environments or add CUDA encoder dependencies to the main project. [Pinned direct dependencies](requirements.txt); save the fully resolved freeze/check output with execution evidence. CUDA 12.6 PyTorch wheels and matching prebuilt FlashAttention/torch-scatter avoid the host's older CUDA 11.7 compiler. Author PTv3 source is loaded without its eager imports of unrelated custom-op architectures; source files are not patched. The adapter verifies code revisions and weight/config hashes.
 
@@ -53,6 +55,43 @@ uv run --no-project --python "$probe_root/extractor-env/bin/python" python scrip
 
 `--road-index` and `--outputs-root` override frozen-reference storage locations without rewriting manifests. Output directory must be fresh and under `outputs-root/experiments/E002a`. Omitting `--dino-weights` explicitly produces partial LiDAR/crop evidence; there is no alternate RGB checkpoint fallback. Results are local `probe.json`, `report.md`, `index.html`, `panels/`, `fixtures/` and `workloads.json`; failures retain traceback/status and propagate. No resume/retry framework.
 
-## Execution evidence
+## Execution evidence — 2026-10-19
 
-Pending native execution. D-DITR weights and compatible CUDA extensions are available on aalto. DINOv3 official weights requested from user because model access is gated. Do not infer compatibility or useful segmentation from successful installation.
+The bounded LiDAR/crop attempt **native-probe-06** completed in 269 s on aalto at revision `f9ff228`, with explicit partial status because RGB weights were unavailable at execution. **75 native development frames**: 38 LOKI / 37 ROAD-Waymo, including separate training-only stress cases. First-frame repeated extraction was **identical (max error 0)** in both datasets. All **663 protected** sampled archives/setup/collection manifests retained their hashes. No behavior training, held-out inference, W&B runs or full caches.
+
+| Measurement | LOKI | ROAD-Waymo |
+|---|---:|---:|
+| Native points/frame, median |231,936|174,021|
+| Spatial tokens/frame, median |105,344|150,063|
+| Encoder wall seconds/frame, median |0.196|0.232|
+| Peak PyTorch allocated GiB during extraction |0.91|1.07|
+| Represented eligible track/slots |474|418|
+| Valid native RGB crops |156|120|
+| Nonempty-neighborhood tokens, median / maximum |17,453 /66,991|15,434.5 /70,056|
+
+Counts describe the bounded sample, not full-population coverage estimates. Some observed targets have no target-box returns; 29 LOKI /40 ROAD track/slots have zero target-box voxel support, including missing/unusable boxes. Preserve their context/other branches rather than filtering them out.
+
+The inspected LOKI and ROAD panels show recognizable scene structure and plausible object/surface regions, with mixed road/other-flat/sidewalk/terrain predictions. This is a **qualitative observation on selected development images**, not verified segmentation correctness or evidence of behavior recoverability. Native image/crop overlays inspected so far match the declared square crop. Different sensor origin/height remains a domain-shift limitation; do not tune a coordinate translation against semantic appearance alone.
+
+### Resource gate
+
+All 16 conservative whole-track shapes (102 slots,70,056 tokens at every slot, widths128/256 × seeds1/4 × tracks1/2/4/8) reached CUDA OOM. This does **not** establish that every actual track fails. A separate **single-frame synthetic-zero workload at the measured maximum count** passed all 16 configurations with finite backward: one-frame/one-track peak about 0.30 GiB at width 128,0.50 GiB at 256; eight frames about 1.12/2.03 GiB. Its first-call timing includes warm-up and is not steady training throughput. The spatial adapter itself fits; retaining its activations across long tracks is the direct-graph bottleneck. Frame streaming/checkpointing or a declared token reduction need a decision, not silent truncation.
+
+Float32 payload estimates from the random groups, **excluding test preparation, indexes/inverse-map overhead and native I/O**:
+
+| Dataset / split | Full-scene GiB | Neighborhood-union GiB | Duplicated track-neighborhood GiB | RGB CLS GiB |
+|---|---:|---:|---:|---:|
+|LOKI training|821.78|362.82|1302.26|0.374|
+|LOKI validation|85.88|36.49|84.59|0.026|
+|ROAD training|1575.75|462.21|1490.07|0.299|
+|ROAD validation|562.20|318.03|1313.70|0.161|
+
+Even union sharing totals about **1,180 GiB / 1.15 TiB**; the laptop has about 511 GiB free after extraction environment setup. RGB CLS is approximately 0.86 GiB total and has no comparable storage concern. These small-sample group-scaled estimates can vary substantially; they are sufficient to reject assuming unbounded float32 point caches fit. Point-encoder wall-time extrapolation sums to about 5.9 hours; native I/O, transfer, indexes and caching can add time. Cache layout, budget, numeric precision and spatial token limits remain open; none was applied automatically.
+
+### Artifacts and acceptance
+
+Full evidence is under `/home/user20/projects/pedestrian-behavior-labeling-review/outputs/experiments/E002a/native-probe-06/` on aalto. [Local report](../../outputs/experiments/E002a/native-probe-06/report.md), [panel gallery](../../outputs/experiments/E002a/native-probe-06/index.html), [numerical/provenance record](../../outputs/experiments/E002a/native-probe-06/probe.json), [whole-track workloads](../../outputs/experiments/E002a/native-probe-06/workloads.json) and `single-frame-workloads/` are ignored outputs. All 27 spatial fixtures, panels and numerical records have been collected locally; generated artifacts stay outside Git. Independent fixture checks reconstruct semantic counts exactly and verify finite float32 data, native selected-coordinate correspondence and pickle-free loading.
+
+Earlier manual attempts are preserved alongside `execution-audit.json`: restricted NumPy checkpoint metadata (01), old sparse runtime NumPy SIGFPE (02/03), evaluation-autocast sparse dtype mismatch (04), and residual pooling-order shuffling (05). Fixed using specific safe scalar allowlisting, spconv-cu126 2.3.8 / cumm-cu126 0.7.11, author-style inference precision and disabling **all** serialization-order shuffling. No automatic retries or checkpoint substitutions.
+
+CPU suite: 87 tests with six CUDA skips; CUDA suite: all 87; isolated extractor probe checks: all 9. The official conversion round-trip preserves all 188 full-backbone state tensors exactly (random initialized weights for this loading check, not pretrained inference). Main lock/dependency and isolated dependency checks pass. All 211 affected-owner links/anchors and `git diff --check` pass. [CPU](../../outputs/experiments/E002a/cpu-acceptance.log), [CUDA](../../outputs/experiments/E002a/cuda-acceptance.log), [isolated runtime](../../outputs/experiments/E002a/extractor-acceptance.log), [fixture acceptance](../../outputs/experiments/E002a/artifact-acceptance.json) and [independent conversion](../../outputs/experiments/E002a/dino-conversion-acceptance.json) retain the checks. DINOv3 access was granted after the point/crop probe; official weights are being downloaded by the user. Frozen RGB inference remains pending until the supplied file is verified and executed.

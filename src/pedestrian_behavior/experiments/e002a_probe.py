@@ -280,6 +280,7 @@ def run(args):
                         repeat, *_ = point_encoder(points)
                         item["repeat_max_absolute_error"] = float(np.max(np.abs(features-repeat)))
                         if not np.allclose(features, repeat, rtol=1e-4, atol=1e-4):
+                            write_json(output/"repeatability-failure.json", item)
                             raise ValueError("Frozen extraction repeatability check failed")
                     spatial = points[selected, :3]
                     union = np.zeros(len(spatial), dtype=bool)

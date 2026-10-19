@@ -62,6 +62,10 @@ class PointEncoder:
         point_cls = load_point_author(self.code)
         self.model = nn.Module()
         self.model.backbone = point_cls(**backbone)
+        # The top-level flag is not forwarded to author SerializedPooling layers.
+        for module in self.model.backbone.modules():
+            if hasattr(module, "shuffle_orders"):
+                module.shuffle_orders = False
         self.model.seg_head = nn.Linear(64, 16)
         # The verified author checkpoint includes NumPy scalar metric metadata.
         with torch.serialization.safe_globals([np._core.multiarray.scalar,

@@ -84,7 +84,10 @@ class PointEncoder:
                 "feat": torch.from_numpy(points[selected]).to(self.device),
                 "offset": torch.tensor([len(selected)], device=self.device)}
         from pointcept.models.utils.structure import Point
-        with torch.inference_mode(), torch.autocast(device_type="cuda", dtype=torch.float16, enabled=str(self.device).startswith("cuda")):
+        # Author segmentation testing keeps sparse/linear weights and values FP32;
+        # PTv3 itself casts FlashAttention QKV to FP16. Eval autocast causes mixed
+        # sparse-convolution value/weight dtypes in spconv and is unsupported.
+        with torch.inference_mode():
             output = self.model.backbone(Point(data))
             if not torch.equal(output.coord, coord):
                 raise ValueError("Decoded feature coordinates changed order")

@@ -190,7 +190,8 @@ def run(args):
             "python": platform.python_version(), "host": platform.node(), "torch": torch.__version__, "numpy": np.__version__,
             "cuda": torch.version.cuda, "cudnn": torch.backends.cudnn.version(), "seed": 0,
             "gpu": torch.cuda.get_device_name() if torch.cuda.is_available() else None,
-            "point_revision": DITR_REVISION, "rgb_revision": DINO_REVISION, "point_sha256": DITR_SHA256},
+            "point_revision": DITR_REVISION, "rgb_revision": DINO_REVISION, "point_sha256": DITR_SHA256,
+            "point_precision": "FP32 sparse/linear, author-internal FP16 FlashAttention", "rgb_precision": "FP16 CUDA autocast"},
         "protected": {}, "samples": {}, "frames": [], "failures": [], "estimates": []}
     protected = {}
     largest = None

@@ -97,6 +97,10 @@ class DinoVisualCheckTest(unittest.TestCase):
             self.assertNotIn("Existing LiDAR BEV</summary>", page)
             self.assertEqual((probe/"index-before-crop-fix.html").read_text(), "original gallery")
             self.assertEqual(source_path.read_bytes(), before)
+            source["status"] = "partial-rgb-weights-unavailable"
+            source_path.write_text(json.dumps(source))
+            refresh_probe_gallery(probe, output)
+            self.assertEqual((probe/"index-before-crop-fix.html").read_text(), "original gallery")
             result["frames"][0]["valid_crops"] = 0
             (output/"visual-check.json").write_text(json.dumps(result))
             with self.assertRaises(ValueError):

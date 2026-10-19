@@ -65,12 +65,14 @@ def refresh_probe_gallery(probe, visual):
     probe, visual = Path(probe), Path(visual)
     source = json.loads((probe/"probe.json").read_text())
     corrected = json.loads((visual/"visual-check.json").read_text())
-    if source["status"] != "complete" or corrected["status"] != "complete":
+    if source["status"] not in ("complete", "partial-rgb-weights-unavailable") or corrected["status"] != "complete":
         raise ValueError("Only completed probe/visual evidence can refresh a gallery")
     frames = {f"{f['dataset']}-{f['group']}-{f['key']}": f for f in source["frames"] if f.get("rendered")}
     if set(frames) != {f["label"] for f in corrected["frames"]}:
         raise ValueError("Probe and corrected gallery frame sets differ")
     for frame in corrected["frames"]:
+        if not (probe/"panels"/(frame["label"]+"-bev.png")).is_file():
+            raise ValueError("Missing original 3D probe panel")
         original = frames[frame["label"]]["tracks"]
         by_id = {t["locator"]: t for t in original}
         if frame["tracks"] != len(original) or frame["valid_crops"] != sum(t["crop"]["valid"] for t in original):

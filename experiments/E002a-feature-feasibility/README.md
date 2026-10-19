@@ -138,4 +138,17 @@ Purposive visual inspection shows distinguishable visual regions in some example
 
 The original [LiDAR-first gallery](../../outputs/experiments/E002a/native-probe-06/index.html) and [completed point/RGB gallery](../../outputs/experiments/E002a/native-probe-07/index.html) now also show the corrected crops alongside **visible original BEV panels**, with counts per frame and missing-crop context collapsed and labeled. Each keeps `index-before-crop-fix.html` as presentation evidence. Only HTML was refreshed; native/probe numerical files and encoder predictions are unchanged. The same presentation helper serves the DINO gallery; no inference rerun is needed.
 
+### Crop-size visual comparison — 2026-10-19
+
+Authorized diagnostic: compare centered square sides **1.5, 2 and 3 × max(native bbox width, height)** on the same 45 valid development examples. Every input remains 256×256, with unchanged bicubic sampling, mean padding, native boxes and no crop shifting. Larger crops add context while reducing target pixel size; no training setting or baseline cache is changed. Missing boxes stay missing. Show crops side by side, with padding fractions, and keep the three-scale DINO PCA/similarity comparison in an expandable panel. PCA colors are independently fitted per crop/scale, not matched semantic classes.
+
+```bash
+probe_root="$PWD/outputs/experiments/E002a"
+uv run --no-project --python "$probe_root/extractor-env/bin/python" python scripts/check-e002a-rgb.py \
+  --probe "$probe_root/native-probe-07" \
+  --output "$probe_root/dino-crop-scales" --device cuda --compare-crop-scales
+```
+
+The default command still uses only 1.5×. The optional comparison preserves the original 1.5× batch composition/checks and saves new 2×/3× float32 crops, CLS, patch features, maps and scale-specific crop/seed metadata in separate pickle-free fixtures. Original numerical evidence stays unchanged. Execution/acceptance results pending.
+
 Retained earlier manual attempts: `dino-visual-check` failed the CLS comparison because single-crop FP16 inference changed batch composition; `dino-visual-check-02` reproduced all LOKI examples but failed on a serialized native-root string passed to the ROAD reader. Matching original batches and restoring a `Path` fixed those failures; regression checks cover both. No automatic retry or overwritten evidence. Full CPU **91 tests / six CUDA skips**, CUDA **91**, and final isolated extractor **13** checks pass; numerical fixtures reconstruct cosine maps and all four questioned ROAD counts, and documentation links/`git diff --check` pass. Logs: `outputs/experiments/E002a/dino-visual-{cpu,cuda,extractor}-acceptance.log`.

@@ -17,7 +17,7 @@ import torch
 
 from pedestrian_behavior.data.preparation import checksum
 from pedestrian_behavior.datasets import loki, road_waymo
-from pedestrian_behavior.inspection.feature_probe import (crop_examples, crop_sheet, dino_sheet,
+from pedestrian_behavior.inspection.feature_probe import (crop_examples, crop_scale_sheet, crop_sheet, dino_sheet,
     normalized_crop, patch_maps, square_crop)
 from pedestrian_behavior.inspection.native_features import native_camera
 from pedestrian_behavior.inspection.pretrained import ImageEncoder
@@ -54,6 +54,11 @@ def gallery(record, output, probe, *, panels=None, native=False):
             for suffix in (["crop", "dino"] if not missing and not native else ["crop"]):
                 path = html.escape(os.path.relpath(panels/"panels"/f"{name}-{suffix}.png", output), quote=True)
                 lines.append(f'<a href="{path}"><img loading="lazy" src="{path}"></a>')
+            if example.get("crop_scales"):
+                path = html.escape(os.path.relpath(panels/"panels"/f"{name}-scales.png", output), quote=True)
+                lines.append(f'<p><b>Same target: 1.5× / 2× / 3× square side, all resized to 256×256.</b></p><a href="{path}"><img loading="lazy" src="{path}"></a>')
+                path = html.escape(os.path.relpath(panels/"panels"/f"{name}-scale-features.png", output), quote=True)
+                lines.append(f'<details><summary>DINO features at all three crop sizes</summary><a href="{path}"><img loading="lazy" src="{path}"></a></details>')
             if missing:
                 lines.append('</details>')
         lines.append('</article>')
@@ -114,6 +119,8 @@ def run(args):
         "seed": 0, "frames": [], "failures": []}
     protected = source["protected"] | {str(probe/"probe.json"): record["probe_sha256"]}
     config = source["config"]
+    compare_scales = getattr(args, "compare_crop_scales", False)
+    record["crop_scales"] = [1.5, 2., 3.] if compare_scales else [1.5]
     protected.update({str(p): checksum(p) for p in [Path(config["dino_weights"]), *sorted((probe/"fixtures").glob("*-rgb.npz"))]})
     started = time.monotonic()
     write_json(output/"visual-check.json", record)
@@ -197,6 +204,30 @@ def run(args):
                                 pca_rgb=colors, cosine_similarity=similarity, seed_row_column=np.array(seed),
                                 locator=np.array(old["locator"]), key=np.array(str(key)))
                             dino_sheet(crop, colors, similarity, seed, output/"panels"/(name+"-dino"))
+                            if compare_scales:
+                                views = [{"expansion": 1.5, "crop": crop, "info": info,
+                                          "pca": colors, "similarity": similarity, "seed": seed}]
+                                expanded = [square_crop(image, box, expansion=s) for s in (2., 3.)]
+                                extra_cls, extra_patches = encoder.descriptors(torch.stack([
+                                    normalized_crop(pixels) for pixels, _ in expanded]), patches=True)
+                                example["crop_scales"] = [{"expansion": 1.5, "crop": info,
+                                                          "seed_row_column": list(seed), "fixture": name+".npz"}]
+                                for j, expansion in enumerate((2., 3.)):
+                                    pixels, crop_info = expanded[j]
+                                    bounds = np.array(crop_info["bounds_pixels"])
+                                    xy = np.floor((center-bounds[:2])/(bounds[2]-bounds[0])*16).astype(int).clip(0, 15)
+                                    patch_seed = (int(xy[1]), int(xy[0]))
+                                    pca, sim = patch_maps(extra_patches[j], patch_seed)
+                                    fixture = f"{name}-scale-{expansion:g}.npz"
+                                    np.savez(output/"fixtures"/fixture, crop=pixels, cls=extra_cls[j],
+                                        patches=extra_patches[j], pca_rgb=pca, cosine_similarity=sim,
+                                        seed_row_column=np.array(patch_seed), locator=np.array(old["locator"]),
+                                        key=np.array(str(key)))
+                                    example["crop_scales"].append({"expansion": expansion, "crop": crop_info,
+                                        "seed_row_column": list(patch_seed), "fixture": fixture})
+                                    views.append({"expansion": expansion, "crop": pixels, "info": crop_info,
+                                                  "pca": pca, "similarity": sim, "seed": patch_seed})
+                                crop_scale_sheet(views, output/"panels"/name)
                         item["examples"].append(example)
                     record["frames"].append(item)
                     write_json(output/"visual-check.json", record)
@@ -226,6 +257,8 @@ def main():
     parser.add_argument("--probe", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--device", choices=("cpu", "cuda"), required=True)
+    parser.add_argument("--compare-crop-scales", action="store_true",
+                        help="Compare 1.5x, 2x and 3x square sides on the same development examples")
     run(parser.parse_args())
 
 

@@ -9,8 +9,10 @@ RGB_MEAN = np.array([.485, .456, .406], dtype=np.float32)
 RGB_STD = np.array([.229, .224, .225], dtype=np.float32)
 
 
-def square_crop(image, box):
-    """Image-relative xyxy → centered 1.5x square; never shift at the border."""
+def square_crop(image, box, *, expansion=1.5):
+    """Image-relative xyxy → centered expanded square; never shift at the border."""
+    if not np.isfinite(expansion) or expansion <= 0:
+        raise ValueError("Crop expansion must be finite and positive")
     if image is None or box is None:
         return None, {"valid": False, "reason": "missing-image-or-box"}
     b = np.asarray(box, dtype=np.float64) * np.tile(image.size, 2)
@@ -20,7 +22,7 @@ def square_crop(image, box):
     right, bottom = np.minimum(b[2:], image.size)
     if right <= left or bottom <= top:
         return None, {"valid": False, "reason": "box-outside-image"}
-    side = 1.5 * max(b[2:]-b[:2])
+    side = expansion * max(b[2:]-b[:2])
     center = (b[:2]+b[2:])/2
     bounds = np.r_[center-side/2, center+side/2]
     # Sampling in output coordinates avoids allocating a huge out-of-image canvas.
@@ -95,6 +97,37 @@ def dino_sheet(crop, colors, similarity, seed, output):
     for suffix in ("png", "svg"):
         fig.savefig(output.with_suffix("."+suffix), dpi=130)
     plt.close(fig)
+
+
+def crop_scale_sheet(views, output):
+    """Same pedestrian at three crop scales; fixed display and encoder resolution."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    for features in (False, True):
+        rows = 3 if features else 1
+        fig, axes = plt.subplots(rows, len(views), figsize=(12, 4*rows), squeeze=False)
+        for column, view in enumerate(views):
+            ax = axes[0, column]
+            ax.imshow(np.clip(view["crop"], 0, 1))
+            ax.set_title(f'{view["expansion"]:g}× side; padding {view["info"]["padding_fraction"]:.0%}\n256×256 input')
+            if features:
+                seed = view["seed"]
+                ax.plot((seed[1]+.5)*16, (seed[0]+.5)*16, "r+", markersize=12)
+                axes[1, column].imshow(view["pca"], interpolation="nearest")
+                axes[1, column].set_title("Per-crop PCA; independent colors")
+                axes[2, column].imshow(np.clip(view["crop"], 0, 1))
+                axes[2, column].imshow(view["similarity"], vmin=-1, vmax=1, cmap="viridis", alpha=.5,
+                                       interpolation="nearest", extent=(0, 256, 256, 0))
+                axes[2, column].set_title("Similarity overlay (cosine −1 to +1)")
+        for ax in axes.flat:
+            ax.axis("off")
+        fig.suptitle("More context makes the pedestrian smaller at fixed resolution. Qualitative only.", fontsize=12)
+        fig.tight_layout()
+        stem = "scale-features" if features else "scales"
+        for suffix in ("png", "svg"):
+            fig.savefig(output.with_name(output.name+"-"+stem).with_suffix("."+suffix), dpi=130)
+        plt.close(fig)
 
 
 def box_membership(points, center, size, yaw):

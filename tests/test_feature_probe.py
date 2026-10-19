@@ -67,6 +67,23 @@ class FeatureProbeTest(unittest.TestCase):
         self.assertFalse(square_crop(None, None)[1]["valid"])
         self.assertEqual(square_crop(image, [-.1, 0, .1, .2])[1]["box_intersection_fraction"], .5)
 
+    def test_crop_expansion_preserves_center_resolution_and_default(self):
+        image = Image.new("RGB", (100, 100), "red")
+        box = [0, 0, .2, .4]
+        baseline, _ = square_crop(image, box)
+        for expansion, side in ((1.5, 60), (2., 80), (3., 120)):
+            pixels, info = square_crop(image, box, expansion=expansion)
+            bounds = np.array(info["bounds_pixels"])
+            np.testing.assert_allclose((bounds[:2]+bounds[2:])/2, [10, 20])
+            np.testing.assert_allclose(bounds[2:]-bounds[:2], side)
+            self.assertEqual(pixels.shape, (256, 256, 3))
+            np.testing.assert_allclose(pixels[0, 0], RGB_MEAN)
+            if expansion == 1.5:
+                np.testing.assert_array_equal(pixels, baseline)
+        for invalid in (0, -1, np.inf, np.nan):
+            with self.assertRaises(ValueError):
+                square_crop(image, box, expansion=invalid)
+
     def test_hf_checkpoint_conversion_retains_all_learned_values(self):
         expected = {"blocks.0.attn.qkv.weight": torch.zeros(6, 2), "blocks.0.attn.qkv.bias": torch.zeros(6),
                     "blocks.0.attn.qkv.bias_mask": torch.tensor([1, 1, 0, 0, 1, 1]),

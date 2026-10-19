@@ -17,6 +17,12 @@ from pedestrian_behavior.inspection.feature_probe import square_crop
 
 class DinoVisualCheckTest(unittest.TestCase):
     def test_original_batch_composition_counts_and_missing_examples(self):
+        self.exercise(compare=False)
+
+    def test_multiscale_keeps_baseline_and_encodes_two_larger_crops(self):
+        self.exercise(compare=True)
+
+    def exercise(self, compare):
         with tempfile.TemporaryDirectory() as temporary:
             threads = torch.get_num_threads()
             self.addCleanup(torch.set_num_threads, threads)
@@ -66,21 +72,30 @@ class DinoVisualCheckTest(unittest.TestCase):
             with patch(module+"ImageEncoder", Encoder), patch(module+"loki.TrackReader", return_value=reader), \
                  patch(module+"road_waymo.TrackReader", return_value=reader) as road_reader, \
                  patch(module+"native_camera", return_value=iter([("0000", image, boxes)])), \
-                 patch(module+"crop_sheet"), patch(module+"dino_sheet"), \
+                 patch(module+"crop_sheet"), patch(module+"dino_sheet"), patch(module+"crop_scale_sheet"), \
                  patch(module+"patch_maps", return_value=(np.zeros((16, 16, 3)), np.ones((16, 16)))):
-                run(SimpleNamespace(probe=probe, output=output, device="cpu"))
+                run(SimpleNamespace(probe=probe, output=output, device="cpu", compare_crop_scales=compare))
             self.assertIsInstance(road_reader.call_args.args[1], Path)
             result = json.loads((output/"visual-check.json").read_text())
             self.assertEqual(result["status"], "complete")
-            self.assertEqual(batches, [16, 16, 1])
+            self.assertEqual(batches, [16, 16, 1, 2, 2] if compare else [16, 16, 1])
             self.assertEqual(source_path.read_bytes(), before)
             self.assertEqual(result["changed_files"], [])
             frame = result["frames"][0]
             self.assertEqual((frame["valid_crops"], frame["tracks"]), (17, 20))
             self.assertEqual([e["crop"]["valid"] for e in frame["examples"]], [True, True, False])
-            with np.load(next((output/"fixtures").glob("*.npz")), allow_pickle=False) as saved:
+            with np.load(output/"fixtures"/(frame["examples"][0]["name"]+".npz"), allow_pickle=False) as saved:
                 self.assertEqual(saved["patches"].shape, (16, 16, 768))
                 np.testing.assert_array_equal(saved["cls"], original[0])
+            if compare:
+                scales = frame["examples"][0]["crop_scales"]
+                self.assertEqual([s["expansion"] for s in scales], [1.5, 2., 3.])
+                self.assertEqual(result["crop_scales"], [1.5, 2., 3.])
+                for scale in scales[1:]:
+                    with np.load(output/"fixtures"/scale["fixture"], allow_pickle=False) as saved:
+                        self.assertEqual(saved["crop"].shape, (256, 256, 3))
+                        np.testing.assert_array_equal(saved["cls"], np.full(768, 2))
+                self.assertIn("1.5× / 2× / 3×", (output/"index.html").read_text())
             self.assertIn("17/20 valid crops", (output/"index.html").read_text())
             # The original 3D gallery must show the BEV and corrected crops,
             # while preserving numerical evidence and the old presentation.
@@ -106,6 +121,7 @@ class DinoVisualCheckTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 refresh_probe_gallery(probe, output)
             self.assertEqual((probe/"index.html").read_text(), page)
+
 
 
 if __name__ == "__main__":

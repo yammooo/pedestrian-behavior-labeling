@@ -11,6 +11,7 @@ from pedestrian_behavior.datasets.road_waymo import range_points
 from pedestrian_behavior.experiments.e002a_probe import sample_groups, selected_frames
 from pedestrian_behavior.inspection.feature_probe import (RGB_MEAN, ProbeReadout, box_membership,
     normalized_crop, relative_xyz, square_crop, voxel_sample, temporal_probe)
+from pedestrian_behavior.inspection.pretrained import image_state_from_hf
 
 
 class FeatureProbeTest(unittest.TestCase):
@@ -26,6 +27,25 @@ class FeatureProbeTest(unittest.TestCase):
         self.assertFalse(square_crop(image, [0, 0, 0, 1])[1]["valid"])
         self.assertFalse(square_crop(None, None)[1]["valid"])
         self.assertEqual(square_crop(image, [-.1, 0, .1, .2])[1]["box_intersection_fraction"], .5)
+
+    def test_hf_checkpoint_conversion_retains_all_learned_values(self):
+        expected = {"blocks.0.attn.qkv.weight": torch.zeros(6, 2), "blocks.0.attn.qkv.bias": torch.zeros(6),
+                    "blocks.0.attn.qkv.bias_mask": torch.tensor([1, 1, 0, 0, 1, 1]),
+                    "rope_embed.periods": torch.ones(1), "mask_token": torch.zeros(1, 2),
+                    "blocks.0.ls1.gamma": torch.zeros(2)}
+        state = {"model.layer.0.attention.q_proj.weight": torch.ones(2, 2),
+                 "model.layer.0.attention.k_proj.weight": torch.ones(2, 2)*2,
+                 "model.layer.0.attention.v_proj.weight": torch.ones(2, 2)*3,
+                 "model.layer.0.attention.q_proj.bias": torch.ones(2),
+                 "model.layer.0.attention.v_proj.bias": torch.ones(2)*3,
+                 "embeddings.mask_token": torch.ones(1, 1, 2)*4,
+                 "model.layer.0.layer_scale1.lambda1": torch.ones(2)*5}
+        converted = image_state_from_hf(state, expected)
+        torch.testing.assert_close(converted["blocks.0.attn.qkv.bias"], torch.tensor([1., 1., 0., 0., 3., 3.]))
+        self.assertEqual(converted["mask_token"].shape, (1, 2))
+        self.assertEqual(converted["blocks.0.attn.qkv.weight"][4, 0], 3)
+        with self.assertRaises(ValueError):
+            image_state_from_hf(state | {"unexpected": torch.ones(1)}, expected)
 
     def test_rotated_cuboid_and_initial_heading_offsets(self):
         points = np.array([[0, 1.9, 0], [1.1, 0, 0], [0, 0, 1.1]])

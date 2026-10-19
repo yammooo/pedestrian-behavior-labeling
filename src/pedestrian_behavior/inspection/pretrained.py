@@ -3,6 +3,7 @@
 import importlib
 from pathlib import Path
 import runpy
+import re
 import subprocess
 import sys
 import types
@@ -18,6 +19,48 @@ DITR_REVISION = "f66d1dadb82e97ded7750567a043e4783305b01c"
 DINO_REVISION = "6876159a11b4df116f30f667f8c9888617df0751"
 DITR_SHA256 = "93dbb9d3fda247adf56e1c1ebd419d6ada4ebe4dc141110c606926d3ad67b30d"
 DITR_CONFIG_SHA256 = "7cce1838385d3f14830b5d61c88db98cbb62951cea39665311c61bca23f253e3"
+DINO_HF_SHA256 = "9a21ac3df0c63839d62612dda6f454d816c25611cc7a52966ed5a5a94921dc8b"
+
+
+def image_state_from_hf(state, expected):
+    """Invert the official Transformers DINOv3 ViT-B converter, not the model.
+
+    Mapping reference: transformers/models/dinov3_vit/convert_dinov3_vit_to_hf.py.
+    Recreate only deterministic buffers and the masked zero key bias; every
+    learned parameter must be present. Strict loading follows conversion.
+    """
+    state = {k.removeprefix("model."): v for k, v in state.items()}
+    result, consumed = {}, set()
+    for key, initial in expected.items():
+        if key == "rope_embed.periods" or key.endswith("qkv.bias_mask"):
+            result[key] = initial
+            continue
+        renamed = key.replace("storage_tokens", "embeddings.register_tokens")
+        renamed = {"cls_token": "embeddings.cls_token", "mask_token": "embeddings.mask_token"}.get(renamed, renamed)
+        renamed = renamed.replace("patch_embed.proj", "embeddings.patch_embeddings")
+        renamed = re.sub(r"blocks\.(\d+)\.", r"layer.\1.", renamed)
+        renamed = renamed.replace("attn.proj", "attention.o_proj").replace("attn.", "attention.")
+        renamed = re.sub(r"ls(\d+)\.gamma", r"layer_scale\1.lambda1", renamed)
+        renamed = renamed.replace("mlp.fc1", "mlp.up_proj").replace("mlp.fc2", "mlp.down_proj")
+        if ".qkv." in renamed:
+            parts = []
+            for name in ("q", "k", "v"):
+                part_key = renamed.replace("qkv", name+"_proj")
+                if name == "k" and key.endswith("bias"):
+                    parts.append(torch.zeros_like(parts[0]))
+                else:
+                    parts.append(state[part_key])
+                    consumed.add(part_key)
+            result[key] = torch.cat(parts)
+        else:
+            value = state[renamed]
+            result[key] = value.squeeze(1) if key == "mask_token" else value
+            consumed.add(renamed)
+        if result[key].shape != initial.shape:
+            raise ValueError(f"Unexpected converted DINO shape: {key}")
+    if set(state) != consumed:
+        raise ValueError(f"Unexpected HF DINO parameters: {sorted(set(state)-consumed)}")
+    return result
 
 
 def verify_code(path, revision):
@@ -105,8 +148,16 @@ class PointEncoder:
 class ImageEncoder:
     def __init__(self, code, checkpoint, device):
         code = verify_code(code, DINO_REVISION)
-        self.model = torch.hub.load(str(code), "dinov3_vitb16", source="local", pretrained=True,
-                                    weights=str(Path(checkpoint).resolve()))
+        if Path(checkpoint).suffix == ".safetensors":
+            if checksum(checkpoint) != DINO_HF_SHA256:
+                raise ValueError("Unexpected official HF DINOv3 ViT-B/16 checkpoint checksum")
+            from safetensors.torch import load_file
+            self.model = torch.hub.load(str(code), "dinov3_vitb16", source="local", pretrained=False)
+            state = image_state_from_hf(load_file(str(checkpoint)), self.model.state_dict())
+            self.model.load_state_dict(state, strict=True)
+        else:
+            self.model = torch.hub.load(str(code), "dinov3_vitb16", source="local", pretrained=True,
+                                        weights=str(Path(checkpoint).resolve()))
         self.model.requires_grad_(False).eval().to(device)
         self.device = device
 

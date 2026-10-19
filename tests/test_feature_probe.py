@@ -10,7 +10,7 @@ import torch
 from pedestrian_behavior.datasets.road_waymo import range_points
 from pedestrian_behavior.experiments.e002a_probe import sample_groups, selected_frames
 from pedestrian_behavior.inspection.feature_probe import (RGB_MEAN, ProbeReadout, box_membership,
-    normalized_crop, relative_xyz, square_crop, voxel_sample)
+    normalized_crop, relative_xyz, square_crop, voxel_sample, temporal_probe)
 
 
 class FeatureProbeTest(unittest.TestCase):
@@ -92,6 +92,20 @@ class FeatureProbeTest(unittest.TestCase):
         chosen, size = selected_frames({"a": {"source_frames": [None, "0000", "0002", "0004", "0006"]}}, True, [])
         self.assertEqual(len(chosen), 3)
         self.assertEqual(size, 4)
+
+    def test_temporal_padding_isolation(self):
+        torch.manual_seed(0)
+        layer = torch.nn.TransformerEncoderLayer(256, 4, 1024, .1, batch_first=True, norm_first=True)
+        temporal = torch.nn.TransformerEncoder(layer, 2, enable_nested_tensor=False).eval()
+        values = torch.randn(2, 6, 256, requires_grad=True)
+        lengths = torch.tensor([3, 6])
+        first = temporal_probe(temporal, values, lengths)
+        other = values.detach().clone()
+        other[0, 3:] = float("nan")
+        torch.testing.assert_close(first, temporal_probe(temporal, other, lengths))
+        self.assertEqual(first[0, 3:].count_nonzero(), 0)
+        first.square().sum().backward()
+        self.assertEqual(values.grad[0, 3:].count_nonzero(), 0)
 
 
 if __name__ == "__main__":

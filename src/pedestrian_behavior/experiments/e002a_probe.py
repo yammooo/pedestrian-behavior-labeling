@@ -4,6 +4,7 @@ import argparse
 from collections import defaultdict
 from datetime import datetime, timezone
 import gc
+import faulthandler
 import hashlib
 import html
 import json
@@ -23,7 +24,7 @@ from pedestrian_behavior.data.preparation import checksum, load_track, valid_pos
 from pedestrian_behavior.datasets import loki, road_waymo
 from pedestrian_behavior.inspection.native_features import native_scene
 from pedestrian_behavior.inspection.feature_probe import (ProbeReadout, bev_sheet, box_membership,
-    crop_sheet, normalized_crop, relative_xyz, square_crop)
+    crop_sheet, normalized_crop, relative_xyz, square_crop, temporal_probe)
 from pedestrian_behavior.inspection.pretrained import PointEncoder, ImageEncoder, DITR_SHA256, DITR_REVISION, DINO_REVISION
 
 
@@ -107,11 +108,7 @@ def benchmark(tokens, length, device, output):
                         r = rgb_projection(torch.zeros(768, device=device))
                         features.append(torch.cat((g, r, lidar, torch.ones(3, device=device))))
                     result = fusion(torch.stack(features).reshape(batch, length, 579))
-                    positions = torch.arange(length, device=device)[:, None]*.2
-                    scales = torch.exp(torch.arange(0, 256, 2, device=device)*(-np.log(10000)/256))
-                    pe = torch.empty(length, 256, device=device)
-                    pe[:, 0::2], pe[:, 1::2] = torch.sin(positions*scales), torch.cos(positions*scales)
-                    result = classifier(temporal(result+pe))
+                    result = classifier(temporal_probe(temporal, result, torch.full((batch,), length, device=device)))
                     loss = result.square().mean()
                     loss.backward()
                     if not torch.isfinite(result).all() or any(p.grad is not None and not torch.isfinite(p.grad).all()
@@ -198,10 +195,13 @@ def run(args):
     largest = None
     max_slots = 0
     started = time.perf_counter()
+    write_json(output/"probe.json", record)
     def protect(path):
         protected[str(path.resolve())] = checksum(path)
     try:
+        print("Loading pinned point checkpoint", flush=True)
         point_encoder = PointEncoder(args.ditr_code, args.ditr_config, args.ditr_weights, args.device)
+        print("Point checkpoint loaded strictly", flush=True)
         image_encoder = ImageEncoder(args.dino_code, args.dino_weights, args.device) if args.dino_weights else None
         if image_encoder:
             record["provenance"]["rgb_sha256"] = checksum(args.dino_weights)
@@ -228,6 +228,7 @@ def run(args):
                     raise ValueError("Frozen ROAD annotation/index checksum mismatch")
             record["samples"][dataset] = groups
             for group, sample in sorted(groups.items()):
+                print("Reading", dataset, group, flush=True)
                 entries = grouped[group]
                 saved = {}
                 for entry in entries:
@@ -249,6 +250,7 @@ def run(args):
                     key = metadata["source_frames"][0]
                     anchors[identity] = anchor_records.get(key, {}).get("ego_pose")
                 for frame in native_scene(reader, group, reasons, track_ids, manifest["scenes"][group]):
+                    print("Extracting", dataset, group, frame["key"], flush=True)
                     frame_start = time.perf_counter()
                     key = frame["key"]
                     label = f"{dataset}-{group}-{key}"
@@ -367,6 +369,7 @@ def run(args):
 
 
 def main():
+    faulthandler.enable()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--device", choices=("cpu", "cuda"), required=True)

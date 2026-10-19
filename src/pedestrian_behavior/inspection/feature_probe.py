@@ -110,6 +110,20 @@ class ProbeReadout(nn.Module):
         return self.output(value.flatten(1))[0]
 
 
+def temporal_probe(temporal, values, lengths):
+    """Grid-time positions and padding isolation for the temporary graph."""
+    length = values.shape[1]
+    slots = torch.arange(length, device=values.device)
+    padding = slots[None] >= lengths[:, None]
+    positions = slots[:, None]*.2
+    scales = torch.exp(torch.arange(0, 256, 2, device=values.device)*(-np.log(10000)/256))
+    pe = torch.empty(length, 256, device=values.device)
+    pe[:, 0::2], pe[:, 1::2] = torch.sin(positions*scales), torch.cos(positions*scales)
+    values = values.masked_fill(padding[:, :, None], 0)
+    result = temporal(values+pe, src_key_padding_mask=padding)
+    return result.masked_fill(padding[:, :, None], 0)
+
+
 def crop_sheet(image, box, crop, info, output):
     from PIL import ImageDraw, ImageOps
     sheet = Image.new("RGB", (1024, 420), "#161616")

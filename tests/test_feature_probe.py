@@ -10,11 +10,50 @@ import torch
 from pedestrian_behavior.datasets.road_waymo import range_points
 from pedestrian_behavior.experiments.e002a_probe import sample_groups, selected_frames
 from pedestrian_behavior.inspection.feature_probe import (RGB_MEAN, ProbeReadout, box_membership,
-    normalized_crop, relative_xyz, square_crop, voxel_sample, temporal_probe)
-from pedestrian_behavior.inspection.pretrained import image_state_from_hf
+    crop_examples, normalized_crop, patch_maps, relative_xyz, square_crop, voxel_sample, temporal_probe)
+from pedestrian_behavior.inspection.pretrained import ImageEncoder, image_state_from_hf
 
 
 class FeatureProbeTest(unittest.TestCase):
+    def test_gallery_valid_examples_precede_missing_and_keep_original_indices(self):
+        tracks = [{"crop": {"valid": v}} for v in (False, False, False, True, False, True, True)]
+        self.assertEqual(crop_examples(tracks, valid_limit=2), [3, 5, 0])
+        self.assertEqual(crop_examples(tracks[:3]), [0])
+        self.assertEqual(crop_examples([]), [])
+
+    def test_patch_maps_cosine_pca_constant_and_invalid_inputs(self):
+        features = np.zeros((3, 3, 4), dtype=np.float32)
+        features[0, 0, 0], features[0, 1, 0], features[0, 2, 1] = 1, -2, 1
+        colors, similarity = patch_maps(features, (0, 0))
+        np.testing.assert_allclose(similarity[0], [1, -1, 0])
+        self.assertEqual(colors.shape, (3, 3, 3))
+        self.assertEqual(colors.dtype, np.float32)
+        self.assertTrue(((colors >= 0) & (colors <= 1)).all())
+        np.testing.assert_array_equal(colors, patch_maps(features, (0, 0))[0])
+        constant, empty = patch_maps(np.zeros_like(features), (1, 1))
+        np.testing.assert_allclose(constant, .5)
+        np.testing.assert_allclose(empty, 0)
+        with self.assertRaises(ValueError):
+            patch_maps(features, (3, 0))
+        with self.assertRaises(ValueError):
+            patch_maps(features+np.nan, (0, 0))
+
+    def test_image_adapter_returns_only_patch_tokens_and_preserves_cls_interface(self):
+        class Backbone:
+            def forward_features(self, images):
+                return {"x_norm_clstoken": torch.ones(len(images), 768),
+                        "x_norm_patchtokens": torch.arange(256*768).reshape(1, 256, 768).float().repeat(len(images), 1, 1),
+                        "x_storage_tokens": torch.zeros(len(images), 4, 768)}
+        encoder = ImageEncoder.__new__(ImageEncoder)
+        encoder.model, encoder.device = Backbone(), "cpu"
+        images = torch.zeros(2, 3, 256, 256)
+        cls, patches = encoder.descriptors(images, patches=True)
+        np.testing.assert_array_equal(cls, encoder(images))
+        self.assertEqual(patches.shape, (2, 16, 16, 768))
+        self.assertEqual(patches[0, 1, 0, 0], 16*768)
+        with self.assertRaises(ValueError):
+            encoder.descriptors(images[:, :, :128], patches=True)
+
     def test_crop_boundary_outside_and_mean_padding(self):
         image = Image.new("RGB", (100, 100), "red")
         crop, info = square_crop(image, [0, 0, .2, .4])

@@ -166,9 +166,19 @@ class ImageEncoder:
         self.model.requires_grad_(False).eval().to(device)
         self.device = device
 
-    def __call__(self, crops):
+    def descriptors(self, crops, *, patches=False):
         with torch.inference_mode(), torch.autocast(device_type="cuda", dtype=torch.float16, enabled=str(self.device).startswith("cuda")):
-            result = self.model.forward_features(crops.to(self.device))["x_norm_clstoken"]
+            output = self.model.forward_features(crops.to(self.device))
+            result = output["x_norm_clstoken"]
         if result.shape != (len(crops), 768) or not torch.isfinite(result).all():
             raise ValueError("Nonfinite/invalid DINO CLS features")
-        return result.float().cpu().numpy()
+        cls = result.float().cpu().numpy()
+        if not patches:
+            return cls
+        tokens = output["x_norm_patchtokens"]
+        if crops.shape[2:] != (256, 256) or tokens.shape != (len(crops), 256, 768) or not torch.isfinite(tokens).all():
+            raise ValueError("Expected finite 16x16 DINO patch grid for exact 256x256 crops")
+        return cls, tokens.float().cpu().numpy().reshape(-1, 16, 16, 768)
+
+    def __call__(self, crops):
+        return self.descriptors(crops)

@@ -44,6 +44,59 @@ def normalized_crop(pixels):
     return torch.from_numpy(((pixels-RGB_MEAN)/RGB_STD).transpose(2, 0, 1).copy())
 
 
+def crop_examples(tracks, valid_limit=3):
+    """Show valid crops first, followed by one explicit missing observation."""
+    valid = [i for i, t in enumerate(tracks) if t["crop"]["valid"]]
+    missing = [i for i, t in enumerate(tracks) if not t["crop"]["valid"]]
+    return valid[:valid_limit]+missing[:1]
+
+
+def patch_maps(features, seed):
+    """Per-crop PCA colors and cosine similarity; neither is segmentation."""
+    features = np.asarray(features, dtype=np.float32)
+    if features.ndim != 3 or min(features.shape) < 3 or not np.isfinite(features).all():
+        raise ValueError("Expected a finite spatial feature grid")
+    if len(seed) != 2 or any(int(i) != i or not 0 <= i < n for i, n in zip(seed, features.shape[:2])):
+        raise ValueError("Patch seed outside feature grid")
+    values = features.reshape(-1, features.shape[-1])
+    centered = values-values.mean(0)
+    _, _, basis = np.linalg.svd(centered, full_matrices=False)
+    basis = basis[:3]
+    # SVD axes have arbitrary signs; fix them for reproducible local colors.
+    signs = np.sign(basis[np.arange(3), np.abs(basis).argmax(1)])
+    colors = centered @ (basis*signs[:, None]).T
+    low, high = np.percentile(colors, [1, 99], axis=0)
+    colors = np.divide(colors-low, high-low, out=np.full_like(colors, .5), where=high-low > 1e-8)
+    unit = features/np.maximum(np.linalg.norm(features, axis=-1, keepdims=True), 1e-12)
+    similarity = np.clip(unit @ unit[tuple(map(int, seed))], -1, 1)
+    return np.clip(colors, 0, 1).reshape(*features.shape[:2], 3).astype(np.float32), similarity.astype(np.float32)
+
+
+def dino_sheet(crop, colors, similarity, seed, output):
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    fig, axes = plt.subplots(1, 4, figsize=(14, 4))
+    axes[0].imshow(crop)
+    axes[0].plot((seed[1]+.5)*16, (seed[0]+.5)*16, "r+", markersize=14)
+    axes[1].imshow(colors, interpolation="nearest", extent=(0, 256, 256, 0))
+    heat = axes[2].imshow(similarity, cmap="viridis", vmin=-1, vmax=1, interpolation="nearest")
+    axes[2].plot(seed[1], seed[0], "r+", markersize=14)
+    fig.colorbar(heat, ax=axes[2], fraction=.046)
+    axes[3].imshow(crop)
+    axes[3].imshow(similarity, cmap="viridis", vmin=-1, vmax=1, interpolation="nearest",
+                   extent=(0, 256, 256, 0), alpha=.5)
+    for ax, title in zip(axes, ("Exact crop; box-centre patch", "Per-crop PCA (arbitrary colors)",
+                                "Cosine similarity to marked patch", "Similarity overlay")):
+        ax.set_title(title, fontsize=9)
+        ax.axis("off")
+    fig.suptitle("16x16 patch features; qualitative only, no semantic or behavior labels", fontsize=11)
+    fig.tight_layout()
+    for suffix in ("png", "svg"):
+        fig.savefig(output.with_suffix("."+suffix), dpi=130)
+    plt.close(fig)
+
+
 def box_membership(points, center, size, yaw):
     """Native ego/point-cloud XYZ and a native z-rotated centered cuboid."""
     center, size = np.asarray(center), np.asarray(size)

@@ -25,7 +25,7 @@ from pedestrian_behavior.data.preparation import checksum, load_track, valid_pos
 from pedestrian_behavior.datasets import loki, road_waymo
 from pedestrian_behavior.inspection.native_features import native_scene
 from pedestrian_behavior.inspection.feature_probe import (ProbeReadout, bev_sheet, box_membership,
-    crop_sheet, normalized_crop, relative_xyz, square_crop, temporal_probe)
+    crop_examples, crop_sheet, normalized_crop, relative_xyz, square_crop, temporal_probe)
 from pedestrian_behavior.inspection.pretrained import PointEncoder, ImageEncoder, DITR_SHA256, DITR_REVISION, DINO_REVISION
 
 
@@ -324,10 +324,13 @@ def run(args):
                                 largest = tokens
                         else:
                             info.update(neighborhood_tokens=0, target_tokens=0, missing_box_or_pose=True)
-                        if render and len(item["tracks"]) < 3:
-                            crop_sheet(frame["image"], frame["camera"].get(track), crop, crop_info,
-                                       output/"panels"/f"{label}-crop-{len(item['tracks'])}.png")
                         item["tracks"].append(info)
+                    if render:
+                        for i in crop_examples(item["tracks"]):
+                            track = json.loads(item["tracks"][i]["locator"])
+                            box = frame["camera"].get(track.get("track_id", track.get("tube_uid")))
+                            crop, info = square_crop(frame["image"], box)
+                            crop_sheet(frame["image"], box, crop, info, output/"panels"/f"{label}-crop-{i}.png")
                     if rgb_crops and image_encoder:
                         cuda = str(args.device).startswith("cuda")
                         if cuda:

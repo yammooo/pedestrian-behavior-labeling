@@ -12,6 +12,33 @@ from pedestrian_behavior.datasets import loki, road_waymo as road
 from pedestrian_behavior.datasets.bbox import read_loki_boxes, read_waymo_boxes
 
 
+def native_camera(reader, scene_id, keys, tracks, frozen):
+    """Read selected images/native boxes without decoding LiDAR or fitting data."""
+    keys = set(keys)
+    if reader.dataset == "loki":
+        camera, _ = read_loki_boxes(reader.root, scene_id, keys, frozen["annotation_odometry_sha256"])
+        paths = dict(loki.frame_files(reader.root/scene_id))
+        for key in sorted(keys, key=int):
+            image = None
+            if paths[key]["image"]:
+                with Image.open(paths[key]["image"]) as raw:
+                    image = raw.convert("RGB")
+            yield key, image, camera[key]["boxes"]
+        return
+    boxes, size, _ = read_waymo_boxes(frozen, set(tracks), reader.waymo_root)
+    scene = reader.scenes[scene_id]
+    rows = road.component_rows(road.component_path(scene, "camera_image", reader.waymo_root), scene["segment_context_name"])
+    for key, group in zip(sorted(keys, key=int), aligned_frames(road.frame_groups(rows), sorted(keys, key=int))):
+        image = None
+        for row in group:
+            if row["key.camera_name"] == 1 and row.get("[CameraImageComponent].image"):
+                with Image.open(BytesIO(row["[CameraImageComponent].image"])) as raw:
+                    image = raw.convert("RGB")
+                if image.size != tuple(size):
+                    raise ValueError("Camera calibration/image dimensions differ")
+        yield key, image, {t: boxes[t, key] for t in tracks if (t, key) in boxes}
+
+
 def native_scene(reader, scene_id, keys, tracks, frozen):
     """Yield one selected native frame at a time, with no behavior inputs."""
     keys = sorted(set(keys), key=int)

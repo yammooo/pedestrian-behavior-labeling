@@ -112,3 +112,22 @@ The sample matches **all 75 prior native frames**, with identical selected group
 [Completed report](../../outputs/experiments/E002a/native-probe-07/report.md) · [Panels](../../outputs/experiments/E002a/native-probe-07/index.html) · [RGB acceptance](../../outputs/experiments/E002a/native-probe-07/rgb-acceptance.json) · [Provenance](../../outputs/experiments/E002a/native-probe-07/probe.json). RGB numerical fixtures and all panels are collected locally; the new duplicate spatial fixtures stay on aalto, while the prior 27 verified local spatial fixtures remain available in `native-probe-06`. Full new outputs remain at `/home/user20/projects/pedestrian-behavior-labeling-review/outputs/experiments/E002a/native-probe-07/`.
 
 Validation after RGB measurement: CPU 87 tests (six CUDA skips), CUDA all 87, isolated extractor all 9; dependency/lock checks, owner links and `git diff --check` pass. These checks validate native extraction/correspondence and existing behavior, not annotation quality or cross-platform bitwise identity.
+
+### DINO patch visual check — 2026-10-19
+
+Authorized qualitative follow-up only; no behavior training or segmentation-head download. Reuse the completed probe's rendered development frames, displaying at most two valid crops plus one explicit missing example per frame. Native images/boxes must reproduce the earlier crop records. Preserve the original probe and frozen data; use a fresh output directory.
+
+For each valid example, save exact float32 crop pixels, normalized CLS, normalized **16×16×768 patch tokens**, per-crop three-component PCA colors and cosine similarity to the patch at the centre of the image-visible native box. The seed is a geometric choice, not a verified pedestrian mask; it may contain background or occlusion. Fit PCA separately per crop, fix component signs and scale colors by its 1st/99th percentiles. Colors cannot be compared across crops. Maps are displayed at native patch resolution or enlarged overlays, never claimed as segmentation, pose or behavior predictions. Patch structure does not validate the CLS descriptor used by E002. [Official visualization examples](https://github.com/facebookresearch/dinov3#notebooks).
+
+The original gallery selected the first three represented tracks regardless of crop validity. Three apparent zero-crop ROAD frames actually contain **3, 4 and 5** valid descriptors; `train_00028-1509232266190995` genuinely has zero. Its two native 3D tracks extend approximately 0.6/0.4 s beyond their last FRONT boxes; no ROAD pedestrian GT exists at that timestamp, and one identity has a native FRONT_RIGHT association. ROAD-origin identities do not imply FRONT boxes throughout their complete native context. The new gallery shows valid/represented counts and valid examples first. Prior numerical extraction is unaffected; original evidence remains intact.
+
+From the isolated GPU checkout:
+
+```bash
+probe_root="$PWD/outputs/experiments/E002a"
+uv run --no-project --python "$probe_root/extractor-env/bin/python" python scripts/check-e002a-rgb.py \
+  --probe "$probe_root/native-probe-07" \
+  --output "$probe_root/dino-visual-check" --device cuda
+```
+
+The command reuses pinned checkpoint/native paths from `probe.json`; it does not decode LiDAR. Acceptance: compare CLS with earlier batched extraction (FP16 numerical tolerance), exact repeated first-crop patch extraction, finite pickle-free numerical fixtures, hand-checked cosine/PCA and gallery-selection cases, and unchanged protected input hashes. Results remain pending until execution.

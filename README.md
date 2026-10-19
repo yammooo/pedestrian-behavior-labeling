@@ -406,3 +406,5 @@ A separate ROAD CUDA smoke uses `--smoke` with either configuration and a fresh 
 ## E002a pretrained-feature feasibility
 
 The bounded [E002a probe](experiments/E002a-feature-feasibility/README.md#environment-and-command) checks native DINOv3 crops, nuScenes D-DITR semantic BEV/alignment, spatial feature correspondence and resource costs. Use its isolated CUDA extractor environment and pinned author clones/weights; the main E001 environment and caches remain unchanged. Entry point: `scripts/probe-e002a.py --help`. No behavior training, held-out scoring, W&B or full caches are launched. The linked protocol owns installation pins, complete command, native-root overrides and explicit partial-RGB status when gated weights are missing.
+
+The [DINO patch visual check](experiments/E002a-feature-feasibility/README.md#dino-patch-visual-check--2026-10-19) adds PCA/similarity panels and a corrected crop gallery from the same development sample: `scripts/check-e002a-rgb.py --help`. It reuses the completed probe and original checkpoint without a segmentation head or training.

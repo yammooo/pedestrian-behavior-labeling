@@ -32,7 +32,7 @@ def gallery(record, output, probe, *, panels=None, native=False):
         f'<h1>{title}</h1>',
         '<p>Counts cover represented eligible tracks on their frozen grids, not every person in the image. Valid crops appear first; one missing example follows. A scene RGB image can exist without a target FRONT box.</p>']
     if native:
-        lines.append('<p>Original 3D semantic predictions with corrected target-crop selection. Missing-crop examples are collapsed scene context, not empty pedestrian crops. No encoder inference was repeated.</p>')
+        lines.append('<p>Original 3D semantic predictions with corrected target-crop selection. Missing-crop examples are collapsed scene context, not empty pedestrian crops. Original 3D predictions are reused; RGB crop diagnostics are shown below.</p>')
     else:
         lines.append('<p>Development crops only. PCA colors are fitted independently per crop and cannot be compared across examples. Similarity is to the marked box-centre patch, which may contain background or occlusion. These are neither segmentation nor behavior predictions. Patch resolution is 16×16; overlays only enlarge it.</p>')
     for frame in record["frames"]:

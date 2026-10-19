@@ -6,7 +6,7 @@ Updated **2026-10-15**. Research-definition stage; the [joint E001/E001b/E001c r
 
 ## Next work
 
-The [DINO patch gallery](../experiments/E002a-feature-feasibility/README.md#dino-patch-visual-check--2026-10-19) now adds 45 PCA/similarity examples over 27 development frames, with corrected crop counts and explicit missing observations. This is an extraction sanity check; behavior training remains deferred.
+The [DINO patch gallery](../experiments/E002a-feature-feasibility/README.md#dino-patch-visual-check--2026-10-19) adds 45 PCA/similarity examples over 27 development frames, with corrected crop counts and explicit missing observations. The [crop-size diagnostic](../experiments/E002a-feature-feasibility/README.md#crop-size-visual-comparison--2026-10-19) compares 1.5×/2×/3× side by side at fixed 256² resolution. These are extraction checks; behavior training remains deferred.
 
 The [prediction review viewer](../README.md#inspect-model-predictions) now compares up to four saved runs, with scoped per-track scores, synchronized native context and separate case notes. All 77 CUDA tests and real browser checks on both datasets passed; [acceptance evidence](../outputs/inspection/prediction-viewer/acceptance/native-b297d5a/verification.json) records timings and 366 unchanged source artifacts. Use the isolated `aalto` viewer checkout; existing training checkouts remain unchanged.
 

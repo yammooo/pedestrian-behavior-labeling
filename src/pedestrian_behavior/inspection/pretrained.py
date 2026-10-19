@@ -20,6 +20,7 @@ DINO_REVISION = "6876159a11b4df116f30f667f8c9888617df0751"
 DITR_SHA256 = "93dbb9d3fda247adf56e1c1ebd419d6ada4ebe4dc141110c606926d3ad67b30d"
 DITR_CONFIG_SHA256 = "7cce1838385d3f14830b5d61c88db98cbb62951cea39665311c61bca23f253e3"
 DINO_HF_SHA256 = "9a21ac3df0c63839d62612dda6f454d816c25611cc7a52966ed5a5a94921dc8b"
+DINO_PTH_SHA256 = "73cec8be7427c8655ceced13ce62f6e20a1fa90d1b4d4a550df17a1144081a7c"
 
 
 def image_state_from_hf(state, expected):
@@ -159,6 +160,8 @@ class ImageEncoder:
             state = image_state_from_hf(load_file(str(checkpoint)), self.model.state_dict())
             self.model.load_state_dict(state, strict=True)
         else:
+            if checksum(checkpoint) != DINO_PTH_SHA256:
+                raise ValueError("Unexpected official DINOv3 ViT-B/16 checkpoint checksum")
             self.model = factory(pretrained=True, weights=str(Path(checkpoint).resolve()))
         self.model.requires_grad_(False).eval().to(device)
         self.device = device

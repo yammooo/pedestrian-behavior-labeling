@@ -147,6 +147,18 @@ def summarize(record, output):
             lines.append(f"| {dataset} | {len(rows)} | {np.median([r['native_points'] for r in rows]):.0f} | "
                          f"{np.median([r['voxels'] for r in rows]):.0f} | {np.median([r['gpu_seconds'] for r in rows]):.3f} | "
                          f"{max(r['peak_cuda_allocated_bytes'] for r in rows)/2**30:.2f} |")
+    rgb_rows = [r for r in record["frames"] if "rgb_seconds" in r]
+    if rgb_rows:
+        lines += ["", "## Frozen DINOv3 RGB", "", "Finite float32 768-channel normalized-CLS descriptors; FP16 CUDA autocast, batches of up to16 crops. Times are encoder wall time including transfer; first calls may include warm-up. GPU peaks include both resident encoders; incremental peak excludes the pre-call live allocation.", "",
+                  "| Dataset | Crops | Extraction seconds | Peak CUDA GiB | Incremental peak GiB | Repeat max absolute error |",
+                  "|---|---:|---:|---:|---:|---:|"]
+        for dataset in ("loki", "road-waymo"):
+            rows = [r for r in rgb_rows if r["dataset"] == dataset]
+            if rows:
+                lines.append(f"| {dataset} | {sum(r['rgb_crops'] for r in rows)} | {sum(r['rgb_seconds'] for r in rows):.3f} | "
+                             f"{max(r.get('rgb_peak_cuda_allocated_bytes', 0) for r in rows)/2**30:.3f} | "
+                             f"{max(r.get('rgb_incremental_peak_cuda_allocated_bytes', 0) for r in rows)/2**30:.3f} | "
+                             f"{max(r.get('rgb_repeat_max_absolute_error', 0) for r in rows):.6g} |")
     lines += ["", "## Random-sample extrapolation", "", "Rough group-scaled estimates, not a storage commitment. Float32 payload only; excludes indexes/compression and test preparation. Stress cases excluded.", "",
               "| Dataset / split | Scene features GiB | Neighborhood union GiB | Duplicated neighborhoods GiB | RGB CLS GiB | Point GPU hours |",
               "|---|---:|---:|---:|---:|---:|"]
@@ -317,9 +329,26 @@ def run(args):
                                        output/"panels"/f"{label}-crop-{len(item['tracks'])}.png")
                         item["tracks"].append(info)
                     if rgb_crops and image_encoder:
+                        cuda = str(args.device).startswith("cuda")
+                        if cuda:
+                            torch.cuda.synchronize()
+                            rgb_baseline = torch.cuda.memory_allocated()
+                            torch.cuda.reset_peak_memory_stats()
                         rgb_start = time.perf_counter()
                         rgb = np.concatenate([image_encoder(torch.stack(rgb_crops[i:i+16])) for i in range(0, len(rgb_crops), 16)])
+                        if cuda:
+                            torch.cuda.synchronize()
+                            item["rgb_peak_cuda_allocated_bytes"] = torch.cuda.max_memory_allocated()
+                            item["rgb_incremental_peak_cuda_allocated_bytes"] = torch.cuda.max_memory_allocated()-rgb_baseline
                         item["rgb_seconds"] = time.perf_counter()-rgb_start
+                        item["rgb_feature_mean"], item["rgb_feature_std"] = float(rgb.mean()), float(rgb.std())
+                        if not any(r["dataset"] == dataset and "rgb_repeat_max_absolute_error" in r for r in record["frames"]):
+                            first = torch.stack(rgb_crops[:16])
+                            repeat = image_encoder(first)
+                            item["rgb_repeat_max_absolute_error"] = float(np.max(np.abs(rgb[:len(first)]-repeat)))
+                            if not np.allclose(rgb[:len(first)], repeat, rtol=1e-4, atol=1e-4):
+                                write_json(output/"rgb-repeatability-failure.json", item)
+                                raise ValueError("Frozen RGB extraction repeatability check failed")
                         np.savez(output/"fixtures"/f"{label}-rgb.npz", cls=rgb,
                                  locators=np.array(rgb_tracks), key=np.array(str(key)))
                     item.update(union_tokens=int(union.sum()), rgb_crops=len(rgb_crops), rendered=render,

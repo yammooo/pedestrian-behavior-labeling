@@ -82,7 +82,7 @@ def frame_groups(rows):
         yield timestamp, list(group)
 
 
-def range_points(values, shape, calibration, pixel_pose=None, frame_pose=None):
+def range_points(values, shape, calibration, pixel_pose=None, frame_pose=None, *, with_strength=False):
     """Waymo range-image equations, including TOP per-pixel ego compensation.
 
     See official range_image_utils.py and v2/perception/utils/lidar_utils.py.
@@ -126,6 +126,11 @@ def range_points(values, shape, calibration, pixel_pose=None, frame_pose=None):
         points = world @ inverse[:3, :3].T + inverse[:3, 3]
     if not np.isfinite(points).all():
         raise ValueError("Non-finite decoded LiDAR points")
+    if with_strength:
+        strength = np.asarray(values, dtype=np.float64).reshape(shape)[..., 1][valid]
+        if not np.isfinite(strength).all() or (strength < 0).any():
+            raise ValueError("Invalid native LiDAR return strength")
+        return np.column_stack((points, strength))
     return points
 
 

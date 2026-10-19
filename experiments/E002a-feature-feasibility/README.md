@@ -127,7 +127,13 @@ From the isolated GPU checkout:
 probe_root="$PWD/outputs/experiments/E002a"
 uv run --no-project --python "$probe_root/extractor-env/bin/python" python scripts/check-e002a-rgb.py \
   --probe "$probe_root/native-probe-07" \
-  --output "$probe_root/dino-visual-check" --device cuda
+  --output "$probe_root/dino-visual-check-new" --device cuda
 ```
 
-The command reuses pinned checkpoint/native paths from `probe.json`; it does not decode LiDAR. Acceptance: compare CLS with earlier batched extraction (FP16 numerical tolerance), exact repeated first-crop patch extraction, finite pickle-free numerical fixtures, hand-checked cosine/PCA and gallery-selection cases, and unchanged protected input hashes. Results remain pending until execution.
+The command reuses pinned checkpoint/native paths from `probe.json`; it does not decode LiDAR. Match the original crop order and batches of up to16 for FP16 comparison. Raw saved crop pixels retain bicubic overshoot; display clips to [0,1] without changing encoder inputs.
+
+**Completed `dino-visual-check-03`** at revision `cff408200c9f87b0f05be1d737ac7d741fbfcb89` in **38.3 s** on aalto: **27 development frames, 45 valid patch examples and 20 explicit missing-crop examples**. All selected CLS descriptors match the previous extraction exactly (max absolute error0); the first repeated patch/CLS batch also matches exactly. All **725 protected files** remain unchanged: the prior 663 frozen references, probe record, original checkpoint and 60 RGB descriptor archives. [Gallery](../../outputs/experiments/E002a/dino-visual-check-03/index.html) · [numerical/provenance record](../../outputs/experiments/E002a/dino-visual-check-03/visual-check.json) · [independent fixture/link checks](../../outputs/experiments/E002a/dino-visual-check-03/acceptance.json). Panels have PNG/SVG exports; pickle-free fixtures retain exact inputs/features/maps/identities. Outputs are available locally and at `/home/user20/projects/pedestrian-behavior-labeling-review/outputs/experiments/E002a/dino-visual-check-03/`.
+
+Purposive visual inspection shows distinguishable visual regions in some examples and broad context similarity in others. These views support extraction sanity only; they do not establish foreground segmentation, pose sensitivity, CLS behavior information or modality benefit. No segmentation head, behavior training, target-test access or W&B run.
+
+Retained earlier manual attempts: `dino-visual-check` failed the CLS comparison because single-crop FP16 inference changed batch composition; `dino-visual-check-02` reproduced all LOKI examples but failed on a serialized native-root string passed to the ROAD reader. Matching original batches and restoring a `Path` fixed those failures; regression checks cover both. No automatic retry or overwritten evidence. Full CPU **91 tests / six CUDA skips**, CUDA **91**, and final isolated extractor **13** checks pass; numerical fixtures reconstruct cosine maps and all four questioned ROAD counts, and documentation links/`git diff --check` pass. Logs: `outputs/experiments/E002a/dino-visual-{cpu,cuda,extractor}-acceptance.log`.

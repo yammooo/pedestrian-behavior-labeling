@@ -6,6 +6,8 @@ Updated **2026-10-15**. Research-definition stage; the [joint E001/E001b/E001c r
 
 ## Next work
 
+The [DINO patch gallery](../experiments/E002a-feature-feasibility/README.md#dino-patch-visual-check--2026-10-19) now adds 45 PCA/similarity examples over 27 development frames, with corrected crop counts and explicit missing observations. This is an extraction sanity check; behavior training remains deferred.
+
 The [prediction review viewer](../README.md#inspect-model-predictions) now compares up to four saved runs, with scoped per-track scores, synchronized native context and separate case notes. All 77 CUDA tests and real browser checks on both datasets passed; [acceptance evidence](../outputs/inspection/prediction-viewer/acceptance/native-b297d5a/verification.json) records timings and 366 unchanged source artifacts. Use the isolated `aalto` viewer checkout; existing training checkouts remain unchanged.
 
 E001c [completed all 30 five-seed attempts](../experiments/E001c-bbox-inputs/README.md#five-seed-results-2026-10-15), with source-selected epochs 10–48 and patience stops at 18–56. The [joint 130-attempt / 260-cell review](../experiments/E001b-2d-bbox-contribution/results-review.md#e001c-native-box-inputs) adds class/stratum diagnostics and PNG/SVG comparisons: basic boxes average below E001b geometry in every direction; 2D size velocities show no systematic gain. Added 3D size velocities remain zero/noise, not evidence of new dynamics. Original results and caches remain unchanged; no cache rebuild or larger epoch cap is justified by these checks.

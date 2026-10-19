@@ -72,6 +72,7 @@ def run(args):
         "seed": 0, "frames": [], "failures": []}
     protected = source["protected"] | {str(probe/"probe.json"): record["probe_sha256"]}
     config = source["config"]
+    protected.update({str(p): checksum(p) for p in [Path(config["dino_weights"]), *sorted((probe/"fixtures").glob("*-rgb.npz"))]})
     started = time.monotonic()
     write_json(output/"visual-check.json", record)
     try:
@@ -101,6 +102,27 @@ def run(args):
                     label = f"{dataset}-{group}-{key}"
                     item = {"label": label, "split": frame["split"], "tracks": len(frame["tracks"]),
                         "valid_crops": sum(t["crop"]["valid"] for t in frame["tracks"]), "examples": []}
+                    valid_indices = [i for i, t in enumerate(frame["tracks"]) if t["crop"]["valid"]]
+                    descriptors = {}
+                    # Match the original FP16 extraction batches, including crop order.
+                    for start in range(0, len(valid_indices), 16):
+                        indices = valid_indices[start:start+16]
+                        inputs = []
+                        for i in indices:
+                            old = frame["tracks"][i]
+                            identity = json.loads(old["locator"])
+                            crop, info = square_crop(image, boxes.get(identity.get("track_id", identity.get("tube_uid"))))
+                            if info != old["crop"]:
+                                raise ValueError("Native crop differs from frozen probe")
+                            inputs.append(normalized_crop(crop))
+                        inputs = torch.stack(inputs)
+                        cls, patches = encoder.descriptors(inputs, patches=True)
+                        if "repeat_max_error" not in record:
+                            again_cls, again_patches = encoder.descriptors(inputs, patches=True)
+                            record["repeat_max_error"] = float(max(np.max(np.abs(cls-again_cls)), np.max(np.abs(patches-again_patches))))
+                            if record["repeat_max_error"] != 0:
+                                raise ValueError("Patch extraction repeatability failed")
+                        descriptors.update({i: (cls[j], patches[j]) for j, i in enumerate(indices)})
                     for i in crop_examples(frame["tracks"], valid_limit=2):
                         old = frame["tracks"][i]
                         identity = json.loads(old["locator"])
@@ -112,29 +134,23 @@ def run(args):
                         example = {"name": name, "locator": old["locator"], "slot": old["slot"], "crop": info}
                         crop_sheet(image, box, crop, info, output/"panels"/(name+"-crop.png"))
                         if crop is not None:
-                            inputs = normalized_crop(crop)[None]
-                            cls, patches = encoder.descriptors(inputs, patches=True)
+                            cls, patches = descriptors[i]
                             # Select the centre of the image-visible part of the box.
                             b = np.asarray(box)*np.tile(image.size, 2)
                             center = (np.maximum(b[:2], 0)+np.minimum(b[2:], image.size))/2
                             bounds = np.array(info["bounds_pixels"])
                             xy = np.floor((center-bounds[:2])/(bounds[2]-bounds[0])*16).astype(int).clip(0, 15)
                             seed = (int(xy[1]), int(xy[0]))
-                            colors, similarity = patch_maps(patches[0], seed)
+                            colors, similarity = patch_maps(patches, seed)
                             with np.load(probe/"fixtures"/(label+"-rgb.npz"), allow_pickle=False) as saved:
                                 match = np.flatnonzero(saved["locators"] == old["locator"])
                                 if len(match) != 1:
                                     raise ValueError("Missing/duplicate saved descriptor identity")
-                                error = float(np.max(np.abs(cls[0]-saved["cls"][match[0]])))
-                                if not np.allclose(cls[0], saved["cls"][match[0]], atol=1e-3, rtol=1e-3):
+                                error = float(np.max(np.abs(cls-saved["cls"][match[0]])))
+                                if not np.allclose(cls, saved["cls"][match[0]], atol=1e-4, rtol=1e-4):
                                     raise ValueError("CLS differs from previous batched extraction")
                             example.update(seed_row_column=list(seed), cls_previous_max_error=error)
-                            if "repeat_max_error" not in record:
-                                again_cls, again_patches = encoder.descriptors(inputs, patches=True)
-                                record["repeat_max_error"] = float(max(np.max(np.abs(cls-again_cls)), np.max(np.abs(patches-again_patches))))
-                                if record["repeat_max_error"] != 0:
-                                    raise ValueError("Patch extraction repeatability failed")
-                            np.savez(output/"fixtures"/(name+".npz"), crop=crop, cls=cls[0], patches=patches[0],
+                            np.savez(output/"fixtures"/(name+".npz"), crop=crop, cls=cls, patches=patches,
                                 pca_rgb=colors, cosine_similarity=similarity, seed_row_column=np.array(seed),
                                 locator=np.array(old["locator"]), key=np.array(str(key)))
                             dino_sheet(crop, colors, similarity, seed, output/"panels"/(name+"-dino"))

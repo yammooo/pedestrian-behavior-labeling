@@ -199,8 +199,8 @@ class UtoniaEncoder:
         points[:, :3] *= .2
         selected, inverse, grid = voxel_sample(points, grid_size=.01)
         coord = torch.from_numpy(points[selected, :3]).to(self.device)
-        # Official --wo_color zeros are passed through NormalizeColor: -1.
-        feat = torch.cat((coord, -torch.ones_like(coord), torch.zeros_like(coord)), dim=1)
+        # Official NormalizeColor divides by 255; absent color stays zero.
+        feat = torch.cat((coord, torch.zeros_like(coord), torch.zeros_like(coord)), dim=1)
         data = {"coord": coord, "grid_coord": torch.from_numpy(grid).int().to(self.device),
                 "feat": feat, "offset": torch.tensor([len(selected)], device=self.device)}
         with torch.inference_mode():

@@ -117,7 +117,7 @@ def run(args):
         "display_policy": "same native XYZ rows within target-centered 30 m world-horizontal radius; inverse grid/hierarchy mapping; 15/20/30 m rings; initial ego heading; no height cut or temporal accumulation",
         "measurement_policy": "seconds include grid preparation, inference, feature gathering/projection and CPU transfer; exclude scene I/O and artifact encoding; CUDA peaks include both resident encoders; no throughput or architecture speed ranking",
         "preprocessing": {"dditr": "unchanged 5 cm rotated XYZ+strength recipe",
-            "utonia": "official outdoor .2 scale, .01 scaled grid, native ego axes, no center shift; black missing color normalizes to -1, absent normals 0; last 3 hierarchy levels as official outdoor PCA demo; first native return/grid and all shuffle_orders False"},
+            "utonia": "official outdoor .2 scale, .01 scaled grid, native ego axes, no center shift; absent color and normals 0 (official NormalizeColor divides by 255); last 3 hierarchy levels as official outdoor PCA demo; first native return/grid and all shuffle_orders False"},
         "calibration": [], "tracks": [], "failures": []}
     started = time.monotonic()
     write_json(output/"comparison.json", record)

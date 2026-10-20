@@ -82,7 +82,7 @@ class PointPcaTest(unittest.TestCase):
         encoder.device = "cpu"
         def model(data):
             torch.testing.assert_close(data["feat"][:, :3], data["coord"])
-            torch.testing.assert_close(data["feat"][:, 3:6], -torch.ones_like(data["coord"]))
+            torch.testing.assert_close(data["feat"][:, 3:6], torch.zeros_like(data["coord"]))
             torch.testing.assert_close(data["feat"][:, 6:], torch.zeros_like(data["coord"]))
             self.assertTrue(float(data["coord"].abs().max()) < 2.)
             return self.hierarchy(data["coord"])

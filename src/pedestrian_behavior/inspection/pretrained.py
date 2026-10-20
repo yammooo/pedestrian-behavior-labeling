@@ -21,6 +21,8 @@ DITR_SHA256 = "93dbb9d3fda247adf56e1c1ebd419d6ada4ebe4dc141110c606926d3ad67b30d"
 DITR_CONFIG_SHA256 = "7cce1838385d3f14830b5d61c88db98cbb62951cea39665311c61bca23f253e3"
 DINO_HF_SHA256 = "9a21ac3df0c63839d62612dda6f454d816c25611cc7a52966ed5a5a94921dc8b"
 DINO_PTH_SHA256 = "73cec8be7427c8655ceced13ce62f6e20a1fa90d1b4d4a550df17a1144081a7c"
+UTONIA_REVISION = "de1f9deef4ee65e508d74347f8d0eb848d878abb"
+UTONIA_SHA256 = "a0a2e5e234ce943082ae9ba26bcff74e285f16ed8d04fed5c36ffe8dc30ea353"
 
 
 def image_state_from_hf(state, expected):
@@ -144,6 +146,70 @@ class PointEncoder:
         if features.shape != (len(selected), 64) or not torch.isfinite(features).all() or not torch.isfinite(logits).all():
             raise ValueError("Nonfinite/misaligned decoded point features")
         return features.float().cpu().numpy(), logits.float().cpu().numpy(), selected, inverse
+
+    def features(self, native_points, native_indices, project=None):
+        features, _, _, inverse = self(native_points)
+        value = torch.from_numpy(features[inverse[native_indices]])
+        return (project(value) if project else value).numpy()
+
+
+def utonia_features(point, indices):
+    """Gather the official outdoor demo's last three levels at input indices.
+
+    Following inverse maps before gathering avoids allocating a full-resolution
+    1224-channel feature array merely to project its colors or sample PCA rows.
+    """
+    hierarchy = [point]
+    while "pooling_parent" in hierarchy[-1]:
+        hierarchy.append(hierarchy[-1]["pooling_parent"])
+    hierarchy.reverse()
+    if len(hierarchy) != 5:
+        raise ValueError("Expected five Utonia encoder levels")
+    pieces = []
+    for level, value in enumerate(hierarchy):
+        if level >= 2:
+            pieces.append(value["feat"][indices])
+        if level < 4:
+            indices = hierarchy[level+1]["pooling_inverse"][indices]
+    return torch.cat(pieces, dim=-1), hierarchy[0]["coord"]
+
+
+class UtoniaEncoder:
+    """Original frozen encoder; official outdoor scale and missing modalities."""
+
+    def __init__(self, code, checkpoint, device):
+        self.code = verify_code(code, UTONIA_REVISION)
+        if checksum(checkpoint) != UTONIA_SHA256:
+            raise ValueError("Unexpected official Utonia checkpoint checksum")
+        sys.path.insert(0, str(self.code))
+        author = importlib.import_module("utonia")
+        self.model = author.load(str(Path(checkpoint).resolve()), custom_config={"shuffle_orders": False})
+        for module in self.model.modules():
+            if hasattr(module, "shuffle_orders"):
+                module.shuffle_orders = False
+        self.model.requires_grad_(False).eval().to(device)
+        self.device = device
+
+    def features(self, native_points, native_indices, project=None):
+        # Official outdoor demo: scale .2, 1 cm scaled grid, no centering.
+        points = np.asarray(native_points, dtype=np.float32).copy()
+        points[:, :3] *= .2
+        selected, inverse, grid = voxel_sample(points, grid_size=.01)
+        coord = torch.from_numpy(points[selected, :3]).to(self.device)
+        # Official --wo_color zeros are passed through NormalizeColor: -1.
+        feat = torch.cat((coord, -torch.ones_like(coord), torch.zeros_like(coord)), dim=1)
+        data = {"coord": coord, "grid_coord": torch.from_numpy(grid).int().to(self.device),
+                "feat": feat, "offset": torch.tensor([len(selected)], device=self.device)}
+        with torch.inference_mode():
+            point = self.model(data)
+            features, original_coord = utonia_features(point,
+                torch.from_numpy(inverse[native_indices]).long().to(self.device))
+            if not torch.equal(original_coord, coord):
+                raise ValueError("Utonia feature/input coordinate order differs")
+            if features.shape != (len(native_indices), 1224) or not torch.isfinite(features).all():
+                raise ValueError("Invalid/nonfinite Utonia features")
+            value = project(features) if project else features
+        return value.float().cpu().numpy()
 
 
 class ImageEncoder:

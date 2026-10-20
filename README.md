@@ -412,3 +412,17 @@ The [DINO patch visual check](experiments/E002a-feature-feasibility/README.md#di
 Add `--compare-crop-scales` with a fresh output directory for the [1.5×/2×/3× side-by-side diagnostic](experiments/E002a-feature-feasibility/README.md#crop-size-visual-comparison--2026-10-19); every crop remains 256×256. This does not change the E002 training proposal's 1.5× input.
 
 For [ten full-track window videos](experiments/E002a-feature-feasibility/README.md#whole-track-window-videos--2026-10-19), use `scripts/video-e002a-tracks.py --help` in the same isolated GPU environment. Each combines a 3× RGB crop with nested 1.5×/2×/3× outlines and target-centered semantic LiDAR with 15/20/30 m radius rings.
+
+For the [frozen D-DITR/Utonia PCA comparison](experiments/E002a-feature-feasibility/README.md#frozen-point-feature-pca--2026-10-20), reuse those ten tracks in the isolated extractor environment:
+
+```bash
+probe_root="$PWD/outputs/experiments/E002a"
+uv run --no-project --python "$probe_root/extractor-env/bin/python" python scripts/check-e002a-points.py \
+  --probe "$probe_root/native-probe-07" \
+  --videos "$probe_root/track-window-videos" \
+  --utonia-code "$probe_root/dependencies/utonia" \
+  --utonia-weights "$probe_root/weights/utonia.pth" \
+  --output "$probe_root/point-pca-comparison" --device cuda
+```
+
+The output directory must be fresh. PCA is fitted once per encoder on a balanced training-only sample from both datasets. RGB and both point-feature BEVs share native frame/point identities; colors are arbitrary, independently fitted per encoder and fixed across videos. No behavior training or segmentation accuracy evaluation.

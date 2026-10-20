@@ -22,13 +22,8 @@ def bev_pixels(offsets):
     return PANEL_SIZE/2+np.c_[-xy[:, 1], -xy[:, 0]]*(PANEL_SIZE/64)
 
 
-def render_track_frame(frame, track, anchor, offsets, labels, palette, names, heading):
-    canvas = Image.new("RGB", VIDEO_SIZE, "#11151b")
-    draw = ImageDraw.Draw(canvas)
-    font, title = ImageFont.load_default(size=18), ImageFont.load_default(size=23)
-    draw.text((25, 15), heading, fill="white", font=title)
-    draw.text((25, 50), "RGB: 3x window; thin outlines show 1.5x / 2x / 3x sides", fill="white", font=font)
-    draw.text((760, 50), "LiDAR semantic predictions: 15 / 20 / 30 m radii", fill="white", font=font)
+def rgb_window(frame, track):
+    font = ImageFont.load_default(size=18)
     left = Image.new("RGB", (PANEL_SIZE, PANEL_SIZE), "#1c222b")
     ld = ImageDraw.Draw(left)
     image = frame["image"] if frame else None
@@ -45,25 +40,27 @@ def render_track_frame(frame, track, anchor, offsets, labels, palette, names, he
     else:
         ld.text((30, 280), "No target RGB crop at this timestep", fill="white", font=font)
         ld.text((30, 310), "No box interpolation or previous-frame reuse", fill="#b8c2cc", font=font)
-    canvas.paste(left, (25, 90))
+    return left, crop, pixels is not None
 
+
+def colored_bev(frame, track, anchor, offsets, colors):
+    """Shared metric display for semantic and continuous feature colors."""
+    font = ImageFont.load_default(size=18)
     right = np.full((PANEL_SIZE, PANEL_SIZE, 3), [21, 26, 34], dtype=np.uint8)
     counts = [0, 0, 0]
     if offsets is not None:
-        offsets, labels = np.asarray(offsets), np.asarray(labels)
-        if offsets.ndim != 2 or offsets.shape[1] != 3 or labels.shape != (len(offsets),) or not np.isfinite(offsets).all():
-            raise ValueError("Invalid aligned semantic offsets/labels")
+        offsets, colors = np.asarray(offsets), np.asarray(colors)
+        if offsets.ndim != 2 or offsets.shape[1] != 3 or colors.shape != (len(offsets), 3) or not np.isfinite(offsets).all() or not np.isfinite(colors).all():
+            raise ValueError("Invalid aligned point offsets/colors")
         radius = np.linalg.norm(offsets[:, :2], axis=1)
         counts = [int((radius <= r).sum()) for r in RADII]
         keep = radius <= RADII[-1]
-        points, classes = offsets[keep], labels[keep]
-        if (classes < 0).any() or (classes >= len(palette)).any():
-            raise ValueError("Invalid semantic class")
+        points, colors = offsets[keep], colors[keep]
         # Draw higher surfaces last where several voxel features share a BEV pixel.
         order = np.argsort(points[:, 2], kind="stable")
         xy = np.rint(bev_pixels(points[order])).astype(int)
         inside = ((xy >= 0) & (xy < PANEL_SIZE)).all(1)
-        right[xy[inside, 1], xy[inside, 0]] = palette[classes[order][inside]]
+        right[xy[inside, 1], xy[inside, 0]] = colors[order][inside]
     bev = Image.fromarray(right)
     bd = ImageDraw.Draw(bev)
     if offsets is not None:
@@ -83,7 +80,24 @@ def render_track_frame(frame, track, anchor, offsets, labels, palette, names, he
         bd.line((320,312,320,328), fill="white", width=1)
     else:
         bd.text((30, 280), "No usable target 3D box / scan / pose", fill="white", font=font)
-        bd.text((30, 310), "No interpolated center or stale segmentation", fill="#b8c2cc", font=font)
+        bd.text((30, 310), "No interpolated center or stale features", fill="#b8c2cc", font=font)
+    return bev, counts
+
+
+def render_track_frame(frame, track, anchor, offsets, labels, palette, names, heading):
+    canvas = Image.new("RGB", VIDEO_SIZE, "#11151b")
+    draw = ImageDraw.Draw(canvas)
+    font, title = ImageFont.load_default(size=18), ImageFont.load_default(size=23)
+    draw.text((25, 15), heading, fill="white", font=title)
+    draw.text((25, 50), "RGB: 3x window; thin outlines show 1.5x / 2x / 3x sides", fill="white", font=font)
+    draw.text((760, 50), "LiDAR semantic predictions: 15 / 20 / 30 m radii", fill="white", font=font)
+    left, crop, rgb_valid = rgb_window(frame, track)
+    canvas.paste(left, (25, 90))
+    if offsets is not None:
+        labels = np.asarray(labels)
+        if labels.shape != (len(offsets),) or (labels < 0).any() or (labels >= len(palette)).any():
+            raise ValueError("Invalid aligned semantic labels")
+    bev, counts = colored_bev(frame, track, anchor, offsets, palette[labels] if offsets is not None else None)
     canvas.paste(bev, (760, 90))
     for i, (scale, radius, color) in enumerate(zip((1.5,2,3),RADII,RING_COLORS)):
         draw.text((25+i*205, 745), f"{scale:g}x RGB / {radius}m LiDAR", fill=color, font=font)
@@ -95,5 +109,29 @@ def render_track_frame(frame, track, anchor, offsets, labels, palette, names, he
         draw.rectangle((x,y+3,x+12,y+15), fill=tuple(color))
         draw.text((x+18,y), name.replace("construction_vehicle", "construction"), fill="white", font=ImageFont.load_default(size=14))
     draw.text((25, 872), "Frozen nuScenes D-DITR predictions; no segmentation GT. Whole-track 5 Hz grid; missing observations retained.", fill="#b8c2cc", font=ImageFont.load_default(size=16))
-    return canvas, {"crop": crop, "points_within_radii": counts, "rgb_valid": pixels is not None,
+    return canvas, {"crop": crop, "points_within_radii": counts, "rgb_valid": rgb_valid,
                     "lidar_valid": offsets is not None}
+
+
+PCA_VIDEO_SIZE = (2048, 850)
+
+
+def render_pca_frame(frame, track, anchor, offsets, colors, heading):
+    canvas = Image.new("RGB", PCA_VIDEO_SIZE, "#11151b")
+    draw = ImageDraw.Draw(canvas)
+    font = ImageFont.load_default(size=19)
+    draw.text((25, 12), heading, fill="white", font=font)
+    rgb, crop, valid = rgb_window(frame, track)
+    for x, title in zip((25, 704, 1383), ("RGB 3x; 1.5x / 2x outlines", "D-DITR: frozen nuScenes features", "Utonia: frozen multi-dataset features")):
+        draw.text((x, 53), title, fill="white", font=font)
+    canvas.paste(rgb, (25, 90))
+    counts = None
+    for x, name in ((704, "dditr"), (1383, "utonia")):
+        rgb_colors = np.uint8(np.clip(colors[name], 0, 1)*255) if offsets is not None else None
+        bev, counts = colored_bev(frame, track, anchor, offsets, rgb_colors)
+        canvas.paste(bev, (x, 90))
+    draw.text((25, 750), "Same native points; 15 / 20 / 30 m rings. Up: initial ego forward. White: native target box.", fill="white", font=font)
+    draw.text((25, 780), "Fixed PCA per encoder across frames/datasets; colors have no class meaning and do not match between encoders.", fill="#b8c2cc", font=font)
+    draw.text((25, 811), "Qualitative development probe; Utonia pretraining includes Waymo. No behavior training or accuracy claim.", fill="#b8c2cc", font=font)
+    return canvas, {"crop": crop, "rgb_valid": valid, "lidar_valid": offsets is not None,
+                    "points_within_radii": counts}

@@ -134,6 +134,19 @@ def range_points(values, shape, calibration, pixel_pose=None, frame_pose=None, *
     return points
 
 
+def range_semantics(values, shape, lidar_values, lidar_shape):
+    """Align [instance, semantic] labels to range_points' row-major range mask."""
+    if (len(lidar_shape) != 3 or lidar_shape[2] != 4 or min(lidar_shape) <= 0
+            or list(shape) != [*lidar_shape[:2], 2]):
+        raise ValueError("Segmentation/range-image shapes differ")
+    labels = np.asarray(values)
+    if not np.issubdtype(labels.dtype, np.integer) or (labels < 0).any():
+        raise ValueError("Expected nonnegative integer segmentation labels")
+    labels = labels.reshape(shape)[..., 1]
+    ranges = np.asarray(lidar_values).reshape(lidar_shape)[..., 0]
+    return labels[np.isfinite(ranges) & (ranges > 0)]
+
+
 def focus_centers(timestamps, observations, poses):
     """Interpolate view focus in world space; never interpolate annotation boxes."""
     known = []

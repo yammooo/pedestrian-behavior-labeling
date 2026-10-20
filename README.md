@@ -426,3 +426,14 @@ uv run --no-project --python "$probe_root/extractor-env/bin/python" python scrip
 ```
 
 The output directory must be fresh. PCA is fitted once per encoder on a balanced training-only sample from both datasets. RGB and both point-feature BEVs share native frame/point identities; colors are arbitrary, independently fitted per encoder and fixed across videos. No behavior training or segmentation accuracy evaluation.
+
+For the bounded [frozen semantic-head transfer check](experiments/E002a-feature-feasibility/README.md#frozen-semantic-head-transfer-check--2026-10-20), use the same isolated GPU environment:
+
+```bash
+probe_root="$PWD/outputs/experiments/E002a"
+uv run --no-project --python "$probe_root/extractor-env/bin/python" python scripts/check-e002a-semantics.py \
+  --probe "$probe_root/native-probe-07" \
+  --output "$probe_root/semantic-transfer" --device cuda
+```
+
+This scores the existing frozen nuScenes head on seven timestamp-matched Waymo development frames, with a declared common taxonomy. It saves local numerical fixtures, confusion PNG/SVG, GT/prediction BEVs and a report. Fresh output required; no training or held-out evaluation.

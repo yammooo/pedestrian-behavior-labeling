@@ -279,3 +279,9 @@ The [official release README](https://github.com/salmank255/Road-waymo-dataset) 
 | Cross from left | 531 | 88 |
 
 Action tubes are label-specific sequences; do not sum them as unique pedestrians or equate them to LOKI's distinct tracks per action. The **516 waiting tubes** are especially relevant to supervision scale. The acquired 9,573 train/validation pedestrian tracks match the paper's non-test total; current paired counts above do not include test supervision. The extent scan above measures gaps and whole-track lengths; action episodes remain uncharacterized.
+
+## Native LiDAR semantic-label availability (2026-10-20)
+
+Read-only verification on aalto found **798 training /202 validation Parquet files** under `/run/media/user20/F47C60057C5FC152/projects/waymo_v2/{training,validation}/lidar_segmentation/`. Sampled arrays contain nonzero semantic IDs for both returns. The [official component schema](https://github.com/waymo-research/waymo-open-dataset/blob/master/src/waymo_open_dataset/v2/perception/segmentation.py) stores `[instance_id, semantic_class]`, annotates TOP only, and does not cover every frame/point. Native instance IDs can be -1 even when semantic IDs are valid. [Semantic class enum](https://github.com/waymo-research/waymo-open-dataset/blob/master/src/waymo_open_dataset/protos/segmentation.proto).
+
+Exactly seven of E002a's existing 37 Waymo development frames match label timestamps, across five ROAD clips. Counted component files are not claims of annotation completeness. [E002a](../../experiments/E002a-feature-feasibility/README.md#frozen-semantic-head-transfer-check--2026-10-20) owns the bounded mapped-head diagnostic, pixel alignment, scoring exclusions and results; no native annotations, associations or experiment splits were changed.

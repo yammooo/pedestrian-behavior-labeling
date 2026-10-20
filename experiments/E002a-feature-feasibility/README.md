@@ -214,3 +214,23 @@ The [official schema](https://github.com/waymo-research/waymo-open-dataset/blob/
 Report pooled native-return confusion, per-class IoU/precision/recall/F1 and point/frame/group support, accuracy, supported-GT-class macro-IoU, per-frame scores and excluded/unlabeled counts. Absent classes remain explicit; no fabricated uncertainty intervals from seven correlated frames. Save raw/row-normalized PNG/SVG confusion, seven GT/prediction/error BEVs, pickle-free reconstruction fixtures, mapping/provenance/protected hashes/status/failures, `report.md` and `index.html` in a fresh ignored attempt. BEV bounds are display-only. Existing 5 cm deterministic sampling/axis/intensity/precision contracts remain unchanged; no TTA or new classifier. [Acceptance tests](../../tests/test_semantic_check.py) cover range masks/channels, sensor/return ordering, unmatched-prediction penalties, hand-computed metrics, empty support and aligned BEV pixels. [Command](../../README.md#e002a-pretrained-feature-feasibility).
 
 This diagnoses the released head on a small Waymo development sample. It cannot establish behavior usefulness, frozen-feature linear separability, or LOKI transfer. No model winner or later experiment setting is selected from these scores.
+
+**Completed `semantic-transfer-02`** at revision `85d51f0cce48438221a56104fd022d2510ac12e8` in **71.3 s** on aalto (summed encoder calls **2.47 s**, remainder native reads/checks/artifacts). Seven frames from five clips: six source-training frames and one source-validation frame. **994,982 scored native returns**, **78.30% accuracy**, **40.40% supported-class macro-IoU** (8/9 classes supported). These are mapped development diagnostics, not official benchmark or behavior results.
+
+| Class | GT points | Supporting frames / clips | IoU % | Precision % | Recall % |
+|---|---:|---:|---:|---:|---:|
+| Vehicle |109,345|7 /5|61.73|89.67|66.45|
+| Pedestrian |29,654|7 /5|22.05|97.29|22.19|
+| Drivable |179,183|7 /5|73.22|88.97|80.53|
+| Sidewalk |62,629|7 /5|15.20|57.46|17.12|
+| Manmade |351,752|7 /5|76.58|83.51|90.22|
+| Vegetation |261,951|7 /5|74.46|83.93|86.83|
+| Bicycle |359|1 /1|0.00|0.00|0.00|
+| Cone |109|2 /2|0.00|0.00|0.00|
+| Motorcycle |0|0 /0|0.00|0.00|unknown|
+
+The unsupported motorcycle class has 121 false-positive predictions; its recall is undefined and it is excluded from supported-class macro-IoU. Rare bicycle/cone scores have little support. Pedestrian recall ranges from 0–42.9% across these frames; most missed pedestrian points map to manmade (13,503) or vegetation (7,882). Sidewalk often maps to unmatched native categories (38,273 points). Broad scene structure transfers on this small sample, but the existing head is not a reliable pedestrian/sidewalk segmenter here. This does not imply the frozen features cannot support a learned behavior readout; it also supplies no evidence for LOKI semantic performance. No preprocessing or class mapping was tuned after scoring.
+
+[Full table/report](../../outputs/experiments/E002a/semantic-transfer-02/report.md) · [GT/prediction/error gallery](../../outputs/experiments/E002a/semantic-transfer-02/index.html) · [Numerical/provenance record](../../outputs/experiments/E002a/semantic-transfer-02/semantic-check.json) · [Independent acceptance](../../outputs/experiments/E002a/semantic-transfer-02/acceptance.json) · [Confusion PNG](../../outputs/experiments/E002a/semantic-transfer-02/confusion.png) / [SVG](../../outputs/experiments/E002a/semantic-transfer-02/confusion.svg). Available locally and at `/home/user20/projects/pedestrian-behavior-labeling-review/outputs/experiments/E002a/semantic-transfer-02/`.
+
+All **671 protected files** retained their hashes. Independent acceptance checks every **1,165,732 native TOP label/pixel association**, exact metric reconstruction from pickle-free arrays, and identical coordinates/voxel mappings/predictions for all four frames with retained original spatial fixtures (the other three have no prior spatial fixture). Seven BEV panels and raw/row-normalized confusion exports were checked. CPU107 (six CUDA skips), CUDA107 and isolated semantic5 checks pass; [CPU](../../outputs/experiments/E002a/semantic-cpu-tests.log), [CUDA](../../outputs/experiments/E002a/semantic-cuda-tests.log). The first `semantic-transfer` attempt failed before inference because a validation check wrongly rejected legal -1 **instance IDs**; semantic IDs remained nonnegative. The fix validates the semantic channel separately and is regression-tested; the failed evidence is retained. No automatic retry or existing result changes.

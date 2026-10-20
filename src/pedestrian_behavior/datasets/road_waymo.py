@@ -140,9 +140,11 @@ def range_semantics(values, shape, lidar_values, lidar_shape):
             or list(shape) != [*lidar_shape[:2], 2]):
         raise ValueError("Segmentation/range-image shapes differ")
     labels = np.asarray(values)
-    if not np.issubdtype(labels.dtype, np.integer) or (labels < 0).any():
-        raise ValueError("Expected nonnegative integer segmentation labels")
+    if not np.issubdtype(labels.dtype, np.integer):
+        raise ValueError("Expected integer segmentation labels")
     labels = labels.reshape(shape)[..., 1]
+    if (labels < 0).any():
+        raise ValueError("Expected nonnegative semantic IDs")
     ranges = np.asarray(lidar_values).reshape(lidar_shape)[..., 0]
     return labels[np.isfinite(ranges) & (ranges > 0)]
 

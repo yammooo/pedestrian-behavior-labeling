@@ -12,7 +12,7 @@ from pedestrian_behavior.inspection.segmentation import semantic_bev, semantic_c
 class SemanticCheckTest(unittest.TestCase):
     def test_range_labels_use_exact_range_mask_and_semantic_channel(self):
         values = np.array([[2,7,0,0],[0,8,0,0],[np.nan,9,0,0],[4,11,0,0]])
-        labels = np.array([[101,7],[102,1],[103,2],[104,18]])
+        labels = np.array([[-1,7],[102,1],[103,2],[-1,18]])
         np.testing.assert_array_equal(range_semantics(labels.ravel(),[1,4,2],values.ravel(),[1,4,4]),[7,18])
         c = "[LiDARCalibrationComponent]."
         calibration = {c+"extrinsic.transform":np.eye(4).ravel(),c+"beam_inclination.values":[0]}
@@ -22,6 +22,9 @@ class SemanticCheckTest(unittest.TestCase):
             range_semantics(labels.ravel(),[2,2,2],values.ravel(),[1,4,4])
         with self.assertRaises(ValueError):
             range_semantics(labels.astype(float).ravel(),[1,4,2],values.ravel(),[1,4,4])
+        labels[0,1] = -1
+        with self.assertRaises(ValueError):
+            range_semantics(labels.ravel(),[1,4,2],values.ravel(),[1,4,4])
 
     def test_laser_return_order_retains_unannotated_context(self):
         def scan(laser):

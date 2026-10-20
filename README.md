@@ -437,3 +437,14 @@ uv run --no-project --python "$probe_root/extractor-env/bin/python" python scrip
 ```
 
 This scores the existing frozen nuScenes head on seven timestamp-matched Waymo development frames, with a declared common taxonomy. It saves local numerical fixtures, confusion PNG/SVG, GT/prediction BEVs and a report. Fresh output required; no training or held-out evaluation.
+
+For the authorized [fresh linear semantic head](experiments/E002a-feature-feasibility/README.md#frozen-feature-linear-semantic-probe--2026-10-20) over the same frozen backbone, use the same isolated environment:
+
+```bash
+probe_root="$PWD/outputs/experiments/E002a"
+uv run --no-project --python "$probe_root/extractor-env/bin/python" python scripts/probe-e002a-linear.py \
+  --probe "$probe_root/native-probe-07" \
+  --output "$probe_root/linear-semantic-probe" --device cuda
+```
+
+Fresh output required. This extracts a bounded 48-training/12-validation-frame sample from separate existing development clips, trains only a nine-class affine head, and compares it with the original head and a taxonomy-only control. No behavior model, backbone updates, LOKI supervision or held-out scoring.

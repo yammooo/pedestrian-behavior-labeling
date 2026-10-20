@@ -137,7 +137,7 @@ def publish(output, record):
     (output/"index.html").write_text("\n".join(body)+"</html>\n")
 
 
-def plot_confusion(output, confusion):
+def plot_confusion(output, confusion, *, title="Frozen nuScenes D-DITR: seven Waymo development frames; shared taxonomy"):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -153,7 +153,7 @@ def plot_confusion(output, confusion):
                yticklabels=NAMES, xlabel="Prediction", ylabel="Waymo GT", title="Row fraction" if norm else "Native return counts")
         ax.tick_params(axis="x", rotation=65)
         fig.colorbar(image, ax=ax, shrink=.7)
-    fig.suptitle("Frozen nuScenes D-DITR: seven Waymo development frames; shared taxonomy")
+    fig.suptitle(title)
     for ext in ("png", "svg"):
         fig.savefig(output/f"confusion.{ext}", dpi=160)
     plt.close(fig)

@@ -42,7 +42,7 @@ def semantic_metrics(confusion):
         "unmatched_predictions": int(cm[:, -1].sum())}
 
 
-def semantic_bev(xyz, targets, predictions, names, palette, heading):
+def semantic_bev(xyz, targets, predictions, names, palette, heading, *, prediction_title="Frozen nuScenes D-DITR"):
     """Three identical TOP point views; display bounds do not restrict scoring."""
     xyz = np.asarray(xyz)
     if xyz.shape != (len(targets), 3) or not np.isfinite(xyz).all():
@@ -65,7 +65,7 @@ def semantic_bev(xyz, targets, predictions, names, palette, heading):
     errors[labeled] = np.where((targets[labeled] == predictions[labeled])[:, None],
                               [60, 200, 115], [245, 75, 65])
     for i, (title, rgb) in enumerate((("Waymo GT (shared classes)", colors[gt]),
-                                     ("Frozen nuScenes D-DITR", colors[pred]),
+                                     (prediction_title, colors[pred]),
                                      ("Correct green / incorrect red", errors))):
         panel = np.full((side, side, 3), [21, 26, 34], dtype=np.uint8)
         panel[xy[order, 1], xy[order, 0]] = rgb[order]

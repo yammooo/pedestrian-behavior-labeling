@@ -181,8 +181,11 @@ class UtoniaEncoder:
         self.code = verify_code(code, UTONIA_REVISION)
         if checksum(checkpoint) != UTONIA_SHA256:
             raise ValueError("Unexpected official Utonia checkpoint checksum")
-        sys.path.insert(0, str(self.code))
-        author = importlib.import_module("utonia")
+        # The package initializer also imports unused SciPy augmentations.
+        package = types.ModuleType("utonia")
+        package.__path__ = [str(self.code/"utonia")]
+        sys.modules["utonia"] = package
+        author = importlib.import_module("utonia.model")
         self.model = author.load(str(Path(checkpoint).resolve()), custom_config={"shuffle_orders": False})
         for module in self.model.modules():
             if hasattr(module, "shuffle_orders"):

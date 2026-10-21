@@ -103,7 +103,13 @@ class FeatureCache:
         try:
             self.payload = self.root / "entries"
             self.payload.mkdir(exist_ok=True)
-            self.db = sqlite3.connect(self.root / "index.sqlite3")
+            index = self.root / "index.sqlite3"
+            fresh = not index.exists()
+            if fresh and any(self.payload.iterdir()):
+                raise ValueError("Refusing to adopt a nonempty unindexed feature directory")
+            self.db = sqlite3.connect(index)
+            if not fresh and self.db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='format'").fetchone() is None:
+                raise ValueError("Existing index is not an owned feature cache")
             self.db.execute("PRAGMA synchronous=FULL")
             self.db.execute("CREATE TABLE IF NOT EXISTS format (version INTEGER NOT NULL)")
             if not self.db.execute("SELECT * FROM format").fetchall():

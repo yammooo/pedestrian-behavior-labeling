@@ -98,6 +98,21 @@ class StorageTest(unittest.TestCase):
                 if kind=="missing":
                     with self.assertRaises(ValueError):FeatureCache(root,min_free_bytes=0)
 
+    def test_unowned_directories_and_indexes_are_rejected_without_deleting_files(self):
+        import sqlite3
+        for foreign_index in (False,True):
+            with tempfile.TemporaryDirectory() as root:
+                root=Path(root);(root/"entries").mkdir()
+                foreign=root/"entries/important.npz";foreign.write_bytes(b"keep this")
+                if foreign_index:
+                    with sqlite3.connect(root/"index.sqlite3") as db:
+                        db.execute("CREATE TABLE unrelated (value INTEGER)")
+                with self.assertRaises(ValueError):FeatureCache(root,min_free_bytes=0)
+                self.assertEqual(foreign.read_bytes(),b"keep this")
+                if foreign_index:
+                    with sqlite3.connect(root/"index.sqlite3") as db:
+                        self.assertIsNone(db.execute("SELECT 1 FROM sqlite_master WHERE name='format'").fetchone())
+
     def test_single_owner_and_pickle_free_payload(self):
         with tempfile.TemporaryDirectory() as root:
             with FeatureCache(root,min_free_bytes=0) as cache:

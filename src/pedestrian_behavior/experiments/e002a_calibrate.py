@@ -91,6 +91,7 @@ def run(args):
     torch.set_num_threads(2)
     args.output.mkdir(parents=True, exist_ok=False)
     record = {"status": "incomplete", "device": args.device, "code": resource_code(),
+              "torch": str(torch.__version__), "cuda": torch.version.cuda,
               "revision": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
               "command": sys.orig_argv, "workloads": [], "failures": [], "held_out_tests": False,
               "fixture_sha256": checksum(args.fixtures / "execution.json"), "settings": SETTINGS}

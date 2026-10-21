@@ -249,7 +249,8 @@ class MultimodalTest(unittest.TestCase):
             root = Path(temporary)
             fixture(root / "experiments")
             profile = root / "profile.json"
-            profile.write_text(json.dumps({"status": "complete", "device": "cpu", "code": e002a_run.resource_code(), "profile": PROFILE}))
+            profile.write_text(json.dumps({"status": "complete", "device": "cpu", "torch": str(torch.__version__), "cuda": torch.version.cuda,
+                                           "code": e002a_run.resource_code(), "profile": PROFILE}))
             setup = json.loads((root / "experiments/E001/data-setup/loki/setup.json").read_text())
             selection = root / "selection.json"
             selection.write_text(json.dumps({"tracks": [{"dataset": "loki", "locator": t["locator"]} for t in setup["tracks"]

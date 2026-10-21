@@ -112,6 +112,8 @@ def assembly(args):
         raise ValueError("Completed calibration on the requested device required")
     if profile_record.get("code") != resource_code():
         raise ValueError("Execution code changed since resource calibration")
+    if profile_record.get("torch") != str(torch.__version__) or profile_record.get("cuda") != torch.version.cuda:
+        raise ValueError("PyTorch/CUDA backend differs from resource calibration")
     profile = validate_profile(profile_record["profile"])
     if args.device == "cuda" and profile_record.get("gpu") != torch.cuda.get_device_name():
         raise ValueError("Resource profile was calibrated on different GPU hardware")

@@ -2,6 +2,7 @@
 
 import argparse
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 import gc
 from importlib.metadata import PackageNotFoundError, version
@@ -183,10 +184,11 @@ class FeatureCatalog:
 class FeatureSupply:
     """Lazy per-track RGB / per-scene-frame points, shared by all experiment arms."""
 
-    def __init__(self, catalogs, rgb_cache, point_cache, encoders, identity, camera_reader=None):
+    def __init__(self, catalogs, rgb_cache, point_cache, encoders, identity, camera_reader=None, crop_map=map):
         self.catalogs, self.rgb_cache, self.point_cache = catalogs, rgb_cache, point_cache
         self.encoders, self.identity = encoders, identity
         self.camera_reader = native_camera if camera_reader is None else camera_reader
+        self.crop_map = crop_map
         self._point_stream = None
 
     def rgb(self, dataset, locator):
@@ -213,16 +215,20 @@ class FeatureSupply:
                     values[indices] = self.encoders("rgb", torch.stack(crops))
                     valid[indices] = True
                     crops.clear(); indices.clear()
-            for key,image,boxes in self.camera_reader(reader, group, [k for k in track["source_keys"] if k is not None], [track["track_id"]], catalog.manifest["scenes"][group]):
+            def crop(item):
+                key,image,boxes = item
+                pixels,detail = square_crop(image,boxes.get(track["track_id"]),expansion=3)
+                return key,normalized_crop(pixels) if pixels is not None else None,detail
+            frames = self.camera_reader(reader, group, [k for k in track["source_keys"] if k is not None], [track["track_id"]], catalog.manifest["scenes"][group])
+            for key,pixels,detail in self.crop_map(crop,frames):
                 key = str(key)
                 if key not in slots or key in seen:
                     raise ValueError("Unexpected/duplicate native camera frame")
                 seen.add(key)
-                pixels, detail = square_crop(image, boxes.get(track["track_id"]), expansion=3)
                 for slot in slots[key]:
                     info[slot] = detail
                     if pixels is not None:
-                        crops.append(normalized_crop(pixels)); indices.append(slot)
+                        crops.append(pixels); indices.append(slot)
                         if len(crops) == RGB_BATCH:
                             flush()
             if seen != set(slots):
@@ -404,11 +410,12 @@ def run(args):
             host=platform.node(), selection=str(args.selection) if args.selection else "full-frozen-source-train-validation")
         encoders = FrozenEncoders(config,args.device)
         with FeatureCache(args.rgb_cache_root, min_free_bytes=gb_bytes(args.min_free_gb)) as rgb, \
-             FeatureCache(args.point_cache_root, capacity_bytes=gb_bytes(args.point_cache_gb), min_free_bytes=gb_bytes(args.min_free_gb)) as points:
+             FeatureCache(args.point_cache_root, capacity_bytes=gb_bytes(args.point_cache_gb), min_free_bytes=gb_bytes(args.min_free_gb)) as points, \
+             ThreadPoolExecutor(max_workers=4) as crops:
             record["initial"] = {"rgb":rgb.initial,"points":points.initial}
             from .e002a_camera_cache import CameraReuse
             camera = CameraReuse(catalogs, selected)
-            supply = FeatureSupply(catalogs,rgb,points,encoders,identity,camera_reader=camera)
+            supply = FeatureSupply(catalogs,rgb,points,encoders,identity,camera_reader=camera,crop_map=crops.map)
             for d,k in selected:
                 t = catalogs[d].tracks[k]
                 row = {"dataset":d,"locator":k,"slots":t["slots"],"split":t["split"]}

@@ -1,6 +1,7 @@
 """Bounded native/GPU acceptance for production E002a caches; no fitting or held-out access."""
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -103,8 +104,8 @@ def run(args):
             record["rgb_warm"]=rgb.snapshot()
             from .e002a_camera_cache import CameraReuse
             camera=CameraReuse(catalogs,selected)
-            with FeatureCache(output/"rgb-camera-reuse",min_free_bytes=gb_bytes(args.min_free_gb)) as repeated_rgb:
-                repeated=FeatureSupply(catalogs,repeated_rgb,points,encoders,identity,camera_reader=camera)
+            with FeatureCache(output/"rgb-camera-reuse",min_free_bytes=gb_bytes(args.min_free_gb)) as repeated_rgb, ThreadPoolExecutor(max_workers=4) as crops:
+                repeated=FeatureSupply(catalogs,repeated_rgb,points,encoders,identity,camera_reader=camera,crop_map=crops.map)
                 for d,k in sorted(selected,key=lambda x:(x[0],catalogs[x[0]].tracks[x[1]]["group"],x[1])):
                     assert_same(references[d,k],repeated.rgb(d,k))
                 record["checks"].append({"check":"bounded-scene-camera-reuse-exact-RGB-payload","passed":True,

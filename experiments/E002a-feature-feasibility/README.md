@@ -1,6 +1,6 @@
 # E002a — First multimodal behavior pilot
 
-**Working specification, updated 2026-10-21.** First behavior pilot within [E002](../E002-multimodal-reference/README.md). The three D-DITR-first arms, branch interfaces and complete-track memory strategy below are agreed in direction; **working default** and **TBD** values remain provisional. No behavior model, pilot command, full feature cache or behavior-training run exists yet. Completed extraction/resource/semantic probes are [preparatory evidence](#preparatory-work), not separate behavior experiments. Later E002 comparisons may use different architectures.
+**Agreed pilot specification, updated 2026-10-21.** First behavior pilot within [E002](../E002-multimodal-reference/README.md). Scope, branch/tensor interfaces, dropout, fitting, batching policy and450 GB point-cache budget are settled below. Numeric execution limits and live throughput require the [implementation acceptance](#before-implementation-and-execution); modality benefit and final research architecture remain hypotheses. No behavior model, pilot command, production feature cache or behavior-training run exists yet. Completed extraction/resource/semantic probes are [preparatory evidence](#preparatory-work), not separate behavior experiments. Later E002 comparisons may use different architectures.
 
 The existing directory name is retained for stable commands, artifact references and links. This record owns the pilot specification, preparation, fitting settings and eventual behavior results.
 
@@ -14,7 +14,7 @@ E001b geometry is a pragmatic reference, not a universal winner. Its BiLSTM trac
 
 The [frozen-feature semantic probe](#frozen-feature-linear-semantic-probe--2026-10-20) reached pedestrian/sidewalk IoU54.1/35.2% on two Waymo development validation clips. This shows accessible semantics, not adequate segmentation or behavior usefulness. Our labeler receives pedestrian tracks/boxes; its point branch supplies additional target/scene evidence. A temporal model cannot restore information discarded by a frozen encoder, while spatial readout/fusion can also be bottlenecks. A negative behavior result cannot identify the encoder alone as the cause.
 
-Prepare one bounded pilot on each source:
+Prepare one source-training/validation pilot on each source:
 
 | Arm | Enabled descriptors |
 |---|---|
@@ -31,7 +31,7 @@ The earlier LR/query sweep is not the next increment. No further standalone segm
 - Reuse E001/E001b's frozen eligible complete tracks, 5 Hz grids, four-state targets, native associations and group splits. Preserve 3D-only LOKI tracks, internal gaps and unlabeled context.
 - Generate four logits at every non-padding timestep. Only accepted GT contributes to equal-track CE and metrics; retain E001 selection/aggregation semantics.
 - Geometry normalization uses source-training statistics only. Frozen image transforms are fixed; no pooled cross-dataset feature fitting or target PCA/compression.
-- Source training/validation only in the pilot. Train separate models per source; each source's validation selects its own checkpoints/settings. Pilot group/track budgets are **TBD**; no held-out inference.
+- Source training/validation only in the pilot, using all frozen eligible tracks in those splits: **LOKI8,574 training /1,861 validation; ROAD-Waymo4,380 /1,110**. Keep the same complete tracks/GT across arms; no additional group/track subset. Train separate models per source; each source's validation selects its own checkpoints. No held-out inference.
 - Experimental ROAD partitions are not official Waymo partitions: all acquired annotated ROAD clips used by E001 originate in official Waymo training. Keep existing splits; [native verification](../../docs/datasets/road-waymo.md#official-download-verification-2026-10-16).
 
 ## Tensor conventions
@@ -53,7 +53,7 @@ The earlier LR/query sweep is not the next increment. No further standalone segm
 
 Use source timestamps/immediate-neighbor derivatives, no interpolation; zero missing numeric values after source normalization. ROAD uses native Waymo FRONT boxes without ROAD fallback; LOKI uses native boxes. Do not substitute E001c centers/dimensions.
 
-Working MLP: `Linear(20,64) → GELU → Linear(64,64) → GELU`, output `[B,T,64]`. Internal flags preserve partial missingness. Derive `geometry_valid = any(six flags)` and zero the final descriptor if all groups are missing. Append this derived flag at fusion alongside RGB/LiDAR availability; retain the six internal flags for partial missingness.
+Agreed MLP: `Linear(20,64) → GELU → Linear(64,64) → GELU`, output `[B,T,64]`. Internal flags preserve partial missingness. Derive `geometry_valid = any(six flags)` and zero the final descriptor if all groups are missing. Append this derived flag at fusion alongside RGB/LiDAR availability; retain the six internal flags for partial missingness.
 
 ## RGB branch
 
@@ -68,7 +68,7 @@ Native RGB + native target bbox
 → RGB descriptor [128]
 ```
 
-**Agreed 2026-10-21:** cache the frozen RGB CLS at **3×** crop scale, separately from earlier1.5× probe outputs. Store float32 `[T,768]`, explicit validity, track/native-time identities, crop/transform settings and checkpoint provenance; zero missing rows without filtering tracks. Never reuse a1.5× CLS cache as3×. Full pilot population/cache scope remains to be frozen.
+**Agreed 2026-10-21:** cache the frozen RGB CLS at **3×** crop scale for the full pilot training/validation populations, separately from earlier1.5× probe outputs. Store float32 `[T,768]`, explicit validity, track/native-time identities, crop/transform settings and checkpoint provenance; zero missing rows without filtering tracks. Never reuse a1.5× CLS cache as3×. RGB is a complete persistent cache without LRU eviction, separate from the450 GB point budget; dense descriptors total2.313 GB before masks/identities ([disk audit](#bounded-cache-simulation--2026-10-21)). Do not cache the full population's RGB images/crop pixels.
 
 Keep the intended crop center; fill out-of-image pixels with pretrained RGB mean. No native-box/image intersection means missing RGB; retain partial boxes and record intersection/padding fractions. Numeric geometry remains unclipped. No full-image branch, patch retrieval, RGB augmentation or encoder fine-tuning initially. CLS utility is untested; DINO web-pretraining overlap is unknown.
 
@@ -93,7 +93,7 @@ Use a **20 m horizontal-radius cylinder**, no height cutoff, centered on the obs
 
 **Agreed 2026-10-21:** retain every D-DITR encoder-input voxel representative inside the20 m crop, using its aligned decoded feature and native/inverse references. No mapping back to duplicate features for every native return, additional subsampling, token cap, target-support filtering or GT/model-error-based selection. Preserve empty/missing crops through the existing missing-input policy. Shared-site alignment with Utonia is deferred with that arm.
 
-Working per-point input and projection:
+Agreed per-point input and projection:
 
 ```text
 relative_xyz_i: target-relative coordinates in fixed initial ego-heading axes
@@ -114,13 +114,14 @@ One cross-attention block, four heads, **one unconditioned learned seed (`M = 1`
 Point tokens H: [N,D]       Seeds S: [M,D]
 Q = LN(S) W_Q              K = LN(H) W_K       V = LN(H) W_V
 Split into4 heads: Q [4,M,D/4], K,V [4,N,D/4]
-A = softmax(Q K^T / sqrt(D/4) + padding_mask)  # [4,M,N]
-U = S + ConcatHeads(A V) W_O
-Z = U + FFN(LN(U))          # token-wise; agreed FFN 128→512→128, GELU
+A = Drop(softmax(Q K^T / sqrt(D/4) + padding_mask))  # [4,M,N]
+U = S + Drop(ConcatHeads(A V) W_O)
+FFN(x) = Linear2(Drop(GELU(Linear1(x))))  # 128→512→128
+Z = U + Drop(FFN(LN(U)))
 LiDAR descriptor = Z[0]     # [128]; no extra output projection
 ```
 
-This is cross-attention, not prepended-token unrestricted self-attention: no `N × N` attention in this readout. Spatial dropout is **TBD**. Geometry enters through point coordinates/membership; no learned semantic class predictions are required. The single seed output forms one128-channel descriptor/frame; it is not an extra temporal timestep. The spatial summary is made before temporal reasoning; future frames do not change its point selection. [PMA/Set Transformer precedent](https://proceedings.mlr.press/v97/lee19d.html).
+This is cross-attention, not prepended-token unrestricted self-attention: no `N × N` attention in this readout. Every `Drop` uses0.1 in training and is disabled in evaluation; [exact shared policy](#dropout-normalization-and-initialization). Geometry enters through point coordinates/membership; no learned semantic class predictions are required. The single seed output forms one128-channel descriptor/frame; it is not an extra temporal timestep. The spatial summary is made before temporal reasoning; future frames do not change its point selection. [PMA/Set Transformer precedent](https://proceedings.mlr.press/v97/lee19d.html).
 
 Multiple seeds remain a possible later control, not a first-pilot setting. With the same128-channel width, four seeds would produce `[4,128]` instead of `[1,128]`: more summary slots, not the same total descriptor size. Different seeds could preserve different spatial evidence, but specialization is not guaranteed and seeds may become redundant. Cross-attention score/value aggregation scales with seed count; point encoding/projection is shared. Flattening would require a larger fusion input; compressing back to128 reinstates an output bottleneck, though aggregation is more expressive. Passing spatial tokens separately through time would change the temporal architecture. No extra seeds can recover information absent from frozen encoder features or discarded point sampling.
 
@@ -149,14 +150,29 @@ geometry [64] + RGB [128] + LiDAR [128] + availability [3]
 → concat [323] → trainable Linear(323,256)
 → fused tokens [B,T,256]; no additive positional encoding
 → two full-track bidirectional pre-norm Transformer layers, with temporal RoPE on Q/K
-→ Linear(256,4) → logits [B,T,4]
+→ LayerNorm(256) → Linear(256,4) → logits [B,T,4]
 ```
 
-Agreed widths: geometry64, RGB128, LiDAR128, fusion input323 and temporal256. Temporal working settings: two layers, four heads, FFN1024, dropout0.1; full noncausal attention within each track, never across tracks. Mask padding and retain missing/unlabeled context. Keep inactive descriptor slots zero so fusion/temporal shapes match every arm. `g` is geometry plus shared availability controls with a new Transformer, not a pure geometry or historical BiLSTM score.
+Agreed widths: geometry64, RGB128, LiDAR128, fusion input323 and temporal256. Temporal settings: two layers, four heads, FFN256→1024→256 with GELU, dropout0.1 and final LayerNorm; full noncausal attention within each track, never across tracks. Temporal Q/K/V and output projections retain biases. Apply the same residual/FFN/dropout structure as the spatial block, with self-attention over frame tokens and RoPE on Q/K. Mask padding and retain missing/unlabeled context. Keep inactive descriptor slots zero so fusion/temporal shapes match every arm. `g` is geometry plus shared availability controls with a new Transformer, not a pure geometry or historical BiLSTM score.
 
-**Temporal positional encoding, agreed 2026-10-21:** use [RoPE](https://arxiv.org/abs/2104.09864) on Q/K in each temporal self-attention layer, not on V; no added sinusoidal/learned position vectors. Keep full bidirectional attention. Working implementation convention: rotate all64 channels/head with frequency base10,000 and position `(nominal_grid_time − track_start_time) /0.2`, equivalent to slot index at5 Hz. Preserve positions through missing modalities/GT; mask temporal padding. No track-length normalization or absolute recording timestamps. This replaces the earlier additive sinusoidal proposal; no behavior advantage is yet measured.
+**Temporal positional encoding, agreed 2026-10-21:** use [RoPE](https://arxiv.org/abs/2104.09864) on Q/K in each temporal self-attention layer, not on V; no added sinusoidal/learned position vectors. Keep full bidirectional attention. Rotate adjacent channel pairs over all64 channels/head with frequency base10,000 and position `(nominal_grid_time − track_start_time) /0.2`, equivalent to slot index at5 Hz. Preserve positions through missing modalities/GT; mask temporal padding. No track-length normalization or absolute recording timestamps. This replaces the earlier additive sinusoidal proposal; no behavior advantage is yet measured.
 
 Initially frozen: DINOv3 and the selected point encoder, in evaluation mode. Trainable: geometry MLP, RGB projection, point normalization/projection, spatial seed/attention/FFN, fusion, temporal layers and classifier. Trainable operations use deterministic FP32; frozen extraction precision is separately recorded. Only behavior supervision trains these modules; source semantic-head probe weights are not reused.
+
+### Dropout, normalization and initialization
+
+Use independent dropout0.1 applications at these four locations in the spatial block and each temporal layer:
+
+| Location | Application |
+|---|---|
+| Attention probabilities | After masked softmax, before multiplying by V |
+| Attention output | After output projection, before residual addition |
+| FFN hidden activations | After GELU, before the second linear |
+| FFN output | After the second linear, before residual addition |
+
+This matches the dropout locations in the [pinned PyTorch Transformer implementation](https://github.com/pytorch/pytorch/blob/v2.7.1/torch/nn/modules/transformer.py). No additional dropout in the geometry MLP, RGB/point projections, fusion or classifier; no modality dropout, token removal or stochastic depth. Validation/inference disables all dropout; frozen encoders remain in evaluation mode during training too. Spatial recomputation must reuse the original forward's RNG state/masks.
+
+All trainable LayerNorms use affine parameters and epsilon1e-5. Normalize point features before adding geometry; normalize projected point tokens once for shared spatial K/V, and the seed separately for Q. Use the existing resource graph's initialization: PyTorch default linear/LayerNorm initialization and spatial seed `Normal(0,0.02)`. Construct modules in the same order under seed0 before disabling unused branches, so shared initial weights match across arms. Disabled branches contribute no descriptor or gradients.
 
 ## Access and comparison safeguards
 
@@ -168,32 +184,46 @@ Later modality ablations remain deferred: geometry+availability, +RGB, +LiDAR wi
 
 ## Deferred training pilot
 
-One seed0 attempt/arm/source gives **six planned exploratory attempts** across three arms/two sources; no execution command yet. These diagnose effects, not reliable winners. Repeat central comparisons before final claims. Do not multiply the pilot into a backbone/query/LR search.
+One seed0 attempt/arm/source gives **six planned exploratory attempts** across three arms/two sources, run **one at a time** with a manual sequential launcher; no execution command yet. Use readable W&B names `e002a-<source>-<arm>-s0`, with source `loki` or `road-waymo`; fresh local attempt directories distinguish manual restarts. These diagnose effects, not reliable winners. Repeat central comparisons before final claims. Do not multiply the pilot into a backbone/query/LR search.
 
-Working fitting defaults, to ratify before execution:
+Agreed fitting settings:
 
 | Setting | Value |
 |---|---|
 | Loss | Equal-track CE over accepted GT; no unlabeled/padding contribution |
-| Optimizer | AdamW, LR **TBD**, betas(.9,.999), epsilon1e-8, weight decay1e-4 |
-| Updates | FP32, global gradient clip1; effective batch64 complete tracks via correctly weighted accumulation; retain final partial batch |
-| Schedule/budget | Three-epoch warmup then constant LR; maximum100 epochs, patience15 |
+| Optimizer | AdamW, peak LR0.0003 for every trainable module, betas(.9,.999), epsilon1e-8, weight decay1e-4 on all trainable parameters, including biases/LayerNorm/spatial seed |
+| Updates | Deterministic FP32; effective batch64 complete tracks via equal-track accumulation; retain final partial update; global gradient clip1 once after accumulation, before stepping |
+| Schedule/budget | Three epochs of update-based linear warmup, then constant LR0.0003; maximum100 epochs including warmup, patience15 |
 | Selection | Highest source-validation track-weighted macro-F1; exact ties lower CE, then earlier epoch; patience resets only for strict F1 improvement |
 | Augmentation | Natural missingness and ordinary network dropout; no modality/crop augmentation initially |
 
-Earlier LR candidates1e-4/3e-4/1e-3 and one/four spatial seeds are historical development options, not a required sweep; the first pilot now fixes one spatial seed. Reuse E001 loss/checkpoint/evaluation operations where applicable; do not change existing data/results or shared scientific semantics.
+For1-based optimizer update `k`, let `W = 3 × ceil(training_tracks /64)` and set `LR(k) = 0.0003 × min(k/W,1)` before that update. Warmup has402 updates for LOKI /207 for ROAD. Microbatch count never advances the schedule. Evaluate full source validation in evaluation mode after every epoch, including warmup; selection/patience operate from epoch1. Epoch training CE aggregates the changing-weight training losses over actual tracks, without an extra training-set pass.
+
+Reset Python/NumPy/PyTorch and the persistent loader generator to0 before each attempt; retain E001 deterministic algorithms, cuBLAS setting, disabled cuDNN benchmarking and TF32 policy. Frozen extraction keeps its separately documented precision/repeatability qualifications. Encoder initialization/extraction must preserve training RNG streams and restore deterministic/backend settings, so cache hits/misses do not alter later dropout. Do not silently relax determinism for trainable operations.
+
+Earlier LR candidates1e-4/1e-3 and one/four spatial seeds are historical development options, not a required sweep; the first pilot fixes LR3e-4 and one seed. Reuse E001 loss/checkpoint/evaluation operations where applicable; preserve existing data/results and default behavior for prior experiments. Atomic `best.pt`/`last.pt` store trainable model state, configuration/normalization references and selection evidence, not copies of frozen encoder weights. Fresh attempt directories, no training resume, automatic restart or retry; persistent frozen-feature cache reuse is independent of training resume.
+
+### Local evidence and W&B
+
+Retain the existing W&B entity/project and tidy namespaces. Main native curves are `train/loss_step` versus hidden `optimizer_step`, `train/loss_epoch`, `val/loss` and `val/macro_f1` versus hidden `epoch`; add `train/learning_rate` versus `optimizer_step`. A step record represents the actual accumulated optimizer update, including the final partial update, not each physical microbatch. Keep detailed support/provenance in config/tables and resource/cache diagnostics in a separate collapsible section; no parameter/gradient histograms or automatic provenance charts.
+
+After reloading the selected checkpoint, save full source-validation predictions with identities/masks/condition membership, primary/per-class metrics, raw/track-weighted confusions and the applicable existing observation strata. Include actual missing-RGB/LiDAR support and paired track changes across arms; retain point counts as diagnostics. Save PNG/SVG exports and numerical evidence locally; log agreed metrics/tables/plots to W&B, never checkpoint/full-prediction artifacts. No held-out tests or event metrics are added. Record effective configuration, command/revision/diff, hashes/encoder provenance, seed, versions/hardware, optimizer steps, denominators, runtime, GPU/system memory and cache state/traffic/timing. Local evidence precedes external logging; W&B errors propagate without fallback/retry.
+
+One seed diagnoses feasibility and possible modality effects, not reliable superiority. Inspect source-validation class/missing-input changes and compute costs before choosing central comparisons to repeat; negative results do not identify the backbone alone as the bottleneck.
 
 ## Complete-track memory and batching policy — agreed 2026-10-21
 
 Keep every selected complete track and every encoder voxel token in its crop. Do not drop long/dense tracks, split them into independent training windows, truncate temporal attention or change inference context to meet a memory limit. Numerical VRAM ceilings and frame concurrency must follow measurement, not the analytical estimates below.
 
-- **Frozen feature supply:** encode scenes without encoder gradients, share scene outputs across represented pedestrians where practical, and discard frozen internal activations. Cached outputs allow encoders to be unloaded during behavior training. On-demand extraction from native data is an alternative, not rejected; it repeats decoding/encoding on cache misses and adds encoder residency/workspaces to the VRAM budget. RGB CLS caching is agreed at3×; full disk cache, bounded pilot cache or on-demand extraction for **D-DITR** remain a measured choice, not a settled requirement. Freeze extraction semantics and verify equivalent feature/identity pairing for either path.
-- **Two batching levels:** whole-track microbatches vary with estimated point cost `sum(N_bt)` and temporal padding/attention cost. Spatial frame chunks control the number of point sets resident at once; they do not split the temporal sequence. Shuffle/bucket deterministically from seed0 using lengths/token counts, never behavior labels or model errors. Each selected track appears once/epoch, including expensive tracks; grouping and calibrated ceilings are fixed before a run and recorded.
+- **Frozen feature supply:** encode scenes without encoder gradients, share scene outputs across represented pedestrians and discard frozen internal activations. Cache frozen outputs before trainable LayerNorm/projection. **Final budget, agreed 2026-10-21:450 GB decimal point payload**, shared across dataset namespaces, training/validation and sequential attempts; byte-based LRU eviction and native decoding/frozen encoding on misses. Use immutable scene/native-frame union entries for the represented tracks'20 m crops, with coordinate/native references and pinned source/encoder/preprocessing identity. Retain every agreed token; capacity controls retention, never population or token selection. Extraction semantics and feature/identity pairing must be equivalent on hits/misses. Cache misses add encoder residency/workspaces to the VRAM budget; fully cached supply may unload encoders. RGB CLS is fully cached separately. Production cache implementation/live timing remain pending.
+- **Configurable cache budget:** expose `point_cache_gb`, default450 (planned CLI `--point-cache-gb 450`), and `--point-cache-root`, default `outputs/experiments/E002a/point-cache/` on the Linux output filesystem; convert GB once to integer bytes and record the resolved path/limit. Changing capacity requires no code edit, feature regeneration or cache-identity change; a lower limit trims entries by the same LRU policy. Exclude RGB, indexes, temporary writes and other outputs from the payload limit. Reserve3 GB RGB,15 GB metadata/temporary-write allowance and10 GB pilot outputs, leaving about61 GB operating margin in the [disk audit](#bounded-cache-simulation--2026-10-21). A configurable20 GB low-free-space guard is a minimum, not a target; check temporary-write headroom and fail visibly rather than silently shrink capacity. No production cache/CLI exists yet.
+- **Two batching levels:** globally shuffle complete tracks with one persistent seed0 generator, form64-track logical optimizer updates, then pack physical microbatches **within each update** using point cost `sum(N_bt)` and temporal padding/attention cost. Do not bucket across update boundaries. Match logical update membership across arms; physical microbatches may differ. Spatial frame chunks control point sets resident at once; they never split the temporal sequence. Use lengths/token counts only, never behavior labels or errors. Every track appears once/epoch, including expensive tracks; grouping/ceilings are fixed before a run and recorded.
 - **Gradients, conditional memory paths:** ordinary execution is the default for workloads that fit. Use spatial activation recomputation and/or CPU-input staging/offloading only for workloads that require them, according to preflight-calibrated, recorded shape/memory thresholds; no OOM-triggered retry. Retain the small descriptors for full-track temporal attention. Recompute only the trainable readout from frozen features during backward, not the frozen encoder. Preserve RNG behavior and delay updates until all contributions are accumulated; do not detach the readout from behavior supervision. Ordinary GPU-input checkpointing alone is insufficient. Exact implementation details must pass gradient equivalence before execution; [checkpointing](https://docs.pytorch.org/docs/2.7/checkpoint.html) and [saved-tensor offloading](https://docs.pytorch.org/docs/2.7/autograd.html#torch.autograd.graph.save_on_cpu).
-- **Effective batch:** accumulate summed individual track losses and divide by actual tracks per optimizer update (working target64 complete tracks; retain the final partial update). Do not average microbatch means equally when microbatch sizes differ. Use matched track order/update membership across arms; physical microbatches may differ. Partial-GT masks and E001 equal-track semantics remain unchanged.
+- **Effective batch:** accumulate summed individual track losses divided by the logical update's actual track count (64 except the final partial update), then clip once and step. Do not average microbatch means equally when sizes differ. E001 equal-track/partial-GT semantics remain unchanged. Different microbatch shapes need not draw identical dropout masks; reproduce a run with its recorded packing/profile. Fixed-shape recomputation must preserve masks.
 - **Preflight:** measure the agreed20 m block on short, typical and long/dense development tracks in both datasets, including naturally missing branches. Time ordinary execution, recomputation and offloading on fitting fixtures, choosing the least overhead path that meets the budget; verify outputs, parameter gradients and one optimizer update within declared FP32 tolerances, including unequal accumulation and temporal padding. Record peak allocated/reserved VRAM, host RAM, transfer/I/O, tracks and point tokens per second, and timings after warm-up. Derive safe microbatch and frame-chunk ceilings from these measurements. If the largest selected example cannot fit, fail visibly and revisit the agreed execution strategy; no OOM-driven retry, silent cap or dropped track.
+- **Throughput/concurrency:** run one behavior attempt at a time initially. Maximize measured tracks/second under safe VRAM/host-RAM limits, not utilization percentage or batch size alone. Include actual cold/warm cache I/O, native misses and encoder residency/transients in integrated calibration. Save the resource profile before training; two-process scheduling/shared-cache contention is deferred.
 
-This settles the execution direction, not its numeric resource limits. Disk feasibility is a separate gate: recomputation saves activations, not the stored frozen-feature payload. Feature-supply strategy and any pilot-cache scope/sharing/disk budget must be fixed before full preparation. On-demand timings must include native reads/decoding, transfer, scene reuse and frozen encoding; a small forward-only encoder timing is not end-to-end epoch throughput. No additional sampling or precision reduction is authorized by this policy.
+This settles the feature-supply direction and disk payload ceiling, not its numeric RAM/VRAM limits or measured throughput. Recomputation saves activations, not the stored frozen-feature payload. Validate the bounded cache before full preparation: miss timings must include native reads/decoding, transfer, scene reuse and frozen encoding; a small forward-only encoder timing is not end-to-end epoch throughput. No additional sampling or precision reduction is authorized by this policy.
 
 ## Analytical VRAM budget — 2026-10-21
 
@@ -253,6 +283,8 @@ The baseline native traversal/encoding totals100.64 s across304 sweeps, excludin
 
 **Acceptance/evidence:** outputs, every parameter gradient and one synthetic AdamW update match across memory paths at rtol1e-4/atol1e-5 (maximum reported difference1.94e-7). All **890 protected** sources/fixtures remain unchanged. Independent artifact checks reconstruct point counts, unique rows,20 m membership, finite pickle-free float32 caches and zero missing RGB rows. CPU116 (six CUDA skips), CUDA116 and isolated-runtime5 checks pass.
 
+This preparatory graph used spatial dropout0 and temporal0.1. Its measurements/equivalence evidence remain unchanged; the final spatial0.1 policy requires the newly declared fixed-shape dropout/RNG and integrated resource checks before behavior training.
+
 Manual attempts remain: `execution-probe` failed on integer timestamp filename concatenation; `execution-probe-02` completed native extraction but was manually interrupted before unguarded offload stress, with interruption also preventing its final evidence write; `execution-probe-03` failed the GPU optimizer-update equivalence check with default biased spatial attention. The final graph uses the specified bias-free spatial projections; equivalence passes without relaxed tolerances. Attempt04 independently hashes/verifies the reused fixtures and original sources. Original1.5×/15 m probes and all E001-family data/results are unchanged.
 
 [Local report](../../outputs/experiments/E002a/execution-probe-04/report.md), [numerical evidence](../../outputs/experiments/E002a/execution-probe-04/execution.json), [artifact audit](../../outputs/experiments/E002a/execution-probe-04/artifact-audit.json), [nonempty compression audit](../../outputs/experiments/E002a/execution-probe-04/compression-audit.json), [selective on-demand audit](../../outputs/experiments/E002a/execution-probe-04/selective-on-demand-audit.json), [GPU system samples](../../outputs/experiments/E002a/execution-probe-04/system.csv) and [validation/failure logs](../../outputs/experiments/E002a/execution-validation/) are collected locally.3× RGB fixtures are also local in `outputs/experiments/E002a/execution-probe-02/rgb/`. Full point fixtures remain on aalto at `/home/user20/projects/pedestrian-behavior-labeling-review/outputs/experiments/E002a/execution-probe-02/`; final resource evidence is in sibling `execution-probe-04/`.
@@ -289,18 +321,31 @@ At nominal size, training-only hits are98.3% LOKI /85.3% ROAD with400 GB versus 
 
 [Report and full tables](../../outputs/experiments/E002a/cache-simulation-02/report.md) · [Numerical results/provenance](../../outputs/experiments/E002a/cache-simulation-02/simulation.json) · [Independent audit](../../outputs/experiments/E002a/cache-simulation-02/artifact-audit.json) · [LOKI trace](../../outputs/experiments/E002a/cache-simulation-02/loki-trace.npz) / [ROAD trace](../../outputs/experiments/E002a/cache-simulation-02/road-waymo-trace.npz) · [CPU acceptance](../../outputs/experiments/E002a/cache-simulation-02/validation/cpu-tests.log). CPU121 checks pass with six CUDA-only skips; byte/request conservation, capacity/scale controls, source hashes and saved sampler permutations pass independently. CUDA execution is unnecessary for metadata replay.
 
+**Disk check, 2026-10-21 12:29 UTC:** aalto's resolved E002a root is `/home/user20/projects/pedestrian-behavior-labeling/outputs/experiments/E002a/`; the review checkout links there. Its Linux filesystem has **539.12 GB available** (`df -B1`, user-available bytes), already accounting for the existing18.89 GB E002a directory, including extractor environment9.04 GB and weights1.45 GB. The native-data NTFS partition has only36.80 GB available and is not the proposed cache location. No files were deleted or moved.
+
+The frozen eligible train/validation populations contain753,019 temporal slots: dense float32 RGB CLS storage is **2.313 GB** at768 values/slot, even retaining all missing rows. Reserve3 GB for RGB/masks/identities,15 GB for point indexes/metadata and temporary writes, and10 GB for new pilot outputs/checkpoints/logs. These are planning allowances, not measured new artifacts; full RGB image/crop storage is not planned. A **450 GB point payload** leaves about61 GB beyond these allowances, versus only11 GB at500 GB (475 GB leaves36 GB). **User accepted450 GB as the final configurable default**, superseding the earlier500 GB agreement. Preserve the400 GB simulation as measured evidence; no450 GB hit rate or live speedup has been measured. Production cache remains unimplemented.
+
 ## Before implementation and execution
 
-| Open item | Required definition |
-|---|---|
-| Pilot population | Group/track budget per source; fixed complete tracks/GT across arms; class/missing-input support; validation coverage |
-| Resource calibration | Measure20 m all-voxel costs and throughput; fix track-memory and concurrent-frame ceilings, padding/bucketing details and host-RAM limit |
-| Readout | Choose spatial dropout; D=128, M=1, feature LayerNorm and spatial GELU FFN128→512→128 are settled |
-| Feature supply | Compare native on-demand extraction with bounded/shared caches; include encoder residency, native I/O, scene reuse, epoch throughput, host RAM and disk ceiling; stored descriptors remain FP32 unless a separate change is agreed |
-| Fitting | Ratify one LR and schedule/budget/effective batch; no hidden optimization differences |
-| Evidence/next decision | Primary/per-class behavior metrics, missing-RGB/point-support strata, paired track changes, parameters/runtime/resources; criteria for repeat seeds or adaptation |
+The scientific pilot specification is settled. Remaining work is implementation and measured operational validation:
 
-The earlier preparatory direct worst-case workload OOM and~1.15TiB D-DITR float32 union estimate prohibit assuming full preparation fits. Measure20 m D-DITR costs; Utonia costs remain a deferred gate; do not silently cap tokens, truncate tracks or reduce precision. Validate coordinate/feature pairing, missing-branch zeros, spatial/temporal/GT masks, full-track gradients/aggregation, checkpoint reload and existing-pipeline compatibility before execution. Preserve failures; fresh output directories, no automatic retry/resume.
+| Item | Required implementation/evidence |
+|---|---|
+| Population/preparation | Verify frozen split identities/counts and class/missing-input support; prepare all3× RGB CLS/masks and input-only point-cost references without changing tracks/GT |
+| Model/trainer | Implement the agreed tensor flow, masks/dropout, equal-track accumulation, update-based warmup and selection; preserve old experiment defaults |
+| Feature supply | Implement450 GB configurable LRU and complete RGB cache; verify atomic writes, immutable identity, capacity changes, hit/miss equality and free-space guard |
+| Resource calibration | Measure actual20 m payloads and integrated cold/warm throughput; record safe microbatch/frame ceilings, memory-path thresholds and VRAM/host-RAM limits, including encoder residency; no guessed numeric limits |
+| Evidence/handoff | Verify local predictions reconstruct metrics and W&B content/failure behavior; provide a fresh-output single-run command and manual sequential six-attempt launcher |
+
+Acceptance before the six exploratory attempts:
+
+1. Check exact shapes, coordinate/feature pairing, missing/disabled-branch zeros and shared availability flags. GT must not affect spatial selection or enter model inputs; padding masks exclude nonexistent tokens without removing missing/unlabeled context. Verify full-track future context and RoPE positions through gaps.
+2. With dropout disabled, compare unequal microbatch/final-partial aggregation, gradients and optimizer updates against a logical-batch reference. With dropout0.1 and fixed physical shapes, compare ordinary/recomputed outputs, gradients and updates at rtol1e-4/atol1e-5; preserve RNG/masks. Do not require identical dropout across different packing shapes.
+3. Verify cache byte/LRU accounting, shared-frame reuse, capacity reduction, atomic writes, corruption/nonfinite failures, hit/miss feature equality and unchanged training RNG/backend settings. Preserve frozen source/encoder hashes.
+4. Verify exact warmup/update counts, padding/unlabeled loss exclusion, nonfinite/empty-GT failures, full validation, F1/CE/earlier-epoch tie-breaking, patience/budget stops and selected-checkpoint predictions.
+5. Run required CPU/CUDA suites and a clearly labeled bounded integration smoke with actual W&B logging, source validation only, checkpoint/plot/prediction reconstruction and logging-error propagation. Smoke is operational evidence, not a comparison result. Save resource/throughput evidence before the manual six-attempt launcher; no automatic full-run launch.
+
+The earlier worst-case OOM and~1.15 TiB estimate remain historical warnings against assuming full preparation fits. Numeric resource ceilings and actual20 m I/O costs are **unknown until integrated calibration**; Utonia remains deferred. Never silently cap tokens, truncate tracks, change precision or relax deterministic training. Preserve failures; fresh attempt outputs, no automatic retry/resume. Local checkpoint/prediction backup outside this laptop remains **TBD** and separate from the cache budget.
 
 **Results:** no behavior runs. Native/resource/semantic evidence is preserved below. Architectural novelty and modality utility remain hypotheses, not consequences of integrating these components.
 
@@ -459,7 +504,7 @@ The default command still uses only 1.5×. The optional comparison preserves the
 
 Completed at revision `792c9050653b74305758d9bb3853a9f96ece1b50` in **97.7 s** on aalto: **45 pedestrians × three crop sizes =135 feature fixtures** across the same 27 development frames. The repeated baseline patch batch matches exactly; all 725 protected files are unchanged. [Comparison gallery](../../outputs/experiments/E002a/dino-crop-scales/index.html) · [record](../../outputs/experiments/E002a/dino-crop-scales/visual-check.json) · [independent acceptance](../../outputs/experiments/E002a/dino-crop-scales/acceptance.json). PNG/SVG comparisons and pickle-free arrays are available locally and under the same ignored output path on aalto. CPU93 (six CUDA skips), CUDA93 and isolated extractor15 checks pass. Larger crops visibly trade target detail for scene context; this does not identify the best behavior-classification input. No training or held-out access.
 
-The original native06/native07 and DINO gallery pages also link these side-by-side crop panels and expandable feature comparisons. Their numerical/provenance records retain the original 1.5× evidence; the 2×/3× data live only in `dino-crop-scales/`. The E002 working crop choice remains 1.5× pending a behavior-based comparison.
+The original native06/native07 and DINO gallery pages also link these side-by-side crop panels and expandable feature comparisons. Their numerical/provenance records retain the original1.5× evidence; the2×/3× data live only in `dino-crop-scales/`. At this preparatory stage the working crop choice was1.5×; the later agreed E002a pilot uses3×, as defined in the [RGB branch](#rgb-branch). No old cache is reinterpreted as3×.
 
 ### Whole-track window videos — 2026-10-19
 

@@ -8,7 +8,7 @@ Shared evaluation safeguards and comparison index. The [joint five-seed E001/E00
 | [E001b](E001b-2d-bbox-contribution/README.md) | Exact K+T+R versus added bbox availability versus added geometry | 20 five-seed attempts complete | Geometry helps LOKI → ROAD in all seeds, mainly Stopped; other directions mixed |
 | [E001c](E001c-bbox-inputs/README.md) | Native 3D/2D centers, dimensions and velocities, with matched availability flags | 30 five-seed attempts complete | Basic boxes average below E001b geometry in all directions; no systematic 2D size-velocity gain; 3D size velocities remain a redundant-input control |
 | [E002](E002-multimodal-reference/README.md) | Multimodal offline-labeling direction and shared constraints | Overview; concrete protocols owned by individual comparisons | No behavior runs |
-| [E002a](E002a-feature-feasibility/README.md) | First behavior pilot: geometry, +RGB, +RGB/D-DITR; Utonia deferred; preparatory probes retained | Branch/memory policy agreed; population, calibrated resource limits and fitting settings open | Preparation only; no behavior runs |
+| [E002a](E002a-feature-feasibility/README.md) | First behavior pilot: geometry, +RGB, +RGB/D-DITR; Utonia deferred; preparatory probes retained | Scope/architecture/fitting and450 GB point cache agreed; implementation and integrated resource calibration next | Preparation only; no behavior runs |
 | [E003](../docs/research.md#tentative-experiment-direction) | One conditional pedestrian/full-track-conditioned scene-retrieval comparison | Tentative; depends on E002 evidence | Not run |
 | [E004](../docs/research.md#tentative-experiment-direction) | One complementary supervision source with an additional-data control | Tentative | Not run |
 

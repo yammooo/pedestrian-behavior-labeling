@@ -72,6 +72,7 @@ def run(args):
             for state in ("cold", "warm"):
                 output = args.output / (source + "-" + state)
                 command = [sys.executable, "scripts/train-e002a.py", "--source", source, "--arm", "g-rgb-dditr",
+                    "--outputs-root", str(args.outputs_root), "--probe", str(args.probe),
                     "--device", "cuda", "--smoke", "--smoke-selection", str(chosen), "--profile", str(args.profile),
                     "--rgb-cache-root", str(args.output / "rgb"), "--point-cache-root", str(args.output / "points"),
                     "--point-cache-gb", "450", "--output", str(output)]

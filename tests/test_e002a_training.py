@@ -59,10 +59,10 @@ class Samples:
         pass
 
 
-def memory_equivalence(device):
+def memory_equivalence(device, concurrency=2):
     seed_run(8)
     batch = collate_multimodal([sample(3), sample(2, "second")])
-    model = MultimodalClassifier("g-rgb-dditr", PROFILE).to(device)
+    model = MultimodalClassifier("g-rgb-dditr", PROFILE | {"frame_chunk": concurrency}).to(device)
     initial = deepcopy(model.state_dict())
     reference, errors = None, {}
     for mode in ("ordinary", "recompute", "offload"):
@@ -151,11 +151,13 @@ class MultimodalTest(unittest.TestCase):
             list(frame_chunks(frames, 3, 5))
 
     def test_memory_paths_preserve_dropout_outputs_all_gradients_and_update(self):
-        self.assertLess(max(memory_equivalence("cpu").values()), 1e-5)
+        for concurrency in (1, 2, 4):
+            self.assertLess(max(memory_equivalence("cpu", concurrency).values()), 1e-5)
 
     @unittest.skipUnless(torch.cuda.is_available(), "CUDA unavailable")
     def test_cuda_memory_paths_preserve_dropout_outputs_gradients_and_update(self):
-        self.assertLess(max(memory_equivalence("cuda").values()), 1e-4)
+        for concurrency in (1, 2, 4):
+            self.assertLess(max(memory_equivalence("cuda", concurrency).values()), 1e-4)
 
     def test_accumulation_unequal_physical_and_final_partial_updates(self):
         data = Samples([sample(3, str(i), points=False) for i in range(7)])

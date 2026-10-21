@@ -17,7 +17,7 @@ import torch
 from pedestrian_behavior.data.multimodal import collate_multimodal
 from pedestrian_behavior.data.preparation import checksum
 from pedestrian_behavior.evaluation import track_cross_entropy
-from pedestrian_behavior.models.multimodal import MultimodalClassifier
+from pedestrian_behavior.models.multimodal import MultimodalClassifier, frame_chunks
 from pedestrian_behavior.training import seed_run
 from . import e001b_run
 from .e002a_execution_probe import loaded_track
@@ -76,6 +76,9 @@ def measure(sample, arm, count, profile, mode, device):
     seconds = float(np.median(timings))
     result = {"arm": arm, "mode": mode, "tracks": count, "slots": int(batch["lengths"].sum()),
               "tokens": sum(len(f) for f in batch["points"]) if arm == "g-rgb-dditr" else 0,
+              "padded_tokens": sum(len(c) * max(len(f) for _, f in c) for c in
+                  frame_chunks(batch["points"], profile["frame_chunk"], profile["frame_tokens"])) if arm == "g-rgb-dditr" else 0,
+              "frame_chunk": profile["frame_chunk"],
               "seconds": seconds, "tracks_per_second": count / seconds,
               "peak_allocated": torch.cuda.max_memory_allocated() if device == "cuda" else None,
               "peak_reserved": torch.cuda.max_memory_reserved() if device == "cuda" else None,
@@ -145,13 +148,41 @@ def run(args):
             record["workloads"].append(row)
             write_json(args.output / "profile.json", record)
             print(name, arm, count, mode, round(row["seconds"], 3), flush=True)
+        # A measured ordinary slope admits one larger condition safely, without OOM probing.
+        for name, sample in samples:
+            cost = sum(len(f) for f in sample["points"])
+            if name == "loki-typical" and cost * 2 * 3200 + 2**29 <= record["allocated_ceiling"]:
+                row = measure(sample, "g-rgb-dditr", 2, profile, "ordinary", args.device) | {"name": name, "status": "complete", "phase": "measured-slope-extension"}
+                if row["peak_allocated"] is not None and row["peak_allocated"] > record["allocated_ceiling"]:
+                    raise ValueError("Larger measured shape exceeded headroom")
+                record["workloads"].append(row)
+        chunks = []
+        for concurrency in (1, 2, 4):
+            for name, sample in samples:
+                if name not in ("loki-typical", "road-waymo-typical"):
+                    continue
+                row = measure(sample, "g-rgb-dditr", 1, profile | {"frame_chunk": concurrency}, "ordinary", args.device)
+                row.update(name=name, status="complete", phase="frame-concurrency")
+                if row["peak_allocated"] is not None and row["peak_allocated"] > record["allocated_ceiling"]:
+                    raise ValueError("Frame concurrency exceeded headroom")
+                chunks.append(row); record["workloads"].append(row)
+        # Normalize by track so both sources contribute equally to this execution-only choice.
+        ratios = {c: np.mean([w["seconds"] / next(x["seconds"] for x in chunks if x["name"] == w["name"] and x["frame_chunk"] == 2)
+                              for w in chunks if w["frame_chunk"] == c]) for c in (1, 2, 4)}
+        profile["frame_chunk"] = min(ratios, key=ratios.get)
+        if profile["frame_chunk"] != 2:
+            name, sample = next((n, s) for n, s in samples if n == "loki-typical")
+            row = measure(sample, "g-rgb-dditr", 2, profile, "ordinary", args.device) | {"name": name, "status": "complete", "phase": "selected-frame-concurrency"}
+            if row["peak_allocated"] is not None and row["peak_allocated"] > record["allocated_ceiling"]:
+                raise ValueError("Selected concurrency exceeded headroom")
+            record["workloads"].append(row)
         fitting = [w for w in record["workloads"] if w.get("status") == "complete" and w.get("mode") == "ordinary"
-                   and w.get("arm") == "g-rgb-dditr"]
+                   and w.get("arm") == "g-rgb-dditr" and w["frame_chunk"] == profile["frame_chunk"]]
         if not fitting:
             raise ValueError("No ordinary spatial calibration condition fit")
-        # Leave ten percent token headroom below the largest measured ordinary shape.
-        ordinary = int(max(w["tokens"] for w in fitting) * .9)
-        profile.update(ordinary_tokens=ordinary, microbatch_tokens=ordinary)
+        # Match tested shapes; reserve is already imposed by the allocated-memory ceiling.
+        profile.update(ordinary_tokens=max(w["padded_tokens"] for w in fitting),
+                       microbatch_tokens=max(w["tokens"] for w in fitting))
         record.update(status="complete", profile=profile)
         return record
     except BaseException:

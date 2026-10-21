@@ -24,7 +24,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
     parser.add_argument("--output", type=Path, default=Path("outputs/experiments/E002a/runs") / ("pilot-" + timestamp))
-    parser.add_argument("--profile", type=Path, default=Path("outputs/experiments/E002a/model-calibration/profile.json"))
+    parser.add_argument("--profile", type=Path, required=True)
     parser.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
     parser.add_argument("--rgb-cache-root", type=Path, default=Path("outputs/experiments/E002a/rgb-cache"))
     parser.add_argument("--point-cache-root", type=Path, default=Path("outputs/experiments/E002a/point-cache"))

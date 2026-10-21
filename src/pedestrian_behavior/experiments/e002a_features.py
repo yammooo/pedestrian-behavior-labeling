@@ -183,9 +183,10 @@ class FeatureCatalog:
 class FeatureSupply:
     """Lazy per-track RGB / per-scene-frame points, shared by all experiment arms."""
 
-    def __init__(self, catalogs, rgb_cache, point_cache, encoders, identity):
+    def __init__(self, catalogs, rgb_cache, point_cache, encoders, identity, camera_reader=None):
         self.catalogs, self.rgb_cache, self.point_cache = catalogs, rgb_cache, point_cache
         self.encoders, self.identity = encoders, identity
+        self.camera_reader = native_camera if camera_reader is None else camera_reader
         self._point_stream = None
 
     def rgb(self, dataset, locator):
@@ -212,7 +213,7 @@ class FeatureSupply:
                     values[indices] = self.encoders("rgb", torch.stack(crops))
                     valid[indices] = True
                     crops.clear(); indices.clear()
-            for key,image,boxes in native_camera(reader, group, [k for k in track["source_keys"] if k is not None], [track["track_id"]], catalog.manifest["scenes"][group]):
+            for key,image,boxes in self.camera_reader(reader, group, [k for k in track["source_keys"] if k is not None], [track["track_id"]], catalog.manifest["scenes"][group]):
                 key = str(key)
                 if key not in slots or key in seen:
                     raise ValueError("Unexpected/duplicate native camera frame")
@@ -397,7 +398,7 @@ def run(args):
             protected.update(catalog.protected)
         for path in (args.probe/"probe.json", transform, Path(config["dino_weights"]), Path(config["ditr_weights"]), Path(config["ditr_config"])):
             protected[str(path.resolve())] = checksum(path)
-        selected = selected_tracks(catalogs,args.selection)
+        selected = sorted(selected_tracks(catalogs,args.selection), key=lambda x: (x[0],catalogs[x[0]].tracks[x[1]]["group"],x[1]))
         identity = extraction_identity(args.device,config)
         record.update(extraction=identity, population={d:c.identity for d,c in catalogs.items()},
             host=platform.node(), selection=str(args.selection) if args.selection else "full-frozen-source-train-validation")
@@ -405,7 +406,9 @@ def run(args):
         with FeatureCache(args.rgb_cache_root, min_free_bytes=gb_bytes(args.min_free_gb)) as rgb, \
              FeatureCache(args.point_cache_root, capacity_bytes=gb_bytes(args.point_cache_gb), min_free_bytes=gb_bytes(args.min_free_gb)) as points:
             record["initial"] = {"rgb":rgb.initial,"points":points.initial}
-            supply = FeatureSupply(catalogs,rgb,points,encoders,identity)
+            from .e002a_camera_cache import CameraReuse
+            camera = CameraReuse(catalogs, selected)
+            supply = FeatureSupply(catalogs,rgb,points,encoders,identity,camera_reader=camera)
             for d,k in selected:
                 t = catalogs[d].tracks[k]
                 row = {"dataset":d,"locator":k,"slots":t["slots"],"split":t["split"]}
@@ -420,6 +423,7 @@ def run(args):
                 write_json(output/"cache.json",record)
                 print(d,len(record["tracks"]),"/",len(selected),args.kind,flush=True)
             record["status"] = "complete"
+            record["camera_reuse"] = camera.snapshot()
     except BaseException:
         record["status"] = "failed"; record["failures"].append(traceback.format_exc()); raise
     finally:

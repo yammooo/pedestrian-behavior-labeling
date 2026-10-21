@@ -4,6 +4,8 @@ from copy import deepcopy
 from functools import partial
 import os
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
 
 os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
 
@@ -14,6 +16,7 @@ from pedestrian_behavior.accumulation import train_accumulated_epoch, warmup_lr
 from pedestrian_behavior.data.multimodal import LogicalBatches, collate_multimodal, pack_tracks
 from pedestrian_behavior.evaluation import track_cross_entropy
 from pedestrian_behavior.experiments.e002a_run import validate_profile
+from pedestrian_behavior.experiments.e002a_camera_cache import CameraReuse
 from pedestrian_behavior.models.multimodal import MultimodalClassifier, frame_chunks, rotary
 from pedestrian_behavior.training import seed_run
 
@@ -204,6 +207,26 @@ class MultimodalTest(unittest.TestCase):
         batch["points"][0][0, 0] = float("nan")
         with self.assertRaisesRegex(ValueError, "spatial"):
             model(batch)
+
+    def test_preparation_image_reuse_keeps_sources_and_bounds_ram(self):
+        from PIL import Image
+        tracks = {"a": {"group": "g", "source_keys": ["1", "2"], "track_id": "a"},
+                  "b": {"group": "g", "source_keys": ["2", "3"], "track_id": "b"}}
+        catalogs = {"loki": SimpleNamespace(tracks=tracks)}
+        reader = SimpleNamespace(dataset="loki")
+        decoded = []
+        def native(reader, group, keys, selected, frozen):
+            decoded.append(list(keys))
+            for key in keys:
+                yield key, Image.new("RGB", (2, 2), int(key)), {t: key + t for t in selected}
+        with patch("pedestrian_behavior.experiments.e002a_camera_cache.native_camera", native):
+            cache = CameraReuse(catalogs, [("loki", "a"), ("loki", "b")], capacity_bytes=36)
+            first = list(cache(reader, "g", ["1", "2"], ["a"], {}))
+            second = list(cache(reader, "g", ["2", "3"], ["b"], {}))
+            self.assertEqual(decoded, [["1", "2", "3"]])
+            self.assertEqual(first[1][2], {"a": "2a"})
+            self.assertEqual(second[0][2], {"b": "2b"})
+            self.assertLessEqual(cache.snapshot()["peak_decoded_bytes"], 36)
 
 
 if __name__ == "__main__":

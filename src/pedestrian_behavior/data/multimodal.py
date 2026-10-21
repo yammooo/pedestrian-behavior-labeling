@@ -67,7 +67,6 @@ class LogicalBatches:
         for group in pack_tracks(indices, lengths, costs, self.profile):
             samples = [self.dataset[i] for i in group]
             batch = collate_multimodal(samples)
-            self.dataset.release_encoder()
             yield batch
 
     def predictions(self):

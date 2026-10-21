@@ -73,11 +73,6 @@ class FeatureDataset:
         values = [self.supply.point_cost(self.source, entry["locator"], i) for i in range(entry["slots"])]
         return None if any(v is None for v in values) else sum(v["tokens"] for v in values)
 
-    def release_encoder(self):
-        # Encoder misses happen between backward passes; never retain its weights during readout.
-        if self.supply.encoders.encoder is not None:
-            self.supply.encoders.release()
-
     def __getitem__(self, index):
         sample = self.baseline[index]
         locator = sample["locator"]
@@ -191,6 +186,7 @@ def assembly(args):
         return {"config": {"experiment": "E002a", "arm": args.arm, "geometry": "E001b-native-geometry",
                     "frozen_features": identity, "profile": profile, "profile_sha256": checksum(args.profile),
                     "point_cache_root": str(args.point_cache_root.resolve()), "point_cache_gb": args.point_cache_gb,
+                    "frozen_encoder_residency": "one encoder retained across misses; calibration reserves 2 GiB",
                     "rgb_cache_root": str(args.rgb_cache_root.resolve()), "warmup_updates": warmup,
                     "held_out_tests": False, "exploratory": True},
                 "normalization": baseline["normalization"], "datasets": {args.source: baseline["datasets"][args.source]},

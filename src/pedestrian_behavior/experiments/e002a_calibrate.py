@@ -127,7 +127,7 @@ def run(args):
             for count in (1, 2, 4):
                 for mode in ("ordinary", "recompute"):
                     # Conservative preflight avoids probing known unsafe allocations; no OOM retry.
-                    estimate = count * cost * 6000 + 2 * 2**30
+                    estimate = count * cost * 4000 + 2**30
                     if mode == "ordinary" and estimate > record["allocated_ceiling"]:
                         record["workloads"].append({"name": name, "tracks": count, "mode": mode, "status": "not-run-shape-estimate", "estimate": estimate})
                     else:

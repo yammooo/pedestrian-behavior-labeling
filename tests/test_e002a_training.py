@@ -241,6 +241,9 @@ class MultimodalTest(unittest.TestCase):
         command = attempt_command(plan[0], Path("outputs/new"), "cuda", ["--profile", "profile.json"])
         self.assertIn("e002a-road-waymo-g-s0", " ".join(command))
         self.assertEqual({t["seed"] for t in plan}, {0})
+        from pedestrian_behavior.experiments.e002a_run import run
+        with self.assertRaisesRegex(ValueError, "rgb-preparation"):
+            run(SimpleNamespace(smoke=False, rgb_preparation=None))
 
     def test_rgb_cache_readback_support_excludes_unlabeled_context(self):
         from pedestrian_behavior.experiments.e002a_rgb_audit import support

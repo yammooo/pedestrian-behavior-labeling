@@ -236,7 +236,7 @@ def add_arguments(parser):
     parser.add_argument("--outputs-root", type=Path, default=Path("outputs"))
     parser.add_argument("--probe", type=Path, default=Path("outputs/experiments/E002a/native-probe-07"))
     parser.add_argument("--rgb-cache-root", type=Path, default=Path("outputs/experiments/E002a/rgb-cache"))
-    parser.add_argument("--rgb-preparation", type=Path, default=Path("outputs/experiments/E002a/rgb-cache-preparation/cache.json"))
+    parser.add_argument("--rgb-preparation", type=Path, help="Required for full attempts: completed matching RGB preparation JSON")
     parser.add_argument("--point-cache-root", type=Path, default=Path("outputs/experiments/E002a/point-cache"))
     parser.add_argument("--point-cache-gb", type=float, default=450)
     parser.add_argument("--min-free-gb", type=float, default=20)
@@ -247,6 +247,8 @@ def add_arguments(parser):
 def run(args):
     if args.smoke and args.smoke_selection is None:
         raise ValueError("Smoke requires an explicit bounded source train/validation selection")
+    if not args.smoke and args.rgb_preparation is None:
+        raise ValueError("Full attempt requires --rgb-preparation with completed matching RGB preparation")
     torch.set_num_threads(2)
     return execute_attempt(args.source, args.arm, "Transformer", args.output, args.device, args.smoke,
                            settings=SETTINGS, assemble=lambda *_: assembly(args), classes=CLASSES, axes=STRATA)

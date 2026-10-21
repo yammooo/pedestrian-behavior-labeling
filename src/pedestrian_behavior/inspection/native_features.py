@@ -16,14 +16,15 @@ def native_camera(reader, scene_id, keys, tracks, frozen):
     """Read selected images/native boxes without decoding LiDAR or fitting data."""
     keys = set(keys)
     if reader.dataset == "loki":
-        camera, _ = read_loki_boxes(reader.root, scene_id, keys, frozen["annotation_odometry_sha256"])
         paths = dict(loki.frame_files(reader.root/scene_id))
+        image_keys = {key for key in keys if paths[key]["image"] is not None}
+        camera, _ = read_loki_boxes(reader.root, scene_id, image_keys, frozen["annotation_odometry_sha256"])
         for key in sorted(keys, key=int):
             image = None
             if paths[key]["image"]:
                 with Image.open(paths[key]["image"]) as raw:
                     image = raw.convert("RGB")
-            yield key, image, camera[key]["boxes"]
+            yield key, image, camera.get(key, {}).get("boxes", {})
         return
     boxes, size, _ = read_waymo_boxes(frozen, set(tracks), reader.waymo_root)
     scene = reader.scenes[scene_id]

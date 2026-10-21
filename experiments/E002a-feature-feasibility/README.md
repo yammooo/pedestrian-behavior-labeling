@@ -267,6 +267,28 @@ Report cold and epochs2–6 training/validation hit rates, prior-epoch versus in
 
 Command: `uv run --locked --extra cpu python scripts/simulate-e002a-cache.py --output outputs/experiments/E002a/cache-simulation`. Fresh output required. [Hand-calculated acceptance](../../tests/test_cache_simulation.py): byte eviction/recency, oversize bypass, cyclic thrashing, cold/unbounded controls, input-only selection and exact reference-loader shuffle. No encoder inference, native-data decoding, full feature cache or training.
 
+**Completed `cache-simulation-02`** at revision `67291101a588222dbf9a34d7b7bccd96cced4b5a` in38.8 s locally:32 scenarios, six epochs each,384 training/validation phase records. All **15,930 protected files** retain their hashes. Initial replay `cache-simulation/` is retained; the final replay includes the8 GB controls in the reproducible command.
+
+| Source | Eligible tracks train/val | Feature requests train/val | Unique frames train/val | Nominal footprint train/val GB |
+|---|---:|---:|---:|---:|
+| LOKI |8,574 /1,861|262,071 /60,231|26,017 /5,273|389.6 /39.2|
+| ROAD-Waymo |4,380 /1,110|302,264 /78,730|42,917 /9,348|496.3 /341.5|
+
+400 GB cache, mean epochs2–6; ranges span uniform/group-varying size models. Each source starts separately; footprints are estimated, not measured20 m payloads.
+
+| Footprint multiplier | LOKI hit % | ROAD-Waymo hit % | LOKI writes GB/epoch | ROAD-Waymo writes GB/epoch |
+|---|---:|---:|---:|---:|
+|0.75×|100|88.5|0|553–554|
+|1×|97.0|85.9|106–107|852–854|
+|1.5×|87.1–87.2|80.9–81.0|866–868|1,594–1,611|
+|2×|77.9–78.2|74.4|2,024–2,053|2,703–2,721|
+
+At nominal size, training-only hits are98.3% LOKI /85.3% ROAD with400 GB versus only4.2–4.5% with8 GB. The small cache's20–22% combined hit rate mainly reflects ordered validation reuse. Much of ROAD's400 GB benefit is also **within an epoch**, sharing frames between pedestrians: only about900–1,023 hits/epoch reuse entries last accessed in an earlier epoch, versus about21,495 for LOKI. Validation eviction is included. Existing in-memory frame sharing could capture some of these hits without disk caching; avoided requests are relative to literal track-sequential extraction.
+
+**Recommendation:** a400 GB bounded shared cache merits a live prototype; the trace does not support dismissing it as overhead alone. Do not claim wall-time speedup yet. Nominal logical full-entry reads reach4.3 TB LOKI /5.5 TB ROAD per epoch, alongside the writes above. These are modeled accesses, not physical SSD traffic: OS caching, selective crop reads and overlapping I/O can change the cost. Measure actual20 m entry sizes, disk throughput, native miss latency and one representative epoch before choosing production feature supply. Reserve write/index headroom outside the payload ceiling. No production cache, behavior model or training was added by this simulation; all tracks/context/tokens remain intact.
+
+[Report and full tables](../../outputs/experiments/E002a/cache-simulation-02/report.md) · [Numerical results/provenance](../../outputs/experiments/E002a/cache-simulation-02/simulation.json) · [Independent audit](../../outputs/experiments/E002a/cache-simulation-02/artifact-audit.json) · [LOKI trace](../../outputs/experiments/E002a/cache-simulation-02/loki-trace.npz) / [ROAD trace](../../outputs/experiments/E002a/cache-simulation-02/road-waymo-trace.npz) · [CPU acceptance](../../outputs/experiments/E002a/cache-simulation-02/validation/cpu-tests.log). CPU121 checks pass with six CUDA-only skips; byte/request conservation, capacity/scale controls, source hashes and saved sampler permutations pass independently. CUDA execution is unnecessary for metadata replay.
+
 ## Before implementation and execution
 
 | Open item | Required definition |

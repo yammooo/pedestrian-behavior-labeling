@@ -61,12 +61,14 @@ Frozen/eval **DINOv3 ViT-B/16 LVD-1689M**; [verified checkpoint/interface](#rgb-
 
 ```text
 Native RGB + native target bbox
-→ centered square: side1.5 × max(box width, box height)
+→ centered square: side3 × max(box width, box height)
 → bicubic256 ×256, fixed pretrained RGB normalization
 → frozen DINOv3 normalized CLS [768]
 → trainable Linear(768,128)
 → RGB descriptor [128]
 ```
+
+**Agreed 2026-10-21:** cache the frozen RGB CLS at **3×** crop scale, separately from earlier1.5× probe outputs. Store float32 `[T,768]`, explicit validity, track/native-time identities, crop/transform settings and checkpoint provenance; zero missing rows without filtering tracks. Never reuse a1.5× CLS cache as3×. Full pilot population/cache scope remains to be frozen.
 
 Keep the intended crop center; fill out-of-image pixels with pretrained RGB mean. No native-box/image intersection means missing RGB; retain partial boxes and record intersection/padding fractions. Numeric geometry remains unclipped. No full-image branch, patch retrieval, RGB augmentation or encoder fine-tuning initially. CLS utility is untested; DINO web-pretraining overlap is unknown.
 
@@ -185,7 +187,7 @@ Earlier LR candidates1e-4/3e-4/1e-3 and one/four spatial seeds are historical de
 
 Keep every selected complete track and every encoder voxel token in its crop. Do not drop long/dense tracks, split them into independent training windows, truncate temporal attention or change inference context to meet a memory limit. Numerical VRAM ceilings and frame concurrency must follow measurement, not the analytical estimates below.
 
-- **Frozen feature supply:** encode scenes without encoder gradients, share scene outputs across represented pedestrians where practical, and discard frozen internal activations. Cached outputs allow encoders to be unloaded during behavior training. On-demand extraction from native data is an alternative, not rejected; it repeats decoding/encoding on cache misses and adds encoder residency/workspaces to the VRAM budget. Full disk cache, bounded pilot cache or on-demand extraction remain a measured choice, not a settled requirement. Freeze extraction semantics and verify equivalent feature/identity pairing for either path.
+- **Frozen feature supply:** encode scenes without encoder gradients, share scene outputs across represented pedestrians where practical, and discard frozen internal activations. Cached outputs allow encoders to be unloaded during behavior training. On-demand extraction from native data is an alternative, not rejected; it repeats decoding/encoding on cache misses and adds encoder residency/workspaces to the VRAM budget. RGB CLS caching is agreed at3×; full disk cache, bounded pilot cache or on-demand extraction for **D-DITR** remain a measured choice, not a settled requirement. Freeze extraction semantics and verify equivalent feature/identity pairing for either path.
 - **Two batching levels:** whole-track microbatches vary with estimated point cost `sum(N_bt)` and temporal padding/attention cost. Spatial frame chunks control the number of point sets resident at once; they do not split the temporal sequence. Shuffle/bucket deterministically from seed0 using lengths/token counts, never behavior labels or model errors. Each selected track appears once/epoch, including expensive tracks; grouping and calibrated ceilings are fixed before a run and recorded.
 - **Gradients, conditional memory paths:** ordinary execution is the default for workloads that fit. Use spatial activation recomputation and/or CPU-input staging/offloading only for workloads that require them, according to preflight-calibrated, recorded shape/memory thresholds; no OOM-triggered retry. Retain the small descriptors for full-track temporal attention. Recompute only the trainable readout from frozen features during backward, not the frozen encoder. Preserve RNG behavior and delay updates until all contributions are accumulated; do not detach the readout from behavior supervision. Ordinary GPU-input checkpointing alone is insufficient. Exact implementation details must pass gradient equivalence before execution; [checkpointing](https://docs.pytorch.org/docs/2.7/checkpoint.html) and [saved-tensor offloading](https://docs.pytorch.org/docs/2.7/autograd.html#torch.autograd.graph.save_on_cpu).
 - **Effective batch:** accumulate summed individual track losses and divide by actual tracks per optimizer update (working target64 complete tracks; retain the final partial update). Do not average microbatch means equally when microbatch sizes differ. Use matched track order/update membership across arms; physical microbatches may differ. Partial-GT masks and E001 equal-track semantics remain unchanged.
@@ -213,6 +215,18 @@ These N values reference the older15 m sample; actual20 m counts remain unmeasur
 Spatial recomputation with **CPU-resident frozen inputs** can instead bound point activations by concurrently processed frames C. Plain checkpointing with every input still on GPU retains a potentially large input payload. A deliberately approximate planning rule `1 GiB + 2 × C × N × bytes_per_token` (GiB conversion implicit) allows one extra local-buffer set plus1 GiB for other costs; it is not a measured peak or safety guarantee. At70,056 tokens and C=1/4/8 this gives D-DITR approximately1.34/2.35/3.71 GiB and Utonia2.72/7.87/14.75 GiB. Host memory, transfer/runtime and temporal microbatch costs still need validation. The calculation itself does not choose numeric microbatch/frame limits; the agreed policy above preserves all tokens and reserves recomputation/offloading for workloads that need them. These cached-feature estimates exclude any co-resident encoder in an on-demand path. Utonia figures remain deferred-alternative evidence.
 
 [Machine-readable assumptions/calculations](../../outputs/experiments/E002a/analytical-vram-budget/budget.json). No behavior implementation or GPU run; original probes/artifacts unchanged.
+
+## Execution and feature-supply probe — 2026-10-21
+
+Authorized bounded check, not behavior fitting. Select minimum/median/maximum slot-length tracks separately within each dataset's previously sampled E002a development groups, from eligible E001 train/validation only; locator breaks ties, no labels/errors or new population filtering. Keep all slots and20 m encoder voxels. Cache3× RGB CLS only for these six complete tracks; population-wide RGB preparation is not implied.
+
+Reuse native readers and pinned encoders. Compare initial native decoding/encoding/crop/cache writing with a separate native traversal and exact feature/native-index checks; measure shared uncompressed scene/union caches, OS-warm cache reads and lossless compression on one frame/group. LiDAR-only native reads omit camera decoding, since RGB CLS is cached. Preserve native, frozen collection/setup and earlier evidence hashes. Do not evict the machine's OS page cache; report warmed-file limitations. No full-population cache extrapolation from these deliberately length-selected tracks.
+
+Temporary resource graph: agreed64/128/128 descriptors,323→256 fusion, two temporal256/four-head/GELU-FFN1024 layers with RoPE. Geometry is zero, cached RGB is real; squared logits provide synthetic gradients, not behavior CE or a behavior result. Probe-only spatial dropout0, temporal dropout.1 and final LayerNorm are recorded, not a hidden fitting search. Compare ordinary/recompute-from-CPU/spatial-saved-tensor-offload paths with microbatch1/2/4; larger microbatches repeat a real complete track as a labeled shape test. First execution warms each condition, then two timed executions; OOM ends that condition without retry, truncation or a smaller substitute.
+
+Check output, every parameter gradient and one AdamW update across memory paths on a small fitting fixture (FP32 rtol1e-4/atol1e-5). Record peak allocated/reserved VRAM, host RSS, system GPU samples, warm timings, frame/token counts and explicit failures. Cached-readout peaks exclude unloaded encoder weights/workspaces; native supply and readout timings are separate, not a measured overlapped epoch. Selection includes long tracks but does not guarantee the densest20 m crop in either population.
+
+Command from the isolated extractor environment: `python scripts/probe-e002a-execution.py --probe outputs/experiments/E002a/native-probe-07 --output outputs/experiments/E002a/execution-probe --device cuda`. Fresh output required. [Acceptance](../../tests/test_execution_probe.py) checks crop support, selection, relative RoPE, RGB-free native reading and memory-path gradient/update equivalence. No behavior training, held-out access or W&B.
 
 ## Before implementation and execution
 

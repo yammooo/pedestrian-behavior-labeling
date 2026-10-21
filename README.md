@@ -409,7 +409,7 @@ These commands implement preparation for the [E002a behavior pilot](experiments/
 
 The [DINO patch visual check](experiments/E002a-feature-feasibility/README.md#dino-patch-visual-check--2026-10-19) adds PCA/similarity panels and a corrected crop gallery from the same development sample: `scripts/check-e002a-rgb.py --help`. It reuses the completed probe and original checkpoint without a segmentation head or training.
 
-Add `--compare-crop-scales` with a fresh output directory for the [1.5×/2×/3× side-by-side diagnostic](experiments/E002a-feature-feasibility/README.md#crop-size-visual-comparison--2026-10-19); every crop remains 256×256. This does not change the E002a pilot's proposed 1.5× input.
+Add `--compare-crop-scales` with a fresh output directory for the [1.5×/2×/3× side-by-side diagnostic](experiments/E002a-feature-feasibility/README.md#crop-size-visual-comparison--2026-10-19); every crop remains 256×256. These earlier diagnostics retain their original scales; the E002a pilot now uses cached CLS from3× crops.
 
 For [ten full-track window videos](experiments/E002a-feature-feasibility/README.md#whole-track-window-videos--2026-10-19), use `scripts/video-e002a-tracks.py --help` in the same isolated GPU environment. Each combines a 3× RGB crop with nested 1.5×/2×/3× outlines and target-centered semantic LiDAR with 15/20/30 m radius rings.
 
@@ -448,3 +448,14 @@ uv run --no-project --python "$probe_root/extractor-env/bin/python" python scrip
 ```
 
 Fresh output required. This extracts a bounded 48-training/12-validation-frame sample from separate existing development clips, trains only a nine-class affine head, and compares it with the original head and a taxonomy-only control. No behavior model, backbone updates, LOKI supervision or held-out scoring.
+
+The bounded [execution/feature-supply probe](experiments/E002a-feature-feasibility/README.md#execution-and-feature-supply-probe--2026-10-21) caches3× RGB CLS for six complete development tracks and compares native D-DITR extraction, shared cache I/O and ordinary/recomputed/offloaded spatial workloads:
+
+```bash
+probe_root="$PWD/outputs/experiments/E002a"
+uv run --no-project --python "$probe_root/extractor-env/bin/python" python scripts/probe-e002a-execution.py \
+  --probe "$probe_root/native-probe-07" \
+  --output "$probe_root/execution-probe" --device cuda
+```
+
+Fresh output required. No additional point subsampling, temporal truncation, behavior fitting or held-out access. Larger resource microbatches repeat a real track as a shape test; they are not independent training examples.

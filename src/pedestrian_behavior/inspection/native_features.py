@@ -39,11 +39,13 @@ def native_camera(reader, scene_id, keys, tracks, frozen):
         yield key, image, {t: boxes[t, key] for t in tracks if (t, key) in boxes}
 
 
-def native_scene(reader, scene_id, keys, tracks, frozen):
+def native_scene(reader, scene_id, keys, tracks, frozen, *, include_rgb=True):
     """Yield one selected native frame at a time, with no behavior inputs."""
     keys = sorted(set(keys), key=int)
     if reader.dataset == "loki":
-        camera, _ = read_loki_boxes(reader.root, scene_id, set(keys), frozen["annotation_odometry_sha256"])
+        camera = {}
+        if include_rgb:
+            camera, _ = read_loki_boxes(reader.root, scene_id, set(keys), frozen["annotation_odometry_sha256"])
         paths = dict(loki.frame_files(reader.root/scene_id))
         poses = reader.read_frames(scene_id, keys)
         for key in keys:
@@ -52,7 +54,7 @@ def native_scene(reader, scene_id, keys, tracks, frozen):
             if points is not None and (not np.isfinite(points).all() or (points[:, 3] < 0).any() or (points[:, 3] > 1).any()):
                 raise ValueError("LOKI normalized intensity contract violated")
             image = None
-            if frame.paths["image"]:
+            if include_rgb and frame.paths["image"]:
                 with Image.open(frame.paths["image"]) as raw:
                     image = raw.convert("RGB")
             boxes = {}
@@ -64,23 +66,25 @@ def native_scene(reader, scene_id, keys, tracks, frozen):
                     boxes[track] = (np.array(center), np.array(size), native_float(row["yaw"]))
             pose = poses[key]["ego_pose"]
             yield {"key": key, "points": points, "image": image, "boxes": boxes,
-                   "camera": camera[key]["boxes"], "world_from_native": pose @ reader.extrinsic if valid_pose(pose) else None,
+                   "camera": camera[key]["boxes"] if include_rgb else {}, "world_from_native": pose @ reader.extrinsic if valid_pose(pose) else None,
                    "files": {k: str(v) if v else None for k, v in frame.paths.items()}}
         return
     scene = reader.scenes[scene_id]
     actual = reader.index_scene(scene_id)["provenance"]
     if actual["component_sha256"] != frozen["component_sha256"] or actual["association_ids"] != frozen["association_ids"]:
         raise ValueError("Native ROAD components/associations differ from frozen E001")
-    camera, size, _ = read_waymo_boxes(frozen, set(tracks), reader.waymo_root)
+    camera, size = {}, None
+    if include_rgb:
+        camera, size, _ = read_waymo_boxes(frozen, set(tracks), reader.waymo_root)
     def rows(component):
         return road.component_rows(road.component_path(scene, component, reader.waymo_root), scene["segment_context_name"])
-    image_groups = iter(aligned_frames(road.frame_groups(rows("camera_image")), keys))
+    image_groups = iter(aligned_frames(road.frame_groups(rows("camera_image")), keys)) if include_rgb else None
     clouds = iter(aligned_frames(road.frame_groups(rows("lidar")), keys))
     poses = iter(aligned_frames(road.frame_groups(rows("lidar_pose")), keys))
     calibration = {row["key.laser_name"]: row for row in rows("lidar_calibration")}
     for key in keys:
         image, parts = None, []
-        for row in next(image_groups):
+        for row in next(image_groups) if image_groups is not None else []:
             if row["key.camera_name"] == 1 and row.get("[CameraImageComponent].image"):
                 with Image.open(BytesIO(row["[CameraImageComponent].image"])) as raw:
                     image = raw.convert("RGB")

@@ -137,6 +137,13 @@ def assembly(args):
         supply = FeatureSupply({args.source: catalog}, rgb, points, encoders, identity)
         baseline = e001b_run.assemble(args.source, "geometry", "B", e001_root=args.outputs_root / "experiments/E001",
                                      e001b_root=args.outputs_root / "experiments/E001b")
+        assets = [args.probe / "probe.json", transform] + [Path(config[k]) for k in ("dino_weights", "ditr_weights", "ditr_config")]
+        bbox_manifest = Path(baseline["datasets"][args.source]["bbox"]["manifest_path"])
+        for path in assets + [bbox_manifest]:
+            catalog.protected[str(path.resolve())] = checksum(path)
+        for entry in json.loads(bbox_manifest.read_text())["tracks"]:
+            if entry["locator"] in catalog.tracks:
+                catalog.protected[str((bbox_manifest.parent / "tracks" / entry["archive"]).resolve())] = entry["bbox_sha256"]
         selected = None
         if args.smoke:
             selected = {t["locator"] for t in json.loads(args.smoke_selection.read_text())["tracks"] if t["dataset"] == args.source}

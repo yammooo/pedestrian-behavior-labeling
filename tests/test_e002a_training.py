@@ -242,6 +242,30 @@ class MultimodalTest(unittest.TestCase):
         self.assertIn("e002a-road-waymo-g-s0", " ".join(command))
         self.assertEqual({t["seed"] for t in plan}, {0})
 
+    def test_paired_summary_uses_saved_predictions_and_checks_availability(self):
+        from pedestrian_behavior.evaluation import save_predictions
+        from pedestrian_behavior.experiments.e002a_summary import summarize
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for row in attempts():
+                run = root / row["name"]
+                destination = run / (row["source"] + "-validation")
+                destination.mkdir(parents=True)
+                (run / "status.json").write_text(json.dumps({"status": "complete"}))
+                track = {"locator": "track", "archive": "reference", "group": "group",
+                         "targets": np.array([0, 1]), "gt_valid": np.ones(2, bool),
+                         "logits": np.array([[2, 0, 0, 0], [0, 2, 0, 0]], np.float32),
+                         "conditions": {"observed": np.zeros(2, np.int64)},
+                         "source_flags": {"rgb_valid": np.ones(2, bool), "lidar_valid": np.ones(2, bool),
+                                          "point_tokens": np.ones(2, np.int64)}}
+                save_predictions(destination / "predictions.npz", [track])
+            result = summarize(root)
+            self.assertTrue((root / "validation-comparison.svg").is_file())
+            pairs = result["sources"]["loki"]["paired_track_changes"]
+            self.assertEqual(len(pairs), 3)
+            self.assertTrue(all(p["accuracy_change"] == 0 for p in pairs))
+            self.assertIn(("g-rgb-dditr", "g-rgb"), {(p["arm"], p["reference_arm"]) for p in pairs})
+
     def test_shared_attempt_multimodal_validation_checkpoint_and_logging_failure(self):
         from test_e001b_training import fixture, FakeRun
         from pedestrian_behavior.experiments import e002a_run
@@ -250,6 +274,14 @@ class MultimodalTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             fixture(root / "experiments")
+            probe = root / "probe"
+            probe.mkdir()
+            (probe / "probe.json").write_text("{}")
+            config = {"rgb_checkpoint_sha256": DINO_PTH_SHA256}
+            for key in ("dino_weights", "ditr_weights", "ditr_config"):
+                path = probe / key
+                path.write_text("fixture-only asset")
+                config[key] = str(path)
             profile = root / "profile.json"
             profile.write_text(json.dumps({"status": "complete", "device": "cpu", "torch": str(torch.__version__), "cuda": torch.version.cuda,
                                            "code": e002a_run.resource_code(), "profile": PROFILE}))
@@ -267,10 +299,10 @@ class MultimodalTest(unittest.TestCase):
                 events = []
                 args = SimpleNamespace(source="loki", arm="g-rgb-dditr", device="cpu", smoke=True,
                     outputs_root=root, output=root / "experiments/E002a" / ("failed" if fail else "complete"),
-                    probe=root / "unused", profile=profile, smoke_selection=selection,
+                    probe=probe, profile=profile, smoke_selection=selection,
                     rgb_cache_root=root / "experiments/E002a/rgb", point_cache_root=root / "experiments/E002a/points",
                     point_cache_gb=450, min_free_gb=0)
-                with patch.object(e002a_run, "load_configuration", return_value=({"rgb_checkpoint_sha256": DINO_PTH_SHA256}, root / "experiments/fixture-transform.json")), \
+                with patch.object(e002a_run, "load_configuration", return_value=(config, root / "experiments/fixture-transform.json")), \
                      patch.object(e002a_run.FeatureSupply, "rgb", rgb), patch.object(e002a_run.FeatureSupply, "iter_points", points), \
                      patch.object(e002a_run.FeatureSupply, "point_cost", return_value={"tokens": 2, "inside_box_tokens": 2}), \
                      patch("pedestrian_behavior.experiments.run.wandb.init", return_value=FakeRun(events, fail)):

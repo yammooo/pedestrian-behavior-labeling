@@ -101,6 +101,15 @@ def run(args):
             if rng_fingerprint()!=state:raise AssertionError("RGB miss/init changed training RNG")
             for d,k in selected:assert_same(references[d,k],supply.rgb(d,k))
             record["rgb_warm"]=rgb.snapshot()
+            from .e002a_camera_cache import CameraReuse
+            camera=CameraReuse(catalogs,selected)
+            with FeatureCache(output/"rgb-camera-reuse",min_free_bytes=gb_bytes(args.min_free_gb)) as repeated_rgb:
+                repeated=FeatureSupply(catalogs,repeated_rgb,points,encoders,identity,camera_reader=camera)
+                for d,k in sorted(selected,key=lambda x:(x[0],catalogs[x[0]].tracks[x[1]]["group"],x[1])):
+                    assert_same(references[d,k],repeated.rgb(d,k))
+                record["checks"].append({"check":"bounded-scene-camera-reuse-exact-RGB-payload","passed":True,
+                                         "tracks":len(selected),"camera":camera.snapshot()})
+            del repeated,camera
             # A bounded point request list, not full-population warming.
             point_values={}
             for d,k,slot in point_refs:

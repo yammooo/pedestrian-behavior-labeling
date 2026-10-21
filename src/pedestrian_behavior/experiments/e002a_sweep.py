@@ -25,12 +25,13 @@ def main():
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
     parser.add_argument("--output", type=Path, default=Path("outputs/experiments/E002a/runs") / ("pilot-" + timestamp))
     parser.add_argument("--profile", type=Path, required=True)
+    parser.add_argument("--rgb-preparation", type=Path, required=True)
     parser.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
     parser.add_argument("--rgb-cache-root", type=Path, default=Path("outputs/experiments/E002a/rgb-cache"))
     parser.add_argument("--point-cache-root", type=Path, default=Path("outputs/experiments/E002a/point-cache"))
     parser.add_argument("--point-cache-gb", type=float, default=450)
     args = parser.parse_args()
-    options = ["--profile", str(args.profile), "--rgb-cache-root", str(args.rgb_cache_root),
+    options = ["--profile", str(args.profile), "--rgb-preparation", str(args.rgb_preparation), "--rgb-cache-root", str(args.rgb_cache_root),
                "--point-cache-root", str(args.point_cache_root), "--point-cache-gb", str(args.point_cache_gb)]
     run_sweep(args.output, attempts(), partial(attempt_command, options=options), jobs=1, seeds=(0,), device=args.device,
               settings={"epochs": SETTINGS["epochs"], "patience": SETTINGS["patience"], "held_out_tests": False,

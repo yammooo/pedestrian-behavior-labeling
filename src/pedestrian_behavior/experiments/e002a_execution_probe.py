@@ -72,7 +72,9 @@ def report(output, record):
         lines.append(f"| {r['track']} | {r['mode']} | {r['tracks']} | {r['status']} | {r.get('median_seconds',0):.3f} | {r.get('peak_allocated',0)/2**30:.3f} | {r.get('peak_reserved',0)/2**30:.3f} |")
     lines += ["", "[Numerical evidence, native timings, compression and provenance](execution.json) · [GPU system samples](system.csv)", "",
         "Only a bounded six-track RGB/point cache is built. Population-wide RGB caching and point-supply choice "
-        "remain separate work; these timings do not prove a full cache fits. Peak host RSS includes retained "
+        "remain separate work; these timings do not prove a full cache fits. Offload shapes estimated to need "
+        "more than60% of available host RAM are explicitly unexecuted, not failed or fitted shapes. Existing "
+        "fully extracted fixtures may be supplied read-only for a separate resource-only attempt. Peak host RSS includes retained "
         "CPU inputs and may include earlier phases. CUDA peaks exclude the unloaded frozen encoders during "
         "cached-readout measurements; live on-demand encoding would add encoder residency/workspaces."]
     (output/"report.md").write_text("\n".join(lines)+"\n")
@@ -117,155 +119,178 @@ def run(args):
             record["hardware"] = {"name":torch.cuda.get_device_name(), "total_bytes":torch.cuda.get_device_properties(0).total_memory}
             log = (output/"system.csv").open("w")
             telemetry = subprocess.Popen(["nvidia-smi", "--query-gpu=timestamp,utilization.gpu,memory.used,power.draw,temperature.gpu", "--format=csv", "-l", "1"], stdout=log, stderr=subprocess.STDOUT)
-        contexts = {}
-        for dataset in ("loki", "road-waymo"):
-            collection, manifest, setup, reader = context(dataset, root, config, probe, protected)
-            contexts[dataset] = (collection, manifest, reader)
-            groups = source["samples"][dataset]
-            candidates = [e for e in setup["tracks"] if not e["exclusions"] and e["group"] in groups and e["split"] in ("training", "validation")]
-            for category, entry in select_tracks(candidates):
-                if setup["groups"][entry["group"]] != entry["split"] or groups[entry["group"]]["split"] != entry["split"]:
-                    raise ValueError("Development split mismatch")
-                path = collection/"tracks"/entry["archive"]
-                protected[str(path)] = checksum(path)
-                m, _ = load_track(path)
-                if m["track_locator"] != entry["locator"]:
-                    raise ValueError("Archive/setup identity mismatch")
-                identity = json.loads(entry["locator"])
-                item = {"name":dataset+"-"+category, "dataset":dataset, "category":category, "group":entry["group"],
-                    "split":entry["split"], "locator":entry["locator"], "archive":entry["archive"], "slots":entry["slots"],
-                    "track_id":identity.get("track_id",identity.get("tube_uid")), "source_frames":m["source_frames"],
-                    "point_frames":[None]*entry["slots"], "point_counts":[0]*entry["slots"]}
-                record["tracks"].append(item)
-        image_start = time.perf_counter()
-        image_encoder = ImageEncoder(config["dino_code"], config["dino_weights"], args.device)
-        record["rgb_load_seconds"] = time.perf_counter()-image_start
-        for item in record["tracks"]:
-            _, manifest, reader = contexts[item["dataset"]]
-            keys = [k for k in item["source_frames"] if k is not None]
-            if len(keys) != len(set(keys)):
-                raise ValueError("Repeated native timestamps require explicit slot mapping")
-            reader.index_scene(item["group"])
-            slots = {k:i for i,k in enumerate(item["source_frames"]) if k is not None}
-            values = np.zeros((item["slots"],768), np.float32)
-            valid = np.zeros(item["slots"], bool)
-            crops, indices, crop_info = [], [], []
+        if args.fixtures is not None:
+            fixture_root = args.fixtures.resolve()
+            if not fixture_root.is_relative_to(root/"experiments/E002a"):
+                raise ValueError("Fixtures must be existing E002a outputs")
+            fixture_file = fixture_root/"execution.json"
+            fixture = json.loads(fixture_file.read_text())
+            expected = {(t["dataset"],t["group"]) for t in fixture["tracks"]}
+            actual = {(r["dataset"],r["group"]) for r in fixture["supply"] if r["verified_repeat_frames"] == len(r["frames"])}
+            if len(fixture["tracks"]) != 6 or expected != actual or fixture.get("crop_expansion") != 3 or fixture.get("radius_m") != 20:
+                raise ValueError("Complete six-track feature extraction/verification required")
+            protected[str(fixture_file)] = checksum(fixture_file)
+            record.update(fixture_source=str(fixture_file),fixture_source_status=fixture["status"],
+                          tracks=fixture["tracks"],supply=fixture["supply"])
+            for item in record["tracks"]:
+                item["rgb_cache"] = str(fixture_root/item["rgb_cache"])
+                paths = [item["rgb_cache"]]
+                for ref in item["point_frames"]:
+                    if ref is not None:
+                        ref["cache"] = str(fixture_root/ref["cache"])
+                        paths.append(ref["cache"])
+                for path in paths:
+                    if path not in protected:protected[path] = checksum(path)
+        else:
+            contexts = {}
+            for dataset in ("loki", "road-waymo"):
+                collection, manifest, setup, reader = context(dataset, root, config, probe, protected)
+                contexts[dataset] = (collection, manifest, reader)
+                groups = source["samples"][dataset]
+                candidates = [e for e in setup["tracks"] if not e["exclusions"] and e["group"] in groups and e["split"] in ("training", "validation")]
+                for category, entry in select_tracks(candidates):
+                    if setup["groups"][entry["group"]] != entry["split"] or groups[entry["group"]]["split"] != entry["split"]:
+                        raise ValueError("Development split mismatch")
+                    path = collection/"tracks"/entry["archive"]
+                    protected[str(path)] = checksum(path)
+                    m, _ = load_track(path)
+                    if m["track_locator"] != entry["locator"]:
+                        raise ValueError("Archive/setup identity mismatch")
+                    identity = json.loads(entry["locator"])
+                    item = {"name":dataset+"-"+category, "dataset":dataset, "category":category, "group":entry["group"],
+                        "split":entry["split"], "locator":entry["locator"], "archive":entry["archive"], "slots":entry["slots"],
+                        "track_id":identity.get("track_id",identity.get("tube_uid")), "source_frames":m["source_frames"],
+                        "point_frames":[None]*entry["slots"], "point_counts":[0]*entry["slots"]}
+                    record["tracks"].append(item)
+            image_start = time.perf_counter()
+            image_encoder = ImageEncoder(config["dino_code"], config["dino_weights"], args.device)
+            record["rgb_load_seconds"] = time.perf_counter()-image_start
+            for item in record["tracks"]:
+                _, manifest, reader = contexts[item["dataset"]]
+                keys = [k for k in item["source_frames"] if k is not None]
+                if len(keys) != len(set(keys)):
+                    raise ValueError("Repeated native timestamps require explicit slot mapping")
+                reader.index_scene(item["group"])
+                slots = {k:i for i,k in enumerate(item["source_frames"]) if k is not None}
+                values = np.zeros((item["slots"],768), np.float32)
+                valid = np.zeros(item["slots"], bool)
+                crops, indices, crop_info = [], [], []
+                begin = time.perf_counter()
+                for key, image, boxes in native_camera(reader, item["group"], keys, [item["track_id"]], manifest["scenes"][item["group"]]):
+                    crop, info = square_crop(image, boxes.get(item["track_id"]), expansion=3)
+                    crop_info.append({"slot":slots[key], "key":key, **info})
+                    if crop is not None:
+                        crops.append(normalized_crop(crop));indices.append(slots[key])
+                for start in range(0,len(crops),16):
+                    values[indices[start:start+16]] = image_encoder(torch.stack(crops[start:start+16]))
+                valid[indices] = True
+                if crops:
+                    repeat = image_encoder(torch.stack(crops[:min(16,len(crops))]))
+                    np.testing.assert_array_equal(repeat, values[indices[:len(repeat)]])
+                item.update(rgb_valid=int(valid.sum()), rgb_seconds=time.perf_counter()-begin, crop_info=crop_info,
+                            rgb_cache="rgb/"+item["name"]+".npz")
+                np.savez(output/item["rgb_cache"], cls=values, valid=valid, source_key=np.array([k or "" for k in item["source_frames"]]))
+                with np.load(output/item["rgb_cache"],allow_pickle=False) as a:
+                    np.testing.assert_array_equal(a["cls"], values)
+                    np.testing.assert_array_equal(a["valid"], valid)
+                print("RGB cached", item["name"], int(valid.sum()), "of",item["slots"],flush=True)
+                write_json(output/"execution.json",record)
+            del image_encoder, crops
+            gc.collect()
+            if args.device == "cuda":torch.cuda.empty_cache()
             begin = time.perf_counter()
-            for key, image, boxes in native_camera(reader, item["group"], keys, [item["track_id"]], manifest["scenes"][item["group"]]):
-                crop, info = square_crop(image, boxes.get(item["track_id"]), expansion=3)
-                crop_info.append({"slot":slots[key], "key":key, **info})
-                if crop is not None:
-                    crops.append(normalized_crop(crop));indices.append(slots[key])
-            for start in range(0,len(crops),16):
-                values[indices[start:start+16]] = image_encoder(torch.stack(crops[start:start+16]))
-            valid[indices] = True
-            if crops:
-                repeat = image_encoder(torch.stack(crops[:min(16,len(crops))]))
-                np.testing.assert_array_equal(repeat, values[indices[:len(repeat)]])
-            item.update(rgb_valid=int(valid.sum()), rgb_seconds=time.perf_counter()-begin, crop_info=crop_info,
-                        rgb_cache="rgb/"+item["name"]+".npz")
-            np.savez(output/item["rgb_cache"], cls=values, valid=valid, source_key=np.array([k or "" for k in item["source_frames"]]))
-            with np.load(output/item["rgb_cache"],allow_pickle=False) as a:
-                np.testing.assert_array_equal(a["cls"], values)
-                np.testing.assert_array_equal(a["valid"], valid)
-            print("RGB cached", item["name"], int(valid.sum()), "of",item["slots"],flush=True)
-            write_json(output/"execution.json",record)
-        del image_encoder, crops
-        gc.collect()
-        if args.device == "cuda":torch.cuda.empty_cache()
-        begin = time.perf_counter()
-        encoder = PointEncoder(config["ditr_code"],config["ditr_config"],config["ditr_weights"],args.device)
-        record["point_load_seconds"] = time.perf_counter()-begin
-        grouped = defaultdict(list)
-        for item in record["tracks"]:grouped[item["dataset"],item["group"]].append(item)
-        for (dataset,group), items in grouped.items():
-            _, manifest, reader = contexts[dataset]
-            ids = [i["track_id"] for i in items]
-            keys = sorted({k for i in items for k in i["source_frames"] if k is not None},key=int)
-            anchors = {}
-            begin = time.perf_counter()
-            reader.index_scene(group)
-            for item in items:
-                first = item["source_frames"][0]
-                anchor = reader.read_frames(group,[first]).get(first,{}).get("ego_pose") if first is not None else None
-                if not valid_pose(anchor):raise ValueError("Track initial ego anchor unavailable")
-                anchors[item["name"]] = anchor
-            slots = {i["name"]:{k:j for j,k in enumerate(i["source_frames"]) if k is not None} for i in items}
-            stream = iter(native_scene(reader,group,keys,ids,manifest["scenes"][group],include_rgb=False))
-            frames_record = []
-            for key in keys:
-                before = time.perf_counter();frame = next(stream);native_seconds = time.perf_counter()-before
-                if frame["key"] != key:raise ValueError("Native timestamp mismatch")
-                points = frame["points"]
-                if points is None or not len(points):continue
-                sync(args.device)
-                if args.device == "cuda":torch.cuda.reset_peak_memory_stats()
-                before = time.perf_counter()
-                features, _, selected, _ = encoder(points)
-                sync(args.device);encoder_seconds = time.perf_counter()-before
-                xyz = points[selected,:3]
-                union = np.zeros(len(xyz),bool);parts = {}
-                for number,item in enumerate(items):
-                    if key not in slots[item["name"]]:continue
-                    box = frame["boxes"].get(item["track_id"])
-                    if box is None or not valid_pose(frame["world_from_native"]):continue
-                    offsets = relative_xyz(xyz,box[0],frame["world_from_native"],anchors[item["name"]])
-                    inside = box_membership(xyz,*box)
-                    _, keep = crop_tokens(features,xyz,offsets,inside)
-                    union |= keep;parts[number] = (keep,offsets,inside)
-                cache = {"features":features[union],"coordinates":xyz[union],"native_indices":selected[union]}
-                path = f"points/{dataset}-{group}-{key}.npz"
-                for number,(keep,offsets,inside) in parts.items():
-                    prefix = f"t{number}_";item = items[number];slot = slots[item["name"]][key]
-                    cache[prefix+"rows"] = np.flatnonzero(keep[union])
-                    cache[prefix+"offsets"] = offsets[keep].astype(np.float32)
-                    cache[prefix+"inside"] = inside[keep]
-                    item["point_frames"][slot] = {"cache":path,"prefix":prefix}
-                    item["point_counts"][slot] = int(keep.sum())
-                before=time.perf_counter();np.savez(output/path,**cache);write_seconds=time.perf_counter()-before
-                r={"key":key,"cache":path,"native_seconds":native_seconds,"encoder_seconds":encoder_seconds,
-                    "native_points":len(points),"scene_voxels":len(selected),"union_tokens":int(union.sum()),
-                    "bytes":(output/path).stat().st_size,"write_seconds":write_seconds,
-                    "encoder_peak_allocated":torch.cuda.max_memory_allocated() if args.device == "cuda" else 0}
-                if not frames_record:
-                    before=time.perf_counter()
-                    with np.load(output/path,allow_pickle=False) as a:
-                        for k,v in cache.items():np.testing.assert_array_equal(a[k],v)
-                    r["uncompressed_read_verify_seconds"]=time.perf_counter()-before
-                    compressed=output/"compressed"/Path(path).name
-                    before=time.perf_counter();np.savez_compressed(compressed,**cache);r["compressed_write_seconds"]=time.perf_counter()-before
-                    r["compressed_bytes"]=compressed.stat().st_size
-                    before=time.perf_counter()
-                    with np.load(compressed,allow_pickle=False) as a:
-                        for k,v in cache.items():np.testing.assert_array_equal(a[k],v)
-                    r["compressed_read_verify_seconds"]=time.perf_counter()-before
-                frames_record.append(r)
-                if len(frames_record)%20==0:print("Points",dataset,group,len(frames_record),"/",len(keys),flush=True)
-            elapsed=time.perf_counter()-begin
-            # A separate native traversal: no persistent feature cache is read to supply inference.
-            begin=time.perf_counter();repeats=0;pure_supply=0.
-            stream=iter(native_scene(reader,group,keys,ids,manifest["scenes"][group],include_rgb=False))
-            for key in keys:
-                before=time.perf_counter();frame=next(stream)
-                if frame["points"] is None or not len(frame["points"]):
+            encoder = PointEncoder(config["ditr_code"],config["ditr_config"],config["ditr_weights"],args.device)
+            record["point_load_seconds"] = time.perf_counter()-begin
+            grouped = defaultdict(list)
+            for item in record["tracks"]:grouped[item["dataset"],item["group"]].append(item)
+            for (dataset,group), items in grouped.items():
+                _, manifest, reader = contexts[dataset]
+                ids = [i["track_id"] for i in items]
+                keys = sorted({k for i in items for k in i["source_frames"] if k is not None},key=int)
+                anchors = {}
+                begin = time.perf_counter()
+                reader.index_scene(group)
+                for item in items:
+                    first = item["source_frames"][0]
+                    anchor = reader.read_frames(group,[first]).get(first,{}).get("ego_pose") if first is not None else None
+                    if not valid_pose(anchor):raise ValueError("Track initial ego anchor unavailable")
+                    anchors[item["name"]] = anchor
+                slots = {i["name"]:{k:j for j,k in enumerate(i["source_frames"]) if k is not None} for i in items}
+                stream = iter(native_scene(reader,group,keys,ids,manifest["scenes"][group],include_rgb=False))
+                frames_record = []
+                for key in keys:
+                    before = time.perf_counter();frame = next(stream);native_seconds = time.perf_counter()-before
+                    if frame["key"] != key:raise ValueError("Native timestamp mismatch")
+                    points = frame["points"]
+                    if points is None or not len(points):continue
+                    sync(args.device)
+                    if args.device == "cuda":torch.cuda.reset_peak_memory_stats()
+                    before = time.perf_counter()
+                    features, _, selected, _ = encoder(points)
+                    sync(args.device);encoder_seconds = time.perf_counter()-before
+                    xyz = points[selected,:3]
+                    union = np.zeros(len(xyz),bool);parts = {}
+                    for number,item in enumerate(items):
+                        if key not in slots[item["name"]]:continue
+                        box = frame["boxes"].get(item["track_id"])
+                        if box is None or not valid_pose(frame["world_from_native"]):continue
+                        offsets = relative_xyz(xyz,box[0],frame["world_from_native"],anchors[item["name"]])
+                        inside = box_membership(xyz,*box)
+                        _, keep = crop_tokens(features,xyz,offsets,inside)
+                        union |= keep;parts[number] = (keep,offsets,inside)
+                    cache = {"features":features[union],"coordinates":xyz[union],"native_indices":selected[union]}
+                    path = f"points/{dataset}-{group}-{key}.npz"
+                    for number,(keep,offsets,inside) in parts.items():
+                        prefix = f"t{number}_";item = items[number];slot = slots[item["name"]][key]
+                        cache[prefix+"rows"] = np.flatnonzero(keep[union])
+                        cache[prefix+"offsets"] = offsets[keep].astype(np.float32)
+                        cache[prefix+"inside"] = inside[keep]
+                        item["point_frames"][slot] = {"cache":path,"prefix":prefix}
+                        item["point_counts"][slot] = int(keep.sum())
+                    before=time.perf_counter();np.savez(output/path,**cache);write_seconds=time.perf_counter()-before
+                    r={"key":key,"cache":path,"native_seconds":native_seconds,"encoder_seconds":encoder_seconds,
+                        "native_points":len(points),"scene_voxels":len(selected),"union_tokens":int(union.sum()),
+                        "bytes":(output/path).stat().st_size,"write_seconds":write_seconds,
+                        "encoder_peak_allocated":torch.cuda.max_memory_allocated() if args.device == "cuda" else 0}
+                    if not frames_record:
+                        before=time.perf_counter()
+                        with np.load(output/path,allow_pickle=False) as a:
+                            for k,v in cache.items():np.testing.assert_array_equal(a[k],v)
+                        r["uncompressed_read_verify_seconds"]=time.perf_counter()-before
+                        compressed=output/"compressed"/Path(path).name
+                        before=time.perf_counter();np.savez_compressed(compressed,**cache);r["compressed_write_seconds"]=time.perf_counter()-before
+                        r["compressed_bytes"]=compressed.stat().st_size
+                        before=time.perf_counter()
+                        with np.load(compressed,allow_pickle=False) as a:
+                            for k,v in cache.items():np.testing.assert_array_equal(a[k],v)
+                        r["compressed_read_verify_seconds"]=time.perf_counter()-before
+                    frames_record.append(r)
+                    if len(frames_record)%20==0:print("Points",dataset,group,len(frames_record),"/",len(keys),flush=True)
+                elapsed=time.perf_counter()-begin
+                # A separate native traversal: no persistent feature cache is read to supply inference.
+                begin=time.perf_counter();repeats=0;pure_supply=0.
+                stream=iter(native_scene(reader,group,keys,ids,manifest["scenes"][group],include_rgb=False))
+                for key in keys:
+                    before=time.perf_counter();frame=next(stream)
+                    if frame["points"] is None or not len(frame["points"]):
+                        pure_supply+=time.perf_counter()-before
+                        continue
+                    features,_,_,inverse=encoder(frame["points"]);sync(args.device)
                     pure_supply+=time.perf_counter()-before
-                    continue
-                features,_,_,inverse=encoder(frame["points"]);sync(args.device)
-                pure_supply+=time.perf_counter()-before
-                ref=next(r for r in frames_record if r["key"]==frame["key"])
-                with np.load(output/ref["cache"],allow_pickle=False) as a:
-                    np.testing.assert_array_equal(a["features"],features[inverse[a["native_indices"]]])
-                    np.testing.assert_array_equal(a["coordinates"],frame["points"][a["native_indices"],:3])
-                repeats+=1
-            repeat_seconds=time.perf_counter()-begin
-            record["supply"].append({"dataset":dataset,"group":group,"keys":len(keys),"frames":frames_record,
-                "initial_extract_crop_write_seconds":elapsed,"repeat_native_encode_verify_seconds":repeat_seconds,
-                "verified_repeat_frames":repeats,"repeat_native_encode_seconds":pure_supply})
-            write_json(output/"execution.json",record)
-            print("Native passes complete",dataset,group,len(keys),flush=True)
-        del encoder, features, cache, points
-        gc.collect()
-        if args.device == "cuda":torch.cuda.empty_cache()
+                    ref=next(r for r in frames_record if r["key"]==frame["key"])
+                    with np.load(output/ref["cache"],allow_pickle=False) as a:
+                        np.testing.assert_array_equal(a["features"],features[inverse[a["native_indices"]]])
+                        np.testing.assert_array_equal(a["coordinates"],frame["points"][a["native_indices"],:3])
+                    repeats+=1
+                repeat_seconds=time.perf_counter()-begin
+                record["supply"].append({"dataset":dataset,"group":group,"keys":len(keys),"frames":frames_record,
+                    "initial_extract_crop_write_seconds":elapsed,"repeat_native_encode_verify_seconds":repeat_seconds,
+                    "verified_repeat_frames":repeats,"repeat_native_encode_seconds":pure_supply})
+                write_json(output/"execution.json",record)
+                print("Native passes complete",dataset,group,len(keys),flush=True)
+            del encoder, features, cache, points
+            gc.collect()
+            if args.device == "cuda":torch.cuda.empty_cache()
         # Tiny native subset checks algebra/gradients without a full-track optimization.
         first=next(t for t in record["tracks"] if max(t["point_counts"])>0)
         fixture=loaded_track(first,output)
@@ -281,6 +306,14 @@ def run(args):
                     r={"track":item["name"],"mode":mode,"tracks":batch,"status":"incomplete","timings":[],
                         "replicated_track_shape":batch>1}
                     graph=None
+                    available = int(next(line.split()[1] for line in Path("/proc/meminfo").read_text().splitlines() if line.startswith("MemAvailable:")))*1024
+                    estimate = batch*(sum(item["point_counts"])*2592+item["slots"]*2**20)
+                    r.update(host_available_bytes=available,estimated_offload_bytes=estimate)
+                    if mode == "offload" and estimate > .6*available:
+                        r.update(status="not-run-host-budget",reason="Estimated spatial saves exceed60% of current available host RAM")
+                        record["workloads"].append(r);write_json(output/"execution.json",record);report(output,record)
+                        print("Host budget excludes offload shape",item["name"],batch,flush=True)
+                        continue
                     try:
                         gc.collect()
                         if args.device=="cuda":torch.cuda.empty_cache();torch.cuda.reset_peak_memory_stats()
@@ -316,7 +349,8 @@ def run(args):
         changed=[p for p,d in protected.items() if not Path(p).is_file() or checksum(p)!=d]
         record.update(protected=protected,protected_files=len(protected),changed_files=changed,
             elapsed_seconds=time.perf_counter()-started,finished_utc=datetime.now(timezone.utc).isoformat(),
-            cache_bytes=sum(p.stat().st_size for p in output.rglob("*.npz")))
+            cache_bytes=sum(p.stat().st_size for p in output.rglob("*.npz")),
+            fixture_source=record.get("fixture_source"))
         if changed:record["status"]="failed"
         write_json(output/"execution.json",record);report(output,record)
         if changed:raise ValueError("Protected sources changed")
@@ -327,4 +361,5 @@ def main():
     parser.add_argument("--probe",type=Path,required=True)
     parser.add_argument("--output",type=Path,required=True)
     parser.add_argument("--device",choices=("cpu","cuda"),required=True)
+    parser.add_argument("--fixtures",type=Path,help="Existing fully extracted six-track fixture; resource-only check in a fresh output")
     run(parser.parse_args())

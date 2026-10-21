@@ -459,3 +459,12 @@ uv run --no-project --python "$probe_root/extractor-env/bin/python" python scrip
 ```
 
 Fresh output required. No additional point subsampling, temporal truncation, behavior fitting or held-out access. Larger resource microbatches repeat a real track as a shape test; they are not independent training examples.
+
+For a metadata-only [400 GB cache simulation](experiments/E002a-feature-feasibility/README.md#bounded-cache-simulation--2026-10-21), using local frozen train/validation archives and the completed probe's size estimates:
+
+```bash
+uv run --locked --extra cpu python scripts/simulate-e002a-cache.py \
+  --output outputs/experiments/E002a/cache-simulation
+```
+
+This replays six hypothetical source epochs without native reads, feature-cache construction, GPU inference or training. Sizes remain uncertain; the report separates cold/steady behavior and size sensitivities.

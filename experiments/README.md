@@ -7,11 +7,12 @@ Shared evaluation safeguards and comparison index. The [joint five-seed E001/E00
 | [E001](E001-kinematic-transfer/README.md) | Four kinematic feature sets × MLP/BiLSTM; within and bidirectional ROAD-Waymo/LOKI transfer | 80 five-seed attempts complete; earlier 32 retained | BiLSTM consistently improves on MLP; RAW versus K+T+R depends on direction |
 | [E001b](E001b-2d-bbox-contribution/README.md) | Exact K+T+R versus added bbox availability versus added geometry | 20 five-seed attempts complete | Geometry helps LOKI → ROAD in all seeds, mainly Stopped; other directions mixed |
 | [E001c](E001c-bbox-inputs/README.md) | Native 3D/2D centers, dimensions and velocities, with matched availability flags | 30 five-seed attempts complete | Basic boxes average below E001b geometry in all directions; no systematic 2D size-velocity gain; 3D size velocities remain a redundant-input control |
-| [E002](../docs/research.md#tentative-experiment-direction) | Kinematic Transformer reference and temporal-context comparison | Tentative | Not run |
-| [E003](../docs/research.md#tentative-experiment-direction) | RGB/local 3D evidence on the Transformer | Tentative | Not run |
+| [E002](E002-multimodal-reference/README.md) | Multimodal offline-labeling direction and shared constraints | Overview; concrete protocols owned by individual comparisons | No behavior runs |
+| [E002a](E002a-feature-feasibility/README.md) | First behavior pilot: geometry, +RGB, +RGB/D-DITR; Utonia deferred; preparatory probes retained | Branch/memory policy agreed; population, calibrated resource limits and fitting settings open | Preparation only; no behavior runs |
+| [E003](../docs/research.md#tentative-experiment-direction) | One conditional pedestrian/full-track-conditioned scene-retrieval comparison | Tentative; depends on E002 evidence | Not run |
 | [E004](../docs/research.md#tentative-experiment-direction) | One complementary supervision source with an additional-data control | Tentative | Not run |
 
-[Research](../docs/research.md#tentative-experiment-direction) owns the tentative direction, branches and schedule. E002–E004 details/records are TBD; write their protocols before execution. Their IDs are reserved, with no model implementation or results.
+[Research](../docs/research.md#tentative-experiment-direction) owns the tentative direction, branches and schedule. E002 owns the direction overview; E002a owns the first behavior pilot, its branch specification and preparatory evidence. Later comparisons may use different architectures. E003/E004 detailed records remain TBD. No E002–E004 behavior model or training results exist.
 
 ## Before execution
 
@@ -20,6 +21,8 @@ Predeclare each question, baseline and key controls. Fix/version applicable rele
 ## Strict zero-shot access
 
 For ROAD-Waymo → LOKI, no LOKI observations are used for representation training, including unlabeled adaptation. For LOKI → ROAD-Waymo, apply the same exclusion to ROAD-Waymo. No target behaviour labels or evaluation scores select checkpoints, hyperparameters, architectures, features or source additions. Source validation determines the selected source model; feature normalization also uses source training data only.
+
+The [2026-10-13 literature review](../docs/literature/offline-labeling-research-direction.md#encoder-shortlist-and-access-implications) clarifies that this accounting includes inherited pretrained encoders/teachers. Record corpus, recording IDs/splits and label exposure separately; a checkpoint trained on public Waymo train data may overlap E001's experimental source or target **test** clips. Unknown web-pretraining intersections remain unknown. Frozen weights or a new behavior head do not erase exposure. A practical model with known target-corpus pretraining needs a separately disclosed access description; it cannot establish dataset-excluded transfer or substitute for the scratch/source-only reference. Existing E001/E001b results and policies are unchanged.
 
 Native annotation definitions may be compared to establish a predeclared evaluation projection. Existing qualitative LOKI inspection is preserved in the [inspection archive](../docs/archive/2026-09-28-loki-inspection.md#selected-clip-observations-2026-09-28); do not claim the target dataset was entirely unknown.
 

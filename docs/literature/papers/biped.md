@@ -1,0 +1,11 @@
+# Bifold and Semantic Reasoning for Pedestrian Behavior Prediction
+
+Rasouli, Rohani and Luo, ICCV 2021, pp. 15600–15610. Reviewed 2026-10-13 against the [full primary paper](https://openaccess.thecvf.com/content/ICCV2021/papers/Rasouli_Bifold_and_Semantic_Reasoning_for_Pedestrian_Behavior_Prediction_ICCV_2021_paper.pdf), §§3–4 and Tables 1–4; [official bibliographic record](https://openaccess.thecvf.com/content/ICCV2021/html/Rasouli_Bifold_and_Semantic_Reasoning_for_Pedestrian_Behavior_Prediction_ICCV_2021_paper.html).
+
+BiPed forecasts binary crossing, image-space trajectories and final grid locations from RGB scenes, target boxes/grid positions and ego motion. Independent and shared LSTM encoders/decoders jointly learn the tasks. Cityscapes-pretrained semantic segmentation divides each scene into target pedestrian, other people, cyclists, vehicles and static context; CNN/LSTM branches and temporal attention compress these categories before prediction. This establishes target-specific semantic context and auxiliary trajectory/grid supervision without a Transformer.
+
+Experiments use 0.5-second histories sampled 1–2 seconds before crossing, with overlapping windows. The main model also receives **future ego motion**; Table 1 reports PIE binary F1 0.85, versus 0.84 without future ego motion. These are forecasting-window scores, not dense four-state track-weighted results. The scene-interaction ablation chiefly supports trajectory improvement; the authors describe action-score changes as insignificant. It does not establish that richer scene processing improves every behavior task.
+
+An adapted baseline could use semantic-category/context descriptors and the existing dense temporal head, retaining incomplete tracks and removing future prediction targets from inputs. Reproducing its complete semantic pipeline is unnecessary unless a semantic-map branch is justified. Complete official runnable code/behavior weights were not verified.
+
+**Novelty boundary:** semantic target–scene reasoning, auxiliary spatial supervision and independent/shared multimodal learning are established. Complete-track-conditioned retrieval would need to outperform these compressed-context alternatives under matched observations and access, rather than merely introduce scene attention. [Direction review](../offline-labeling-research-direction.md).

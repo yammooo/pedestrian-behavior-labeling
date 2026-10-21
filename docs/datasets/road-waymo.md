@@ -2,11 +2,31 @@
 
 Status: Acquired on aalto; ROAD-authoritative same-frame 3D index inspected and rechecked
 
-Last updated: 2026-10-06
+Last updated: 2026-10-16
 
 ## Candidate role
 
 Initial real behaviour dataset with verified partial multimodal correspondence in the acquired train/validation subset. [E001](../../experiments/E001-kinematic-transfer/README.md) uses it as source and target in separate comparisons with LOKI, with an accepted experiment-specific projection. Linkage and similar class names do not establish universal semantic equivalence. [Gate 1](README.md#outstanding-dataset-checks) owns remaining native-data acceptance checks.
+
+## Split names
+
+**Waymo partition, ROAD partition and our experiment split are different fields.** For our acquired release:
+
+| ROAD partition | Clips | Native Waymo partition | Behavior GT acquired? |
+| --- | ---: | --- | --- |
+| Train | 600 | training | Yes |
+| Validation | 198 | training | Yes |
+| Test | 202 | validation | No |
+
+Waymo also has an official **test** partition; it is not the acquired ROAD test population. [Official Waymo paper](https://openaccess.thecvf.com/content_CVPR_2020/papers/Sun_Scalability_in_Perception_for_Autonomous_Driving_Waymo_Open_Dataset_CVPR_2020_paper.pdf).
+
+**E001/E001b/E001c use our own frozen 70/15/15 clip split** over eligible tracks from the 798 annotated clips. Their cached setups, normalization and results refer to that experiment split, not native ROAD/Waymo splits. No replacement split has been implemented.
+
+**Our generated indexes:** `scene_manifest.json` covers all 798 annotated clips; `final_color/mapping.json` covers all 1,000 videos. `final_color` names a historical color-image verification pass, not a dataset partition. [Coverage audit and artifact paths](#manifest-completeness-and-acquired-split-mapping-2026-10-16).
+
+**Pretraining:** Utonia's published recipe includes Waymo training and validation, so adopting native ROAD assignments alone does not establish pretraining-disjoint evaluation. [Sources and limits](../literature/papers/utonia.md#independent-split-recheck-2026-10-16).
+
+**Official release confirmed:** our annotation file matches the size/MD5 of the file currently linked by Waymo; all mapped segments were checked against live official partition lists. Paper v3's exact-alignment claim contradicts this release. The authors' rationale is unknown. [Evidence](#official-download-verification-2026-10-16).
 
 ## Documented annotation form
 
@@ -37,7 +57,29 @@ On SSH host `aalto`:
 
 Use `pedestrians.csv.gz` for annotations and `scene_manifest.json` for original modality paths. `report.json`, `export_audit.json`, `clip_summary.json`, and `road_label_definitions.json` contain provenance, coverage and native vocabularies. The manifest covers **798 distinct scenes/clips**: ROAD's 600 train and 198 validation clips, all drawn from Waymo **training**. ROAD's 202 test videos have no downloaded behaviour annotation JSON and contribute no rows. ROAD and Waymo split names are not interchangeable; preserve both split fields.
 
+**Paper/release contradiction:** [paper v3 §IV-C, Dataset Splits](https://arxiv.org/html/2411.01683v3#S4.SS3), claims exact Waymo-split alignment. The current official download instead maps ROAD train/validation to Waymo training and ROAD test to Waymo validation. The merger's hardcoded training paths initially required independent checking; [official bucket verification](#official-download-verification-2026-10-16) now confirms partition membership and annotation-file authenticity. There is no evidence here of an unofficial/wrong download. The reason for the contradictory paper statement is unknown. E001's frozen 70/15/15 assignments and completed results remain unchanged.
+
 Source evidence lives beside the index: `BOX_MAPPING_RESULTS.md`, `PEDESTRIAN_COVERAGE.md`, `join_boxes.py`, `audit_pedestrian_coverage.py`, and `merge_pedestrians.py`. The older coverage report used a strict Waymo-pedestrian class filter; its 426,077 pairs and 6,525 tracks are historical audit counts, superseded for training by the ROAD-authoritative policy below.
+
+### Manifest completeness and acquired split mapping (2026-10-16)
+
+A fresh read-only check on `aalto` compared the original 1.05 GB annotation JSON, the 798-entry pedestrian scene manifest, the existing full-video `final_color/mapping.json` and actual native camera-image filenames under both Waymo partitions.
+
+The acquired partition counts and native correspondence are summarized under [Split names](#split-names). Both annotated ROAD partitions enter the pedestrian scene manifest; ROAD test remains in the separate full-video mapping.
+
+All **798 annotation-JSON clip IDs are present exactly once**, with 798 distinct segment IDs, no extra/missing clips and no disagreement with the full-video mapping. Their native files exist under Waymo training and none occur in the acquired validation inventory. The full-video mapping covers **1,000 distinct clips / 1,000 distinct segments**, including all 202 unannotated test clips; every mapped native camera-image file exists. Thus ROAD validation was not omitted, and the annotated manifest is a one-to-one clip-to-segment mapping for its declared population. It is not a manifest of all 1,000 ROAD videos or of every original Waymo scene.
+
+This confirms structural coverage, not a perfect frame/object association rate. The retained prior visual audit reports 979 fully verified clips out of 1,000 and 381 unresolved frames overall; this check did not rerun image comparisons or certify every box. This first check used local native filenames; the subsequent official inventory check is below. Audit and source hashes: [manifest coverage evidence](../../outputs/inspection/road_waymo_handoff/manifest-coverage-20261016.json). Original files and E001 setups/caches were not modified.
+
+### Official download verification (2026-10-16)
+
+[Waymo's download page](https://waymo.com/intl/es/open/download/#road-waymo-dataset) links ROAD to `gs://waymo_open_dataset_road_plus_plus/`. Authenticated, read-only metadata checks against that bucket and `gs://waymo_open_dataset_v_2_0_1/` establish:
+
+- Local `road_waymo_trainval_v1.0.json` matches the official object's **1,052,860,408 bytes** and base64 MD5 **`NXZZkfGfVSo/RhD7f88h/Q==`**; generation `1690307327070948`, updated 2023-07-25.
+- All 600 ROAD train and 198 ROAD validation segments belong to the live official **Waymo training** inventory. All 202 ROAD test segments belong to live official **Waymo validation**. No mapped segments cross into the other queried partition.
+- The explicit exact-alignment statement appears in checked [paper v3](https://arxiv.org/html/2411.01683v3#S4.SS3), not [v1](https://arxiv.org/html/2411.01683v1) or [v2](https://arxiv.org/html/2411.01683v2). The retained v3 PDF text also contains it; this is not only an HTML rendering issue.
+
+The mismatch is between the **current official downloadable release and paper v3's statement**, not an E001 split or annotation-download mismatch. Author clarification is needed for the rationale; no message was sent. [Evidence, object metadata, complete official segment lists and example matches](../../outputs/inspection/road_waymo_handoff/official-release-20261016/verification.json); adjacent HTML preserves the official bucket link. No sensor/video downloads or native-data/cache/split/result changes.
 
 ### Identity and supervision policy
 

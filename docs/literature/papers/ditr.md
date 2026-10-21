@@ -1,0 +1,22 @@
+# DINO in the Room: Leveraging 2D Foundation Models for 3D Segmentation
+
+Knaebel et al., 3DV 2026 / earlier CVPRW 2025 T4V version. Focused method/interface check **2026-10-15**: [primary v2 paper, §§3–4](https://arxiv.org/html/2503.18944v2), [official repository](https://github.com/RWTHVision/ditr), [published configs/checkpoints](https://huggingface.co/rwthvision/ditr). No reproduction or behavior evaluation.
+
+Two variants have importantly different inference requirements:
+
+- **DITR injection:** calibrated camera images supply frozen DINO features projected onto points and injected at multiple spatial-decoder levels. Images/projection remain necessary at inference. This cannot bypass LOKI's unresolved camera-calibration delivery.
+- **D-DITR distillation:** a PTv3 student learns DINOv2 features from paired training observations. After pretraining it can run or be fine-tuned on point clouds without the image branch. This could supply image-informed semantics for our 3D-only tracks, but does not recover visual information absent from current LiDAR.
+
+The official model zoo supplies nuScenes versions of the distilled student and a distilled-then-segmentation-fine-tuned model. File metadata confirms `model_best.pth` entries of **555,305,064** and **554,518,952 bytes**, respectively. The latter's saved config trains on nuScenes `train`, validates on `val`, uses XYZ plus return strength, and outputs 64-channel spatial backbone features before its 16-class segmentation head. The distilled-only training config contains the DINO teacher and image loading; extract the student using the documented transfer path rather than treating the whole distiller as a point-only inference wrapper. [Official model zoo and transfer command](https://github.com/RWTHVision/ditr#model-zoo).
+
+**Exposure:** the screened nuScenes recipe is an alternative to deliberate Waymo pretraining. Distillation inherits DINOv2's web-image provenance; the fine-tuned version additionally uses nuScenes semantic labels. Keep these stages separate in a modality or auxiliary-supervision comparison. Pin the exact config and checkpoint rather than selecting an injected model by its higher segmentation score. Code/model cards specify AGPL-3.0; no package installation or weight execution was performed.
+
+**Novelty relevance:** pretrained semantic image features injected into point hierarchies and LiDAR-only visual distillation are established mechanisms. Their transfer to our dense pedestrian behavior task remains untested. An independent RGB branch may still add dense appearance/context unavailable through the points. [Concrete PTv3 shortlist](ptv3.md#concrete-outdoor-checkpoint-follow-up-2026-10-15) · [Direction review](../offline-labeling-research-direction.md).
+
+## Performance and RGB-branch interpretation (2026-10-16)
+
+[Paper Table 4](https://arxiv.org/html/2503.18944v2) reports nuScenes validation segmentation mIoU **79.9** for its reproduced PTv3 baseline and **80.9** for single-dataset D-DITR after full segmentation fine-tuning; the cited original PTv3 result is 80.4. This is the most useful matched comparison here. [ScaLR Table 5](https://arxiv.org/html/2310.17504v2) reports 78.4 for its multi-dataset-pretrained WaffleIron after full nuScenes fine-tuning, under a different backbone/training recipe. These numbers do not establish which frozen encoder transfers better to pedestrian states, or isolate the distillation methods across papers. ScaLR's frozen linear-probe result (67.8) is a different evaluation regime and must not be compared directly with 80.9.
+
+**Checkpoint warning:** the D-DITR paper also evaluates outdoor multi-dataset pretraining on **nuScenes + SemanticKITTI + Waymo**. That variant does not satisfy our Waymo-excluded requirement; the screened published nuScenes-only configuration is the relevant candidate.
+
+Using DINO in our separate RGB branch is compatible with image-distilled LiDAR features. At deployment, one branch observes current images and the other current points; a shared pretraining teacher neither makes these observations redundant nor guarantees that final features have matching dimensions/coordinates. Any complementarity is a hypothesis for matched modality ablations. Call the point branch LiDAR-only **at inference**, with image-supervised pretraining; neither D-DITR nor ScaLR needs current RGB/calibration for its distilled point-only inference path. This is distinct from DITR injection, which does. No checkpoint executed or architecture selected.

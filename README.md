@@ -405,11 +405,11 @@ A separate ROAD CUDA smoke uses `--smoke` with either configuration and a fresh 
 
 ## E002a pretrained-feature feasibility
 
-The bounded [E002a probe](experiments/E002a-feature-feasibility/README.md#environment-and-command) checks native DINOv3 crops, nuScenes D-DITR semantic BEV/alignment, spatial feature correspondence and resource costs. Use its isolated CUDA extractor environment and pinned author clones/weights; the main E001 environment and caches remain unchanged. Entry point: `scripts/probe-e002a.py --help`. No behavior training, held-out scoring, W&B or full caches are launched. The linked protocol owns installation pins, complete command, native-root overrides and explicit partial-RGB status when gated weights are missing.
+These commands implement preparation for the [E002a behavior pilot](experiments/E002a-feature-feasibility/README.md); no behavior-training command exists yet. The bounded [E002a probe](experiments/E002a-feature-feasibility/README.md#environment-and-command) checks native DINOv3 crops, nuScenes D-DITR semantic BEV/alignment, spatial feature correspondence and resource costs. Use its isolated CUDA extractor environment and pinned author clones/weights; the main E001 environment and caches remain unchanged. Entry point: `scripts/probe-e002a.py --help`. No behavior training, held-out scoring, W&B or full caches are launched. The linked protocol owns installation pins, complete command, native-root overrides and explicit partial-RGB status when gated weights are missing.
 
 The [DINO patch visual check](experiments/E002a-feature-feasibility/README.md#dino-patch-visual-check--2026-10-19) adds PCA/similarity panels and a corrected crop gallery from the same development sample: `scripts/check-e002a-rgb.py --help`. It reuses the completed probe and original checkpoint without a segmentation head or training.
 
-Add `--compare-crop-scales` with a fresh output directory for the [1.5×/2×/3× side-by-side diagnostic](experiments/E002a-feature-feasibility/README.md#crop-size-visual-comparison--2026-10-19); every crop remains 256×256. This does not change the E002 training proposal's 1.5× input.
+Add `--compare-crop-scales` with a fresh output directory for the [1.5×/2×/3× side-by-side diagnostic](experiments/E002a-feature-feasibility/README.md#crop-size-visual-comparison--2026-10-19); every crop remains 256×256. This does not change the E002a pilot's proposed 1.5× input.
 
 For [ten full-track window videos](experiments/E002a-feature-feasibility/README.md#whole-track-window-videos--2026-10-19), use `scripts/video-e002a-tracks.py --help` in the same isolated GPU environment. Each combines a 3× RGB crop with nested 1.5×/2×/3× outlines and target-centered semantic LiDAR with 15/20/30 m radius rings.
 

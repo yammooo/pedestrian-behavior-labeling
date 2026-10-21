@@ -1,6 +1,237 @@
-# E002a — Native-feature feasibility
+# E002a — First multimodal behavior pilot
 
-Authorized **2026-10-19**. Bounded gate for [E002](../E002-multimodal-reference/README.md), including semantic BEV inspection. No behavior training, held-out scoring, W&B runs or full-cache preparation. Existing E001-family archives, setup, normalization and results stay unchanged. This probe may complete partially if gated DINOv3 weights are unavailable; that state is explicit and cannot pass the RGB execution gate.
+**Working specification, updated 2026-10-21.** First behavior pilot within [E002](../E002-multimodal-reference/README.md). The three D-DITR-first arms, branch interfaces and complete-track memory strategy below are agreed in direction; **working default** and **TBD** values remain provisional. No behavior model, pilot command, full feature cache or behavior-training run exists yet. Completed extraction/resource/semantic probes are [preparatory evidence](#preparatory-work), not separate behavior experiments. Later E002 comparisons may use different architectures.
+
+The existing directory name is retained for stable commands, artifact references and links. This record owns the pilot specification, preparation, fitting settings and eventual behavior results.
+
+## Question and interpretation
+
+Do appearance and local 3D scene features improve offline pedestrian behavior labeling beyond geometry, including missing RGB and cross-dataset transfer? Use an established multimodal reference before considering a new retrieval mechanism. No modality benefit or methodological novelty is assumed; [literature positioning](../../docs/literature/offline-labeling-research-direction.md).
+
+E001b geometry is a pragmatic reference, not a universal winner. Its BiLSTM track-weighted macro-F1, mean ± sample SD in percentage points: ROAD→ROAD **52.18 ±1.55**, ROAD→LOKI **45.57 ±1.10**, LOKI→LOKI **62.03 ±1.61**, LOKI→ROAD **47.53 ±0.91**. Other inputs win or tie elsewhere; [five-seed review](../E001b-2d-bbox-contribution/results-review.md). This representation choice followed inspection of both datasets' tests: disclose **test-informed development**.
+
+## Next increment: behavior utility, not another segmentation gate
+
+The [frozen-feature semantic probe](#frozen-feature-linear-semantic-probe--2026-10-20) reached pedestrian/sidewalk IoU54.1/35.2% on two Waymo development validation clips. This shows accessible semantics, not adequate segmentation or behavior usefulness. Our labeler receives pedestrian tracks/boxes; its point branch supplies additional target/scene evidence. A temporal model cannot restore information discarded by a frozen encoder, while spatial readout/fusion can also be bottlenecks. A negative behavior result cannot identify the encoder alone as the cause.
+
+Prepare one bounded pilot on each source:
+
+| Arm | Enabled descriptors |
+|---|---|
+| `g` | Geometry |
+| `g-rgb` | Geometry + RGB |
+| `g-rgb-dditr` | Geometry + RGB + D-DITR |
+
+Every arm receives the same three branch-availability flags. Keep tracks, targets, geometry/RGB preprocessing, fusion/temporal widths and fitting protocol matched. **Utonia is deferred**, replacing the earlier four-arm proposal: first establish RGB/D-DITR behavior utility and a practical memory/storage strategy. Its feature specification and exposure/resource evidence below are retained for a separately agreed later comparison, not a fourth current arm. Frozen encoders are the initial pilot policy, not a final freezing decision. The Waymo-adapted semantic head is diagnostic only; neither its logits nor semantic GT enter the behavior inputs.
+
+The earlier LR/query sweep is not the next increment. No further standalone segmentation optimization is planned before the behavior pilot.
+
+## Retained data and evaluation contract
+
+- Reuse E001/E001b's frozen eligible complete tracks, 5 Hz grids, four-state targets, native associations and group splits. Preserve 3D-only LOKI tracks, internal gaps and unlabeled context.
+- Generate four logits at every non-padding timestep. Only accepted GT contributes to equal-track CE and metrics; retain E001 selection/aggregation semantics.
+- Geometry normalization uses source-training statistics only. Frozen image transforms are fixed; no pooled cross-dataset feature fitting or target PCA/compression.
+- Source training/validation only in the pilot. Train separate models per source; each source's validation selects its own checkpoints/settings. Pilot group/track budgets are **TBD**; no held-out inference.
+- Experimental ROAD partitions are not official Waymo partitions: all acquired annotated ROAD clips used by E001 originate in official Waymo training. Keep existing splits; [native verification](../../docs/datasets/road-waymo.md#official-download-verification-2026-10-16).
+
+## Tensor conventions
+
+`B`: tracks/batch; `T`: padded track length; `N`: retained local point sites/frame; `N_max`: spatial padding length; `d_e`: encoder feature width; `D`: shared spatial attention width; `M`: learned spatial seeds. Logical shapes do not require keeping all `B × T` point sets resident together; spatial processing must be chunked without changing complete-track semantics or gradients.
+
+## Geometry branch: exact E001b input
+
+**Input `[B,T,20]`: 14 continuous values + six existing validity flags.** Retain [E001b's definitions](../E001b-2d-bbox-contribution/README.md#additional-observation-contract):
+
+| Group | Continuous values | Validity |
+|---|---|---|
+| K | Pedestrian XY velocity | One vector flag |
+| T | XY displacement from first valid position | One vector flag |
+| R position | Pedestrian-minus-ego XY position | One vector flag |
+| R velocity | `v_ped − v_ego`, XY | One vector flag |
+| 2D box | Image-normalized horizontal center, **bottom** vertical coordinate, width, height | Bbox flag |
+| 2D velocity | Horizontal-center and **bottom** vertical velocity | Bbox-velocity flag |
+
+Use source timestamps/immediate-neighbor derivatives, no interpolation; zero missing numeric values after source normalization. ROAD uses native Waymo FRONT boxes without ROAD fallback; LOKI uses native boxes. Do not substitute E001c centers/dimensions.
+
+Working MLP: `Linear(20,64) → GELU → Linear(64,64) → GELU`, output `[B,T,64]`. Internal flags preserve partial missingness. Derive `geometry_valid = any(six flags)` and zero the final descriptor if all groups are missing. Append this derived flag at fusion alongside RGB/LiDAR availability; retain the six internal flags for partial missingness.
+
+## RGB branch
+
+Frozen/eval **DINOv3 ViT-B/16 LVD-1689M**; [verified checkpoint/interface](#rgb-checkpoint-completion--2026-10-19), [official implementation](https://github.com/facebookresearch/dinov3).
+
+```text
+Native RGB + native target bbox
+→ centered square: side1.5 × max(box width, box height)
+→ bicubic256 ×256, fixed pretrained RGB normalization
+→ frozen DINOv3 normalized CLS [768]
+→ trainable Linear(768,128)
+→ RGB descriptor [128]
+```
+
+Keep the intended crop center; fill out-of-image pixels with pretrained RGB mean. No native-box/image intersection means missing RGB; retain partial boxes and record intersection/padding fractions. Numeric geometry remains unclipped. No full-image branch, patch retrieval, RGB augmentation or encoder fine-tuning initially. CLS utility is untested; DINO web-pretraining overlap is unknown.
+
+## Point-cloud branch
+
+### Encoder features
+
+Encode the **complete native sweep** once per scene/timestamp before pedestrian selection. For the current pilot retain pinned D-DITR preprocessing, voxel inverse mappings and feature-coordinate alignment; [D-DITR contracts](#encoder-contracts), [Utonia contracts](#frozen-point-feature-pca--2026-10-20).
+
+| Encoder / scope | Frozen representation | `d_e` | Token input with geometry |
+|---|---|---:|---:|
+| NuScenes D-DITR, distilled + segmentation-fine-tuned | Decoded point features **before** its16-class head |64|68|
+| Original Utonia — deferred | All five encoder levels, inverse-mapped and concatenated: `54+108+216+432+576` |1386|1390|
+
+D-DITR uses XYZ+strength. Utonia uses its configured XYZ with absent color/normals zero; no LiDAR RGB coloring. Both effective input grids are5 cm under their pinned recipes. The original Utonia [ScanNet linear-probe demo](https://github.com/Pointcept/Utonia/blob/de1f9deef4ee65e508d74347f8d0eb848d878abb/demo/2_sem_seg.py) concatenates all levels; we reuse that feature assembly, not its class-specific weights. The earlier1224-channel three-level PCA representation remains visual evidence, not the behavior input.
+
+Utonia's raw feature width is~21.7 times D-DITR's. This affects storage and input-projection cost, not downstream attention width after projection. Report the different feature stages/supervision; do not interpret this as a controlled architectural difference.
+
+### Pedestrian crop and point tokens
+
+Use a **20 m horizontal-radius cylinder**, no height cutoff, centered on the observed native target position. Require a usable sweep, target center and coordinate transform; no center interpolation across missing observations. The crop restricts readout locations, not necessarily the frozen encoder's receptive context. Earlier preparatory15 m measurements remain unchanged and require resource re-estimation for20 m.
+
+**Agreed 2026-10-21:** retain every D-DITR encoder-input voxel representative inside the20 m crop, using its aligned decoded feature and native/inverse references. No mapping back to duplicate features for every native return, additional subsampling, token cap, target-support filtering or GT/model-error-based selection. Preserve empty/missing crops through the existing missing-input policy. Shared-site alignment with Utonia is deferred with that arm.
+
+Working per-point input and projection:
+
+```text
+relative_xyz_i: target-relative coordinates in fixed initial ego-heading axes
+inside_box_i:   geometric membership in the supplied native rotated cuboid
+x_i = concat(LayerNorm(feature_i), relative_xyz_i /20, inside_box_i)
+H_i = Linear(d_e +4, D)(x_i)
+```
+
+Relative XYZ has3 channels; membership has1. Box dimensions/heading define membership but are not extra geometry-MLP inputs. Containment is not verified point ownership. No point-index positional embedding; explicit target-relative coordinates supply spatial information. LayerNorm on encoder features is agreed for the first implementation.
+
+**Agreed 2026-10-21: `D = 128`**; a future Utonia comparison would retain this width. D-DITR projects 68→128 (8,832 parameters with bias); Utonia projects 1390→128 (178,048). Expansion before nonlinear attention provides processing capacity, not new observations. Equal RGB/LiDAR descriptor widths are a practical starting budget, not evidence that they retain equal information.
+
+### Spatial cross-attention and output
+
+One cross-attention block, four heads, **one unconditioned learned seed (`M = 1`)**, agreed 2026-10-21. Attention width is128, with32 channels/head. The seed is a global trainable parameter repeated for every valid frame, not conditioned on geometry/RGB embeddings.
+
+```text
+Point tokens H: [N,D]       Seeds S: [M,D]
+Q = LN(S) W_Q              K = LN(H) W_K       V = LN(H) W_V
+Split into4 heads: Q [4,M,D/4], K,V [4,N,D/4]
+A = softmax(Q K^T / sqrt(D/4) + padding_mask)  # [4,M,N]
+U = S + ConcatHeads(A V) W_O
+Z = U + FFN(LN(U))          # token-wise; agreed FFN 128→512→128, GELU
+LiDAR descriptor = Z[0]     # [128]; no extra output projection
+```
+
+This is cross-attention, not prepended-token unrestricted self-attention: no `N × N` attention in this readout. Spatial dropout is **TBD**. Geometry enters through point coordinates/membership; no learned semantic class predictions are required. The single seed output forms one128-channel descriptor/frame; it is not an extra temporal timestep. The spatial summary is made before temporal reasoning; future frames do not change its point selection. [PMA/Set Transformer precedent](https://proceedings.mlr.press/v97/lee19d.html).
+
+Multiple seeds remain a possible later control, not a first-pilot setting. With the same128-channel width, four seeds would produce `[4,128]` instead of `[1,128]`: more summary slots, not the same total descriptor size. Different seeds could preserve different spatial evidence, but specialization is not guaranteed and seeds may become redundant. Cross-attention score/value aggregation scales with seed count; point encoding/projection is shared. Flattening would require a larger fusion input; compressing back to128 reinstates an output bottleneck, though aggregation is more expressive. Passing spatial tokens separately through time would change the temporal architecture. No extra seeds can recover information absent from frozen encoder features or discarded point sampling.
+
+### Spatial readout objection and revised proposal (2026-10-16)
+
+The initial pooling discussion motivated retaining coordinates until learned aggregation. Shared unconditioned seeds were chosen on19 October; fixed mean/max remains a possible control, not the default. DINO CLS is also learned compression. Full-track-conditioned retrieval remains a conditional later hypothesis; none of these summaries is assumed lossless or novel.
+
+## Missing inputs and padding
+
+| Branch | Validity rule | Invalid output |
+|---|---|---|
+| Geometry | Any existing feature-group flag true; partial groups retain their masks | Zero final64-channel descriptor if all groups missing |
+| RGB | `rgb_valid`: usable native image/box crop | Zero final128-channel descriptor |
+| LiDAR | `lidar_valid`: usable20 m crop with at least one retained spatial token | Skip attention; zero final128-channel descriptor |
+
+Append **`geometry_valid`, `rgb_valid` and `lidar_valid`** as three per-frame scalar feature channels. The geometry flag is the deterministic OR of the six existing geometry flags, not an additional observation. Their meanings/site policy must be encoder-independent and identical across arms. Disabling a branch zeros its descriptor but retains measured observation flags. No extra target/context availability bits enter the model; retain those counts as diagnostics. A crop with context but no inside-box points can still be valid LiDAR.
+
+Gate **after** all branch projections: learned seeds, residuals and biases otherwise produce nonzero outputs for missing input. Never invoke attention with every spatial key masked. Genuine missing observations are retained; corrupt/nonfinite inputs and missing required decoding metadata fail visibly.
+
+Spatial padding masks cover nonexistent point tokens; temporal padding masks cover nonexistent track timesteps. Missing modalities and unlabeled slots do **not** remove time positions. GT masks affect loss/metrics only.
+
+## Fusion and temporal head
+
+```text
+geometry [64] + RGB [128] + LiDAR [128] + availability [3]
+→ concat [323] → trainable Linear(323,256)
+→ fused tokens [B,T,256]; no additive positional encoding
+→ two full-track bidirectional pre-norm Transformer layers, with temporal RoPE on Q/K
+→ Linear(256,4) → logits [B,T,4]
+```
+
+Agreed widths: geometry64, RGB128, LiDAR128, fusion input323 and temporal256. Temporal working settings: two layers, four heads, FFN1024, dropout0.1; full noncausal attention within each track, never across tracks. Mask padding and retain missing/unlabeled context. Keep inactive descriptor slots zero so fusion/temporal shapes match every arm. `g` is geometry plus shared availability controls with a new Transformer, not a pure geometry or historical BiLSTM score.
+
+**Temporal positional encoding, agreed 2026-10-21:** use [RoPE](https://arxiv.org/abs/2104.09864) on Q/K in each temporal self-attention layer, not on V; no added sinusoidal/learned position vectors. Keep full bidirectional attention. Working implementation convention: rotate all64 channels/head with frequency base10,000 and position `(nominal_grid_time − track_start_time) /0.2`, equivalent to slot index at5 Hz. Preserve positions through missing modalities/GT; mask temporal padding. No track-length normalization or absolute recording timestamps. This replaces the earlier additive sinusoidal proposal; no behavior advantage is yet measured.
+
+Initially frozen: DINOv3 and the selected point encoder, in evaluation mode. Trainable: geometry MLP, RGB projection, point normalization/projection, spatial seed/attention/FFN, fusion, temporal layers and classifier. Trainable operations use deterministic FP32; frozen extraction precision is separately recorded. Only behavior supervision trains these modules; source semantic-head probe weights are not reused.
+
+## Access and comparison safeguards
+
+The deferred Utonia alternative is a **Waymo-exposed reference, not an upper bound**. Its [pretraining includes Waymo training/validation](../../docs/literature/papers/utonia.md#verified-pretraining-partitions-2026-10-15), potentially overlapping E001 source-test recordings; exact intersections are unmeasured. Source-only fitting does not establish dataset-excluded LOKI→Waymo transfer or unseen Waymo recordings. A shared encoder choice informed by both sources' development scores must be disclosed. LOKI behavior utility remains untested for both encoders.
+
+D-DITR is LiDAR-only at inference but inherits DINOv2 image distillation and nuScenes semantic fine-tuning; [lineage](../../docs/literature/papers/ditr.md). Different DINO teachers do not imply aligned RGB/LiDAR features or complementarity. Waymo semantic-probe decisions are additional label-informed development. Freezing does not erase pretraining access; retain [shared evaluation safeguards](../README.md#strict-zero-shot-access).
+
+Later modality ablations remain deferred: geometry+availability, +RGB, +LiDAR without RGB, +both. With five seeds/two sources/four variants they would require40 attempts/80 test cells, separately authorized after pilot settings freeze. No held-out tests in the current pilot.
+
+## Deferred training pilot
+
+One seed0 attempt/arm/source gives **six planned exploratory attempts** across three arms/two sources; no execution command yet. These diagnose effects, not reliable winners. Repeat central comparisons before final claims. Do not multiply the pilot into a backbone/query/LR search.
+
+Working fitting defaults, to ratify before execution:
+
+| Setting | Value |
+|---|---|
+| Loss | Equal-track CE over accepted GT; no unlabeled/padding contribution |
+| Optimizer | AdamW, LR **TBD**, betas(.9,.999), epsilon1e-8, weight decay1e-4 |
+| Updates | FP32, global gradient clip1; effective batch64 complete tracks via correctly weighted accumulation; retain final partial batch |
+| Schedule/budget | Three-epoch warmup then constant LR; maximum100 epochs, patience15 |
+| Selection | Highest source-validation track-weighted macro-F1; exact ties lower CE, then earlier epoch; patience resets only for strict F1 improvement |
+| Augmentation | Natural missingness and ordinary network dropout; no modality/crop augmentation initially |
+
+Earlier LR candidates1e-4/3e-4/1e-3 and one/four spatial seeds are historical development options, not a required sweep; the first pilot now fixes one spatial seed. Reuse E001 loss/checkpoint/evaluation operations where applicable; do not change existing data/results or shared scientific semantics.
+
+## Complete-track memory and batching policy — agreed 2026-10-21
+
+Keep every selected complete track and every encoder voxel token in its crop. Do not drop long/dense tracks, split them into independent training windows, truncate temporal attention or change inference context to meet a memory limit. Numerical VRAM ceilings and frame concurrency must follow measurement, not the analytical estimates below.
+
+- **Frozen feature supply:** encode scenes without encoder gradients, share scene outputs across represented pedestrians where practical, and discard frozen internal activations. Cached outputs allow encoders to be unloaded during behavior training. On-demand extraction from native data is an alternative, not rejected; it repeats decoding/encoding on cache misses and adds encoder residency/workspaces to the VRAM budget. Full disk cache, bounded pilot cache or on-demand extraction remain a measured choice, not a settled requirement. Freeze extraction semantics and verify equivalent feature/identity pairing for either path.
+- **Two batching levels:** whole-track microbatches vary with estimated point cost `sum(N_bt)` and temporal padding/attention cost. Spatial frame chunks control the number of point sets resident at once; they do not split the temporal sequence. Shuffle/bucket deterministically from seed0 using lengths/token counts, never behavior labels or model errors. Each selected track appears once/epoch, including expensive tracks; grouping and calibrated ceilings are fixed before a run and recorded.
+- **Gradients, conditional memory paths:** ordinary execution is the default for workloads that fit. Use spatial activation recomputation and/or CPU-input staging/offloading only for workloads that require them, according to preflight-calibrated, recorded shape/memory thresholds; no OOM-triggered retry. Retain the small descriptors for full-track temporal attention. Recompute only the trainable readout from frozen features during backward, not the frozen encoder. Preserve RNG behavior and delay updates until all contributions are accumulated; do not detach the readout from behavior supervision. Ordinary GPU-input checkpointing alone is insufficient. Exact implementation details must pass gradient equivalence before execution; [checkpointing](https://docs.pytorch.org/docs/2.7/checkpoint.html) and [saved-tensor offloading](https://docs.pytorch.org/docs/2.7/autograd.html#torch.autograd.graph.save_on_cpu).
+- **Effective batch:** accumulate summed individual track losses and divide by actual tracks per optimizer update (working target64 complete tracks; retain the final partial update). Do not average microbatch means equally when microbatch sizes differ. Use matched track order/update membership across arms; physical microbatches may differ. Partial-GT masks and E001 equal-track semantics remain unchanged.
+- **Preflight:** measure the agreed20 m block on short, typical and long/dense development tracks in both datasets, including naturally missing branches. Time ordinary execution, recomputation and offloading on fitting fixtures, choosing the least overhead path that meets the budget; verify outputs, parameter gradients and one optimizer update within declared FP32 tolerances, including unequal accumulation and temporal padding. Record peak allocated/reserved VRAM, host RAM, transfer/I/O, tracks and point tokens per second, and timings after warm-up. Derive safe microbatch and frame-chunk ceilings from these measurements. If the largest selected example cannot fit, fail visibly and revisit the agreed execution strategy; no OOM-driven retry, silent cap or dropped track.
+
+This settles the execution direction, not its numeric resource limits. Disk feasibility is a separate gate: recomputation saves activations, not the stored frozen-feature payload. Feature-supply strategy and any pilot-cache scope/sharing/disk budget must be fixed before full preparation. On-demand timings must include native reads/decoding, transfer, scene reuse and frozen encoding; a small forward-only encoder timing is not end-to-end epoch throughput. No additional sampling or precision reduction is authorized by this policy.
+
+## Analytical VRAM budget — 2026-10-21
+
+For the agreed FP32 spatial block, a small CPU autograd saved-storage inspection (N=257, shared normalized H for K/V, trainable feature LayerNorm) gives **2,592 bytes/token for D-DITR** and **13,168 for Utonia**. Point-dependent retained storage is approximately `4 × sum(N_bt) × (2*d_e + 4*128 + 8)` bytes: raw features and normalized projection inputs, H/normalized H/K/V, and LayerNorm statistics. This is a tensor accounting model, **not a CUDA peak measurement or guaranteed bound**; backend, dropout and tensor-lifetime choices can change allocations.
+
+Illustrative102-slot tracks, constant N at each slot, cached encoder outputs, frozen encoders not GPU-resident. GiB of retained point buffers only:
+
+| Encoder / tokens per frame | Microbatch1 track |2 tracks|4 tracks|8 tracks|
+|---|---:|---:|---:|---:|
+| D-DITR /16,000 |3.94|7.88|15.76|31.52|
+| D-DITR /32,000 |7.88|15.76|31.52|63.03|
+| D-DITR /70,056 |17.25|34.50|69.00|138.00|
+| Utonia /16,000 |20.01|40.03|80.06|160.11|
+| Utonia /32,000 |40.03|80.06|160.11|320.23|
+| Utonia /70,056 |87.63|175.27|350.53|701.06|
+
+These N values reference the older15 m sample; actual20 m counts remain unmeasured. Add temporal activations, model/optimizer state, backward temporaries, CUDA context/workspaces and allocator reserve. For varying tracks use actual summed tokens, not necessarily batch×maximum lengths/counts; rectangular padding may incur the latter. Existing OOM evidence reports11.60 GiB total GPU capacity. The current normalized block differs from that earlier stress graph.
+
+Spatial recomputation with **CPU-resident frozen inputs** can instead bound point activations by concurrently processed frames C. Plain checkpointing with every input still on GPU retains a potentially large input payload. A deliberately approximate planning rule `1 GiB + 2 × C × N × bytes_per_token` (GiB conversion implicit) allows one extra local-buffer set plus1 GiB for other costs; it is not a measured peak or safety guarantee. At70,056 tokens and C=1/4/8 this gives D-DITR approximately1.34/2.35/3.71 GiB and Utonia2.72/7.87/14.75 GiB. Host memory, transfer/runtime and temporal microbatch costs still need validation. The calculation itself does not choose numeric microbatch/frame limits; the agreed policy above preserves all tokens and reserves recomputation/offloading for workloads that need them. These cached-feature estimates exclude any co-resident encoder in an on-demand path. Utonia figures remain deferred-alternative evidence.
+
+[Machine-readable assumptions/calculations](../../outputs/experiments/E002a/analytical-vram-budget/budget.json). No behavior implementation or GPU run; original probes/artifacts unchanged.
+
+## Before implementation and execution
+
+| Open item | Required definition |
+|---|---|
+| Pilot population | Group/track budget per source; fixed complete tracks/GT across arms; class/missing-input support; validation coverage |
+| Resource calibration | Measure20 m all-voxel costs and throughput; fix track-memory and concurrent-frame ceilings, padding/bucketing details and host-RAM limit |
+| Readout | Choose spatial dropout; D=128, M=1, feature LayerNorm and spatial GELU FFN128→512→128 are settled |
+| Feature supply | Compare native on-demand extraction with bounded/shared caches; include encoder residency, native I/O, scene reuse, epoch throughput, host RAM and disk ceiling; stored descriptors remain FP32 unless a separate change is agreed |
+| Fitting | Ratify one LR and schedule/budget/effective batch; no hidden optimization differences |
+| Evidence/next decision | Primary/per-class behavior metrics, missing-RGB/point-support strata, paired track changes, parameters/runtime/resources; criteria for repeat seeds or adaptation |
+
+The earlier preparatory direct worst-case workload OOM and~1.15TiB D-DITR float32 union estimate prohibit assuming full preparation fits. Measure20 m D-DITR costs; Utonia costs remain a deferred gate; do not silently cap tokens, truncate tracks or reduce precision. Validate coordinate/feature pairing, missing-branch zeros, spatial/temporal/GT masks, full-track gradients/aggregation, checkpoint reload and existing-pipeline compatibility before execution. Preserve failures; fresh output directories, no automatic retry/resume.
+
+**Results:** no behavior runs. Native/resource/semantic evidence is preserved below. Architectural novelty and modality utility remain hypotheses, not consequences of integrating these components.
+
+## Preparatory work
+
+Authorized **2026-10-19** as a bounded feasibility gate, including semantic BEV inspection. The following records preserve the executed probe protocols and evidence; their 15 m radius, benchmark dimensions and other historical settings do not override the current pilot specification above. No behavior training, held-out scoring, W&B runs or full-cache preparation. Existing E001-family archives, setup, normalization and results stay unchanged. This probe may complete partially if gated DINOv3 weights are unavailable; that state is explicit and cannot pass the RGB execution gate.
 
 ## Fixed scope and sample
 
@@ -261,6 +492,8 @@ Save source references, class support, selected identities/pixels, compact train
 | Accuracy % |70.95|75.70|81.24|
 
 Learned pedestrian precision/recall **85.38% /59.59%**; sidewalk **58.42% /46.87%**. Gains occur in both validation clips: pedestrian IoU original→learned **28.60→54.38** (`train_00528`) and **17.12→46.43** (`train_00575`); sidewalk **16.78→43.21** and **4.04→24.43**. These are two already-inspected development clips, not an independent final test. The large-class gains beyond the taxonomy-only control support accessible common semantic information in the frozen features; domain/head mismatch contributes to the original failures. This does not establish behavior utility, LOKI transfer, or a need for backbone fine-tuning. No architecture/optimizer search followed the results. Any later representation choice based on this probe is Waymo-label-informed development, including for LOKI→Waymo claims.
+
+**Quality qualification / nuScenes context:** sidewalk IoU **35.15% remains weak**, despite improvement. The [official model zoo](https://github.com/RWTHVision/ditr#model-zoo) reports **80.9% nuScenes validation mIoU** after full segmentation fine-tuning. The released experiment's [last logged training-validation pass](https://huggingface.co/rwthvision/ditr/blob/a656b4385aa28060b30152676023903a923b4a17/nuscenes/semseg-ptv3_weight%3Ddistill-ptv3_nuscenes_dino-L/train.log) reports **76.05% sidewalk /80.44% pedestrian /96.81% drivable IoU**, averaging **79.56%**; these are not verified class scores for the final80.9% evaluation. Different datasets, taxonomies, preprocessing and full-model versus small frozen-feature training prevent a direct performance comparison. Our probe establishes accessible semantic information, **not adequate segmentation quality or that a frozen backbone will suffice for the final behavior labeler**.
 
 Rare-class limits: sampled training contains **4 bicycle /0 motorcycle /174 cone points**; validation **2,154 /0 /93**. Learned bicycle/cone IoU is0; motorcycle has no validation GT and is excluded from supported-class macro-IoU. These are not decisive tests of rare-class recoverability. Full/cached class supports and per-frame confusion remain in the record; source-only uniform sampling was not changed after observing this limitation. The diagnostic head is separate from the behavior inputs and does not replace the frozen pretrained representation.
 

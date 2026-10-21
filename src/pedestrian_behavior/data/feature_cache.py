@@ -112,6 +112,7 @@ class FeatureCache:
                 raise ValueError("Unsupported feature-cache index format")
             self.db.execute("CREATE TABLE IF NOT EXISTS entries (key TEXT PRIMARY KEY, identity TEXT NOT NULL, bytes INTEGER NOT NULL, sha256 TEXT NOT NULL, used INTEGER NOT NULL)")
             self.db.execute("CREATE INDEX IF NOT EXISTS entries_lru ON entries(used, key)")
+            self.db.execute("CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, identity TEXT NOT NULL, value TEXT NOT NULL, sha256 TEXT NOT NULL)")
             self.db.commit()
             self.entry_count, self.resident = self.db.execute("SELECT COUNT(*), COALESCE(SUM(bytes),0) FROM entries").fetchone()
             self.clock = self.db.execute("SELECT COALESCE(MAX(used), 0) FROM entries").fetchone()[0]
@@ -150,6 +151,30 @@ class FeatureCache:
             self.entry_count -= 1
             self.counts["evictions"] += 1
             self.counts["evicted_bytes"] += size
+
+    def metadata(self, identity):
+        row = self.db.execute("SELECT identity, value, sha256 FROM metadata WHERE key=?", (identity_digest(identity),)).fetchone()
+        if row is None:
+            return None
+        if row[0] != canonical(identity):
+            raise ValueError("Cache metadata identity mismatch")
+        value = json.loads(row[1])
+        if identity_digest(value) != row[2]:
+            raise ValueError("Cache metadata checksum mismatch")
+        return value
+
+    def record_metadata(self, identity, value):
+        """Small immutable cost references survive feature-payload eviction."""
+        existing = self.metadata(identity)
+        if existing is not None:
+            if existing != value:
+                raise ValueError("Immutable cache metadata changed")
+            return
+        serialized = canonical(value)
+        if shutil.disk_usage(self.root).free < self.min_free_bytes + len(serialized.encode()) + 4096:
+            raise OSError("Insufficient cache-index write headroom")
+        with self.db:
+            self.db.execute("INSERT INTO metadata VALUES (?, ?, ?, ?)", (identity_digest(identity), canonical(identity), serialized, identity_digest(value)))
 
     def contains(self, identity):
         return self.db.execute("SELECT 1 FROM entries WHERE key=?", (identity_digest(identity),)).fetchone() is not None

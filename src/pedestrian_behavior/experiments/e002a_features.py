@@ -246,6 +246,13 @@ class FeatureSupply:
             "encoder": DITR_REVISION, "checkpoint": DITR_SHA256, "config": DITR_CONFIG_SHA256,
             "preprocessing": "full-sweep;rotated-xyz-strength;5cm-first-native;fixed-serialization;float32"}
 
+    def point_cost(self, dataset, locator, slot):
+        """None means not measured; zero means genuinely unavailable/empty, never a guessed cost."""
+        identity = self.point_identity(dataset,locator,slot)
+        if identity is None:
+            return {"tokens":0,"inside_box_tokens":0}
+        return self.point_cache.metadata({"kind":"point-cost","entry":identity_digest(identity),"locator":locator})
+
     def iter_points(self, dataset, locator):
         """All slots, one native traversal for ordered misses, no decoded-frame RAM cache."""
         if self._point_stream is not None:
@@ -320,7 +327,10 @@ class FeatureSupply:
                 features, _, selected, _ = self.encoders("points", points)
             return point_union(points, features, selected, boxes, frame["world_from_native"], anchors)
         arrays = self.point_cache.get(identity, produce, validate_points)
-        return point_crop(arrays, locator)
+        crop = point_crop(arrays, locator)
+        self.point_cache.record_metadata({"kind":"point-cost","entry":identity_digest(identity),"locator":locator},
+            {"tokens":len(crop["features"]),"inside_box_tokens":int(crop["inside_box"].sum())})
+        return crop
 
 
 def load_configuration(probe):
@@ -371,6 +381,7 @@ def run(args):
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
     record = {"status": "incomplete", "started_utc": datetime.now(timezone.utc).isoformat(),
+        "config": {k:str(v) if isinstance(v,Path) else v for k,v in vars(args).items()},
         "command": sys.orig_argv, "revision": subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip(),
         "diff": subprocess.check_output(["git","diff","HEAD"],text=True), "tracks": [], "failures": []}
     write_json(output/"cache.json", record)

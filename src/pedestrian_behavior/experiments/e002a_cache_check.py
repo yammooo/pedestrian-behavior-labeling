@@ -48,6 +48,7 @@ def run(args):
     output = args.output.resolve()
     output.mkdir(parents=True,exist_ok=False)
     record = {"status":"incomplete","started_utc":datetime.now(timezone.utc).isoformat(),
+        "config":{k:str(v) if isinstance(v,Path) else v for k,v in vars(args).items()},
         "command":sys.orig_argv,"revision":subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip(),
         "diff":subprocess.check_output(["git","diff","HEAD"],text=True),"checks":[],"failures":[],
         "scope":"bounded frozen source train/validation features only; no behavior fitting, test inference or W&B"}
@@ -147,7 +148,11 @@ def run(args):
                     if before!=encoders.calls:raise AssertionError("Shared frame was encoded again")
                     record["checks"].append({"check":"shared-pedestrian-union-hit","dataset":d,"tokens":len(shared["features"])})
             # Persisted LRU capacity reduction, then a miss must reproduce the same full crop.
+            measured_costs={ref:supply.point_cost(*ref) for ref in point_refs}
             points.trim(0)
+            if any(supply.point_cost(*ref)!=value for ref,value in measured_costs.items()):
+                raise AssertionError("Eviction lost measured input-only costs")
+            record["checks"].append({"check":"point-costs-survive-eviction","references":len(measured_costs)})
             if points.snapshot()["resident_bytes"]:raise AssertionError("Lowered capacity did not trim")
             points.trim(gb_bytes(args.point_cache_gb))
             d,k,slot=point_refs[0]

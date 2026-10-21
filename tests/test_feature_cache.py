@@ -13,7 +13,7 @@ import torch
 
 from pedestrian_behavior.data.feature_cache import FeatureCache, gb_bytes, identity_digest, isolated_extraction
 from pedestrian_behavior.data.frozen_features import point_crop, point_union, validate_points, validate_rgb
-from pedestrian_behavior.experiments.e002a_features import FeatureCatalog, FeatureSupply, FrozenEncoders, selected_tracks, validate_roots
+from pedestrian_behavior.experiments.e002a_features import FeatureCatalog, FeatureSupply, FrozenEncoders, selected_tracks, validate_roots, run
 
 
 def payload(value=1):
@@ -109,6 +109,23 @@ class StorageTest(unittest.TestCase):
                         self.assertEqual(json.loads(str(a["__identity__"])),{"unicode":"é"})
                 with self.assertRaises(ValueError):cache.get({"bad":1},lambda:{"x":np.array([object()])})
             with FeatureCache(root,min_free_bytes=0):pass
+
+    def test_measured_cost_metadata_survives_payload_eviction_and_reopen(self):
+        with tempfile.TemporaryDirectory() as root:
+            with FeatureCache(root,min_free_bytes=0) as cache:
+                identity={"kind":"cost","source":"loki","frame":1}
+                self.assertIsNone(cache.metadata(identity))
+                cache.record_metadata(identity,{"tokens":123})
+                cache.get({"frame":1},payload)
+                cache.trim(0)
+                self.assertEqual(cache.metadata(identity),{"tokens":123})
+                with self.assertRaises(ValueError):cache.record_metadata(identity,{"tokens":124})
+            with FeatureCache(root,min_free_bytes=0) as cache:
+                self.assertEqual(cache.metadata(identity),{"tokens":123})
+                self.assertEqual(cache.snapshot()["resident_bytes"],0)
+                with cache.db:
+                    cache.db.execute('UPDATE metadata SET value=\'{"tokens":124}\'')
+                with self.assertRaises(ValueError):cache.metadata(identity)
 
     def test_hit_payload_validator_runs_even_with_valid_file_checksum(self):
         with tempfile.TemporaryDirectory() as root, FeatureCache(root,min_free_bytes=0) as cache:
@@ -213,7 +230,10 @@ class SupplyTest(unittest.TestCase):
              FeatureCache(Path(root)/"points",min_free_bytes=0) as points, \
              patch("pedestrian_behavior.experiments.e002a_features.native_scene",side_effect=native):
             supply=FeatureSupply({"test":catalog},rgb,points,encode,{"version":1})
+            self.assertIsNone(supply.point_cost("test","a",0))
             a=list(supply.iter_points("test","a"))
+            self.assertEqual(supply.point_cost("test","a",0)["tokens"],2)
+            self.assertEqual(supply.point_cost("test","a",2)["tokens"],0)
             self.assertEqual([len(c["features"]) for c in a],[2,2,0])
             self.assertEqual(reads,[[1,2]])
             supply.encoders=lambda *_:self.fail("hit loaded encoder")
@@ -261,6 +281,19 @@ class SupplyTest(unittest.TestCase):
             self.assertEqual(len(catalog.tracks),2)
             for track in catalog.tracks.values():np.testing.assert_array_equal(track["point_usable"],[1,0])
             self.assertEqual(len(catalog.frames),2)
+
+    def test_preparation_failure_retains_local_status_and_propagates_without_retry(self):
+        with tempfile.TemporaryDirectory() as root:
+            root=Path(root)
+            args=SimpleNamespace(outputs_root=root,rgb_cache_root=root/"rgb",point_cache_root=root/"points",
+                                 output=root/"experiments/E002a/failed",probe=root/"probe")
+            with patch("pedestrian_behavior.experiments.e002a_features.load_configuration",side_effect=RuntimeError("asset failure")) as load:
+                with self.assertRaisesRegex(RuntimeError,"asset failure"):run(args)
+                self.assertEqual(load.call_count,1)
+            record=json.loads((args.output/"cache.json").read_text())
+            self.assertEqual(record["status"],"failed")
+            self.assertIn("asset failure",record["failures"][0])
+            self.assertEqual(record["config"]["output"],str(args.output))
 
     def test_cache_roots_cannot_overlap_data_or_each_other(self):
         with tempfile.TemporaryDirectory() as root:

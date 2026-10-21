@@ -214,7 +214,7 @@ def run(args):
                     _, keep = crop_tokens(features,xyz,offsets,inside)
                     union |= keep;parts[number] = (keep,offsets,inside)
                 cache = {"features":features[union],"coordinates":xyz[union],"native_indices":selected[union]}
-                path = "points/"+dataset+"-"+group+"-"+key+".npz"
+                path = f"points/{dataset}-{group}-{key}.npz"
                 for number,(keep,offsets,inside) in parts.items():
                     prefix = f"t{number}_";item = items[number];slot = slots[item["name"]][key]
                     cache[prefix+"rows"] = np.flatnonzero(keep[union])

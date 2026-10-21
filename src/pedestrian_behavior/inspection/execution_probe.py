@@ -68,7 +68,8 @@ class ExecutionGraph(nn.Module):
         self.point_norm = nn.LayerNorm(128)
         self.seed = nn.Parameter(torch.randn(1, 128)*.02)
         self.seed_norm = nn.LayerNorm(128)
-        self.attention = nn.MultiheadAttention(128, 4, dropout=0, batch_first=True)
+        # Matches the specified W-only attention projections; a shared K bias cancels in softmax.
+        self.attention = nn.MultiheadAttention(128, 4, dropout=0, batch_first=True, bias=False)
         self.out_norm = nn.LayerNorm(128)
         self.ffn = nn.Sequential(nn.Linear(128, 512), nn.GELU(), nn.Linear(512, 128))
         self.geometry = nn.Sequential(nn.Linear(20, 64), nn.GELU(), nn.Linear(64, 64), nn.GELU())
@@ -138,7 +139,7 @@ def compare_gradients(frames, rgb, valid, device):
                     if actual is not expected:
                         raise ValueError("Gradient presence differs")
                     continue
-                torch.testing.assert_close(actual, expected, rtol=1e-4, atol=1e-5)
+                torch.testing.assert_close(actual, expected, rtol=1e-4, atol=1e-5, msg=f"{mode}: {section}/{k}")
                 maximum = max(maximum, float((actual-expected).abs().max()))
         torch.testing.assert_close(item["output"], reference["output"], rtol=1e-4, atol=1e-5)
         errors[mode] = maximum

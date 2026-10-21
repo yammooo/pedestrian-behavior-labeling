@@ -295,7 +295,7 @@ def run(args):
         first=next(t for t in record["tracks"] if max(t["point_counts"])>0)
         fixture=loaded_track(first,output)
         indices=[i for i,f in enumerate(fixture[0]) if len(f)][:3]
-        small=[fixture[0][i][:128].clone() for i in indices]
+        small=[fixture[0][i][torch.linspace(0,len(fixture[0][i])-1,min(128,len(fixture[0][i]))).long()].clone() for i in indices]
         record["gradient_equivalence"]=compare_gradients(small,fixture[1][indices],fixture[2][indices],args.device)
         del fixture
         for item in record["tracks"]:

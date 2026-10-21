@@ -28,6 +28,13 @@ STRATA = e001b_run.STRATA | {"rgb-observed": ("missing", "valid"), "lidar-observ
 SETTINGS = {"seed": 0, "batch_size": 64, "epochs": 100, "patience": 15, "clip_norm": 1.,
             "precision": "float32", "warmup_epochs": 3,
             "optimizer": {"lr": .0003, "weight_decay": .0001, "betas": [.9, .999], "eps": 1e-8}}
+MODEL_SPEC = {"geometry_mlp": [20, 64, 64], "rgb_projection": [768, 128], "point_projection": [68, 128],
+              "spatial": {"width": 128, "heads": 4, "seeds": 1, "layers": 1, "ffn": 512, "attention_bias": False},
+              "availability": ["geometry_valid", "rgb_valid", "lidar_valid"], "fusion": [323, 256],
+              "temporal": {"width": 256, "heads": 4, "layers": 2, "ffn": 1024, "attention_bias": True,
+                           "rope_base": 10000, "slot_seconds": .2, "bidirectional": True},
+              "classifier": [256, 4], "activation": "GELU", "dropout": .1, "layer_norm_eps": 1e-5,
+              "trainable_precision": "float32", "attention_backend": "torch-SDPA-math"}
 
 
 def resource_code():
@@ -196,7 +203,7 @@ def assembly(args):
             return c | {"rgb-observed": track["source_flags"]["rgb_valid"].astype(np.int64),
                         "lidar-observed": track["source_flags"]["lidar_valid"].astype(np.int64)}, flags
 
-        return {"config": {"experiment": "E002a", "arm": args.arm, "geometry": "E001b-native-geometry",
+        return {"config": {"experiment": "E002a", "arm": args.arm, "model": MODEL_SPEC, "geometry": "E001b-native-geometry",
                     "frozen_features": identity, "profile": profile, "profile_sha256": checksum(args.profile),
                     "point_cache_root": str(args.point_cache_root.resolve()), "point_cache_gb": args.point_cache_gb,
                     "frozen_encoder_residency": "one encoder retained across misses; calibration reserves 2 GiB",

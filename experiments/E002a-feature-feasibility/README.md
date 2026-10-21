@@ -228,6 +228,35 @@ Check output, every parameter gradient and one AdamW update across memory paths 
 
 Command from the isolated extractor environment: `python scripts/probe-e002a-execution.py --probe outputs/experiments/E002a/native-probe-07 --output outputs/experiments/E002a/execution-probe --device cuda`. Fresh output required. [Acceptance](../../tests/test_execution_probe.py) checks crop support, selection, relative RoPE, RGB-free native reading and memory-path gradient/update equivalence. No behavior training, held-out access or W&B.
 
+### Execution results — 2026-10-21
+
+**Completed resource attempt `execution-probe-04`**, code `c8b399204f3d87353794065667e022dcfb1818e2`,123.4 s for resource-only checks. Native fixtures were extracted in `execution-probe-02`: six complete tracks/311 slots,193 valid3× RGB CLS descriptors and304 unique scene sweeps verified on a separate native traversal. Shared referenced point payload is **1.253 GiB** across216 referenced scene-cache files; six RGB caches total **963,715 bytes**. Empty/unusable point slots remain temporal positions. This deliberately selected sample is not a population storage estimate.
+
+Peak **allocated GiB / warm forward+backward seconds** for the temporary graph; microbatch4 repeats each complete track as a shape test:
+
+| Track | Slots | Summed point tokens | Ordinary B=1 | Ordinary B=4 | Recompute B=4 |
+|---|---:|---:|---:|---:|---:|
+| loki-short | 1 | 62,379 | 0.32 / 0.037 | 0.79 / 0.128 | 0.33 / 0.169 |
+| loki-typical | 22 | 1,368,425 | 3.54 / 0.585 | OOM | 0.37 / 3.216 |
+| loki-long | 102 | 988,192 | 2.59 / 0.417 | 9.88 / 1.665 | 0.28 / 2.439 |
+| road-waymo-short | 7 | 4,383 | 0.11 / 0.006 | 0.14 / 0.017 | 0.10 / 0.024 |
+| road-waymo-typical | 79 | 2,021,044 | 5.18 / 0.866 | OOM | 0.48 / 4.946 |
+| road-waymo-long | 100 | 83,704 | 0.30 / 0.084 | 0.93 / 0.389 | 0.11 / 0.772 |
+
+Dense LOKI22-slot B=2 also fits at6.88 GiB allocated/7.66 reserved,1.168 s; dense ROAD79-slot B=2 reaches10.13/10.84 GiB,1.743 s, with little headroom. Recomputed B=4 peaks at0.37/1.34 GiB allocated/reserved for LOKI22 and0.48/2.93 for ROAD79. Recomputation adds about38–43% to B=1 compute on the substantial LOKI22/102 and ROAD79 cases; relative overhead is larger on tiny/sparse workloads. These are cached-feature resource graphs, not measured behavior epochs; full encoder residency, real feature assembly/CE/optimizer-step peaks still require final integration checks.
+
+Of54 declared conditions, **46 complete, two ordinary B=4 OOM, six offload conditions unexecuted under the host-RAM guard**. Host RSS reaches12.14 GiB for the probe process; host headroom depends on other applications and earlier pinned allocations. Ordinary execution remains preferable where it fits. For example LOKI22 offload B=1 takes1.398 s versus ordinary0.585 s and recompute0.805 s; it is not a default speed optimization. No selected track or point token was removed.
+
+The baseline native traversal/encoding totals100.64 s across304 sweeps, excluding cache-equality checks. All six OS-warm point/RGB cache reads total1.01 s. They are separately measured supply paths, not an overlapped end-to-end epoch; the baseline encodes even timestamps with no usable target crop. A selective on-demand audit skips unavailable target-crop timestamps while retaining the labeler's full temporal sequence: **216 sweeps take74.24 s**, plus0.44 s reader setup and separate encoder initialization. Every resulting cached feature matches exactly. This is still much slower than1.01 s warmed cache supply on this sample, but is not a full-epoch estimate. Lossless `.npz` on five median nonempty group frames retains **88.5–88.7%** of the uncompressed size but takes **2.9–4.6×** as long to read/verify under warmed-file conditions. This does not resolve the earlier terabyte-scale full-cache concern.
+
+**Recommendation:** use all-token-cost-aware microbatches, ordinary execution for fitting shapes and recomputation for expensive ones; avoid routine CPU offloading. Prefer shared uncompressed point-feature caching for the bounded pilot if its declared disk budget fits, rather than repeated encoding each epoch. Full-population feature supply and disk capacity remain open; no full cache or behavior training was launched.3× RGB CLS caching is agreed; only these six-track fixtures are prepared so far.
+
+**Acceptance/evidence:** outputs, every parameter gradient and one synthetic AdamW update match across memory paths at rtol1e-4/atol1e-5 (maximum reported difference1.94e-7). All **890 protected** sources/fixtures remain unchanged. Independent artifact checks reconstruct point counts, unique rows,20 m membership, finite pickle-free float32 caches and zero missing RGB rows. CPU116 (six CUDA skips), CUDA116 and isolated-runtime5 checks pass.
+
+Manual attempts remain: `execution-probe` failed on integer timestamp filename concatenation; `execution-probe-02` completed native extraction but was manually interrupted before unguarded offload stress, with interruption also preventing its final evidence write; `execution-probe-03` failed the GPU optimizer-update equivalence check with default biased spatial attention. The final graph uses the specified bias-free spatial projections; equivalence passes without relaxed tolerances. Attempt04 independently hashes/verifies the reused fixtures and original sources. Original1.5×/15 m probes and all E001-family data/results are unchanged.
+
+[Local report](../../outputs/experiments/E002a/execution-probe-04/report.md), [numerical evidence](../../outputs/experiments/E002a/execution-probe-04/execution.json), [artifact audit](../../outputs/experiments/E002a/execution-probe-04/artifact-audit.json), [nonempty compression audit](../../outputs/experiments/E002a/execution-probe-04/compression-audit.json), [selective on-demand audit](../../outputs/experiments/E002a/execution-probe-04/selective-on-demand-audit.json), [GPU system samples](../../outputs/experiments/E002a/execution-probe-04/system.csv) and [validation/failure logs](../../outputs/experiments/E002a/execution-validation/) are collected locally.3× RGB fixtures are also local in `outputs/experiments/E002a/execution-probe-02/rgb/`. Full point fixtures remain on aalto at `/home/user20/projects/pedestrian-behavior-labeling-review/outputs/experiments/E002a/execution-probe-02/`; final resource evidence is in sibling `execution-probe-04/`.
+
 ## Before implementation and execution
 
 | Open item | Required definition |

@@ -157,6 +157,7 @@ def assembly(args):
 
         def snapshot():
             return {"rgb": rgb.snapshot(), "points": points.snapshot(), "encoder_loads": encoders.loads,
+                    "initial": {"rgb": rgb.initial, "points": points.initial},
                     "encoder_calls": encoders.calls, "encoder_seconds": encoders.seconds,
                     "host_peak_rss_bytes": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024,
                     "cuda_allocated_bytes": torch.cuda.memory_allocated() if args.device == "cuda" else None,
@@ -175,7 +176,10 @@ def assembly(args):
                     raise ValueError("Frozen source files changed")
 
         def batches(d, training=False, seed=0):
-            logical = LogicalBatches(d, profile, training, seed, max_updates=2 if args.smoke and training else None)
+            def packing(row):
+                with (args.output / "packing.jsonl").open("a") as stream:
+                    stream.write(json.dumps(row | {"phase": "training" if training else "validation"}, allow_nan=False) + "\n")
+            logical = LogicalBatches(d, profile, training, seed, max_updates=2 if args.smoke and training else None, on_pack=packing)
             return logical if training else PredictionBatches(logical)
 
         def conditions(metadata, arrays, track, dataset):
@@ -198,7 +202,7 @@ def assembly(args):
                 "conditions": conditions, "kind": "integration-smoke" if args.smoke else "exploratory-source-validation",
                 "custom_smoke": True, "smoke_limits": {"selected_tracks": sorted(selected), "max_training_updates": 2,
                     "held_out_tests": False} if selected is not None else None,
-                "run_name": f"e002a-{args.source}-{args.arm}-s0" + ("-smoke" if args.smoke else ""),
+                "run_name": f"e002a-{args.source}-{args.arm}-s0" + ("-smoke-" + args.output.name if args.smoke else ""),
                 "log_learning_rate": True, "runtime_snapshot": snapshot, "close": close}
     except BaseException:
         stack.close()

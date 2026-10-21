@@ -38,12 +38,14 @@ def summarize(root):
                 for flag in ("rgb_valid", "lidar_valid", "point_tokens"):
                     if not np.array_equal(track["source_flags"][flag], base["source_flags"][flag]):
                         raise ValueError("Availability controls differ across arms")
-                if arm == "g":
-                    continue
-                a, b = (prediction_metrics([x], 4) for x in (track, base))
-                pairs.append({"locator": key, "arm": arm, "accuracy_change": a["mean_track_accuracy"] - b["mean_track_accuracy"],
+        for arm, reference in (("g-rgb", "g"), ("g-rgb-dditr", "g-rgb"), ("g-rgb-dditr", "g")):
+            for key in baseline:
+                track = arms[arm][key]
+                a, b = (prediction_metrics([x], 4) for x in (track, arms[reference][key]))
+                pairs.append({"locator": key, "arm": arm, "reference_arm": reference,
+                              "accuracy_change": a["mean_track_accuracy"] - b["mean_track_accuracy"],
                               "ce_change": a["track_ce"] - b["track_ce"], "gt_frames": int(track["gt_valid"].sum())})
-        result["sources"][source] = {"metrics": scores, "paired_track_changes_vs_g": pairs}
+        result["sources"][source] = {"metrics": scores, "paired_track_changes": pairs}
     write_json(root / "paired-validation.json", result)
     fig, axes = plt.subplots(1, 2, figsize=(10, 4), sharey=True)
     for ax, (source, value) in zip(axes, result["sources"].items()):

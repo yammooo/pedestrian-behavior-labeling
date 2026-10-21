@@ -45,16 +45,18 @@ def pack_tracks(indices, lengths, costs, profile):
 class LogicalBatches:
     """One persistent generator; no feature payloads materialized for the whole update."""
 
-    def __init__(self, dataset, profile, training=False, seed=0, max_updates=None):
+    def __init__(self, dataset, profile, training=False, seed=0, max_updates=None, on_pack=None):
         self.dataset, self.profile = dataset, profile
         self.training, self.max_updates = training, max_updates
         self.generator = torch.Generator().manual_seed(seed)
+        self.on_pack, self.iteration = on_pack, 0
 
     def __len__(self):
         n = (len(self.dataset) + 63) // 64
         return min(n, self.max_updates) if self.max_updates is not None else n
 
     def __iter__(self):
+        self.iteration += 1
         order = torch.randperm(len(self.dataset), generator=self.generator).tolist() if self.training else list(range(len(self.dataset)))
         for update, start in enumerate(range(0, len(order), 64)):
             if self.max_updates is not None and update >= self.max_updates:
@@ -67,7 +69,13 @@ class LogicalBatches:
         for group in pack_tracks(indices, lengths, costs, self.profile):
             samples = [self.dataset[i] for i in group]
             batch = collate_multimodal(samples)
+            if self.on_pack:
+                self.on_pack({"pass": self.iteration, "logical_indices": indices, "physical_indices": group,
+                              "locators": batch["locators"], "lengths": batch["lengths"].tolist(),
+                              "point_counts": [len(f) for f in batch["points"]],
+                              "unknown_cost_indices": [i for i in indices if costs[i] is None]})
             yield batch
+            del batch, samples
 
     def predictions(self):
         for indices in self:

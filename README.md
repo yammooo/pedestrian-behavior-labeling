@@ -405,9 +405,35 @@ A separate ROAD CUDA smoke uses `--smoke` with either configuration and a fresh 
 
 ## E002a pretrained-feature feasibility
 
-These commands implement preparation for the [E002a behavior pilot](experiments/E002a-feature-feasibility/README.md); no behavior-training command exists yet. The bounded [E002a probe](experiments/E002a-feature-feasibility/README.md#environment-and-command) checks native DINOv3 crops, nuScenes D-DITR semantic BEV/alignment, spatial feature correspondence and resource costs. Use its isolated CUDA extractor environment and pinned author clones/weights; the main E001 environment and caches remain unchanged. Entry point: `scripts/probe-e002a.py --help`. No behavior training, held-out scoring, W&B or full caches are launched. The linked protocol owns installation pins, complete command, native-root overrides and explicit partial-RGB status when gated weights are missing.
+These commands implement preparation for the [E002a behavior pilot](experiments/E002a-feature-feasibility/README.md); no behavior-training command exists yet. The bounded [E002a probe](experiments/E002a-feature-feasibility/README.md#environment-and-command) checks native DINOv3 crops, nuScenes D-DITR semantic BEV/alignment, spatial feature correspondence and resource costs. Use its isolated CUDA extractor environment and pinned author clones/weights; the main E001 environment and caches remain unchanged. Entry point: `scripts/probe-e002a.py --help`. That probe launches no behavior training, held-out scoring, W&B or full caches. The linked protocol owns installation pins, complete command, native-root overrides and explicit partial-RGB status when gated weights are missing.
 
-The [final pilot specification](experiments/E002a-feature-feasibility/README.md#deferred-training-pilot) now fixes scope, dropout, fitting and sequential execution. Planned point-cache options default to450 GB with a separate complete RGB CLS cache; these are [documented interfaces](experiments/E002a-feature-feasibility/README.md#complete-track-memory-and-batching-policy--agreed-2026-10-21), not available command flags yet. Implementation, integrated calibration/smoke and the manual six-attempt launcher remain next.
+The [final pilot specification](experiments/E002a-feature-feasibility/README.md#deferred-training-pilot) now fixes scope, dropout, fitting and sequential execution. The [feature-cache commands](#e002a-feature-caches) now implement the separate persistent RGB cache and configurable450 GB point LRU. Behavior-model implementation, integrated calibration/smoke and the manual six-attempt launcher remain next.
+
+### E002a feature caches
+
+Run from the isolated aalto checkout using its pinned extractor environment. This prepares **all frozen eligible training/validation RGB**, with3× crops; it performs no behavior training or test inference:
+
+```bash
+probe_root="$PWD/outputs/experiments/E002a"
+uv run --no-project --python "$probe_root/extractor-env/bin/python" python scripts/cache-e002a.py \
+  --device cuda --dataset both --kind rgb \
+  --point-cache-gb 450 \
+  --output "$probe_root/rgb-cache-preparation"
+```
+
+RGB defaults to`outputs/experiments/E002a/rgb-cache/`; LiDAR defaults to`outputs/experiments/E002a/point-cache/`. Set`--rgb-cache-root`, `--point-cache-root`, `--point-cache-gb` and`--min-free-gb` without editing code. GB is decimal;450 GB is one shared point-payload ceiling, excluding RGB/index/temp files. Keep the20 GB free-space guard and operating headroom. A fresh evidence`--output` is required; matching immutable feature entries may be reused. One cache owner, zero workers. [Schemas, identities and failure semantics](experiments/E002a-feature-feasibility/README.md#production-feature-caches--2026-10-21).
+
+Point entries are supplied lazily on misses by `FeatureSupply.iter_points(dataset, locator)`; measured `point_cost` references survive eviction and remain unknown until first measurement. `--kind points` explicitly warms the source population and is optional. Avoid full warming merely to fill the LRU. For bounded native/GPU acceptance on the six existing development tracks, use fresh dedicated roots:
+
+```bash
+uv run --no-project --python "$probe_root/extractor-env/bin/python" python scripts/check-e002a-cache.py \
+  --device cuda --selection "$probe_root/execution-probe-04/execution.json" \
+  --rgb-cache-root "$probe_root/cache-check-data/rgb" \
+  --point-cache-root "$probe_root/cache-check-data/points" \
+  --point-cache-gb 450 --output "$probe_root/cache-check"
+```
+
+This caches six complete RGB tracks and at most two usable point frames/track, then checks warm/reopened hits, independent native re-encoding, shared-frame reuse, capacity reduction and unchanged input/RNG evidence. `--selection` may also bound the preparation command; it never changes the union population or permits held-out tracks. Cache checking logs locally, with no W&B or training. The full-population RGB command above has **not** been executed yet.
 
 The [DINO patch visual check](experiments/E002a-feature-feasibility/README.md#dino-patch-visual-check--2026-10-19) adds PCA/similarity panels and a corrected crop gallery from the same development sample: `scripts/check-e002a-rgb.py --help`. It reuses the completed probe and original checkpoint without a segmentation head or training.
 

@@ -405,9 +405,9 @@ A separate ROAD CUDA smoke uses `--smoke` with either configuration and a fresh 
 
 ## E002a pretrained-feature feasibility
 
-These commands implement preparation for the [E002a behavior pilot](experiments/E002a-feature-feasibility/README.md); no behavior-training command exists yet. The bounded [E002a probe](experiments/E002a-feature-feasibility/README.md#environment-and-command) checks native DINOv3 crops, nuScenes D-DITR semantic BEV/alignment, spatial feature correspondence and resource costs. Use its isolated CUDA extractor environment and pinned author clones/weights; the main E001 environment and caches remain unchanged. Entry point: `scripts/probe-e002a.py --help`. That probe launches no behavior training, held-out scoring, W&B or full caches. The linked protocol owns installation pins, complete command, native-root overrides and explicit partial-RGB status when gated weights are missing.
+The [E002a behavior pilot](experiments/E002a-feature-feasibility/README.md) has separate preparation, calibration, integration and training commands below. Use its isolated CUDA extractor environment and pinned author clones/weights; the main E001 environment and caches remain unchanged. The earlier bounded probe (`scripts/probe-e002a.py --help`) checks native crops, semantic BEV/alignment and resources without behavior training, held-out scoring, W&B or full caches.
 
-The [final pilot specification](experiments/E002a-feature-feasibility/README.md#deferred-training-pilot) now fixes scope, dropout, fitting and sequential execution. The [feature-cache commands](#e002a-feature-caches) now implement the separate persistent RGB cache and configurable450 GB point LRU. Behavior-model implementation, integrated calibration/smoke and the manual six-attempt launcher remain next.
+The [pilot specification](experiments/E002a-feature-feasibility/README.md#deferred-training-pilot) fixes scope, dropout, fitting and sequential execution. The implementation reuses E001 loss, validation selection, checkpoints, metrics, plots and W&B; the pilot evaluates source validation only.
 
 ### E002a feature caches
 
@@ -415,6 +415,7 @@ Run from the isolated aalto checkout using its pinned extractor environment. Thi
 
 ```bash
 probe_root="$PWD/outputs/experiments/E002a"
+OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 \
 uv run --no-project --python "$probe_root/extractor-env/bin/python" python scripts/cache-e002a.py \
   --device cuda --dataset both --kind rgb \
   --point-cache-gb 450 \
@@ -433,7 +434,50 @@ uv run --no-project --python "$probe_root/extractor-env/bin/python" python scrip
   --point-cache-gb 450 --output "$probe_root/cache-check"
 ```
 
-This caches six complete RGB tracks and at most two usable point frames/track, then checks warm/reopened hits, independent native re-encoding, shared-frame reuse, capacity reduction and unchanged input/RNG evidence. `--selection` may also bound the preparation command; it never changes the union population or permits held-out tracks. Cache checking logs locally, with no W&B or training. The full-population RGB command above has **not** been executed yet.
+This caches six complete RGB tracks and at most two usable point frames/track, then checks warm/reopened hits, independent native re-encoding, shared-frame reuse, capacity reduction and unchanged input/RNG evidence. It also compares bounded scene-image reuse against independent per-track extraction exactly. `--selection` may bound preparation requests; it never changes union populations or permits held-out tracks. Preparation groups requests by scene and reuses at most2 GB decoded images in RAM; saved crop semantics and16-crop encoder batches stay unchanged. Cache checking logs locally, with no W&B or training.
+
+The accepted full RGB preparation is already complete at `rgb-cache-preparation-03/cache.json`:15,925 tracks, with every entry read back successfully. To repeat the hits-only integrity/GT-support audit, choose a fresh output:
+
+```bash
+uv run --no-project --python "$probe_root/extractor-env/bin/python" python scripts/audit-e002a-rgb.py \
+  --device cuda --preparation "$probe_root/rgb-cache-preparation-03/cache.json" \
+  --output "$probe_root/my-rgb-audit"
+```
+
+### E002a source-validation pilot
+
+Run from `/home/user20/projects/pedestrian-behavior-labeling-review` on `aalto`, using the calibrated RTX4080 extractor environment. The completed preparation record and resource profile are explicit inputs; changing model/execution code or backend requires new calibration. Full attempts reject incomplete/mismatched RGB preparation and RGB misses. Point features fill the450 GB LRU lazily. Fresh attempt/sweep outputs only; no automatic restart/resume.
+
+```bash
+probe_root="$PWD/outputs/experiments/E002a"
+uv run --no-project --python "$probe_root/extractor-env/bin/python" python scripts/train-e002a-pilot.py \
+  --device cuda \
+  --profile "$probe_root/model-calibration-05/profile.json" \
+  --rgb-preparation "$probe_root/rgb-cache-preparation-03/cache.json"
+```
+
+This manually starts six **sequential**, seed0 attempts: ROAD-Waymo then LOKI, each `g`, `g-rgb`, `g-rgb-dditr`. Names are `e002a-<source>-<arm>-s0`; outputs live under a fresh `outputs/experiments/E002a/runs/pilot-<time>/`. It trains on full frozen source training, selects on full source validation, and never opens held-out tests.100 epochs maximum/patience15, effective64 tracks and update-based warmup are fixed. `--point-cache-gb` and cache roots remain configurable. One cache owner/attempt at a time; run after preparation has completed. Read progress in `sweep.json`, per-run `history.json`, `steps.jsonl`, `packing.jsonl` and W&B. Final paired validation changes (including LiDAR versus RGB) and PNG/SVG comparison are generated from saved predictions after all six finish; rerun with `scripts/summarize-e002a.py <pilot-directory>`.
+
+For one attempt, use the same profile/preparation arguments:
+
+```bash
+uv run --no-project --python "$probe_root/extractor-env/bin/python" python scripts/train-e002a.py \
+  --source road-waymo --arm g-rgb-dditr --device cuda \
+  --profile "$probe_root/model-calibration-05/profile.json" \
+  --rgb-preparation "$probe_root/rgb-cache-preparation-03/cache.json" \
+  --output "$probe_root/runs/my-fresh-attempt"
+```
+
+Reproduce operational checks separately with fresh evidence outputs:
+
+```bash
+uv run --no-project --python "$probe_root/extractor-env/bin/python" python scripts/calibrate-e002a.py \
+  --device cuda --output "$probe_root/my-calibration"
+uv run --no-project --python "$probe_root/extractor-env/bin/python" python scripts/smoke-e002a.py \
+  --profile "$probe_root/my-calibration/profile.json" --output "$probe_root/my-integration-check"
+```
+
+Calibration uses six existing complete development fixtures and explicitly labelled repeated/tiled shape stresses, real CE/backward/clipping/AdamW, ordinary/recomputed execution and frame concurrency1/2/4. It does not select a behavior model. The integration command runs cold/warm bounded source-validation smoke attempts on both datasets, with actual W&B, checkpoints and plot/prediction reconstruction. These operational runs are not comparison results. [Acceptance and artifact paths](experiments/E002a-feature-feasibility/README.md#model-and-training-acceptance--2026-10-21).
 
 The [DINO patch visual check](experiments/E002a-feature-feasibility/README.md#dino-patch-visual-check--2026-10-19) adds PCA/similarity panels and a corrected crop gallery from the same development sample: `scripts/check-e002a-rgb.py --help`. It reuses the completed probe and original checkpoint without a segmentation head or training.
 

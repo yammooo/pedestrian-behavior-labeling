@@ -7,12 +7,12 @@ Shared evaluation safeguards and comparison index. The [joint five-seed E001/E00
 | [E001](E001-kinematic-transfer/README.md) | Four kinematic feature sets × MLP/BiLSTM; within and bidirectional ROAD-Waymo/LOKI transfer | 80 five-seed attempts complete; earlier 32 retained | BiLSTM consistently improves on MLP; RAW versus K+T+R depends on direction |
 | [E001b](E001b-2d-bbox-contribution/README.md) | Exact K+T+R versus added bbox availability versus added geometry | 20 five-seed attempts complete | Geometry helps LOKI → ROAD in all seeds, mainly Stopped; other directions mixed |
 | [E001c](E001c-bbox-inputs/README.md) | Native 3D/2D centers, dimensions and velocities, with matched availability flags | 30 five-seed attempts complete | Basic boxes average below E001b geometry in all directions; no systematic 2D size-velocity gain; 3D size velocities remain a redundant-input control |
-| [E002](E002-multimodal-reference/README.md) | Multimodal offline-labeling direction and shared constraints | Overview; concrete protocols owned by individual comparisons | No behavior runs |
-| [E002a](E002a-feature-feasibility/README.md) | First behavior pilot: geometry, +RGB, +RGB/D-DITR; Utonia deferred; preparatory probes retained | Scope/architecture/fitting agreed; production RGB/450 GB point caches accepted; model and integrated calibration next | Preparation only; no behavior runs |
+| [E002](E002-multimodal-reference/README.md) | Multimodal offline-labeling direction and shared constraints | Overview; concrete protocols owned by individual comparisons | E002a operational smoke; no full comparison |
+| [E002a](E002a-feature-feasibility/README.md) | First behavior pilot: geometry, +RGB, +RGB/D-DITR; Utonia deferred; preparatory probes retained | Model/trainer/caches and manual launcher implemented; bounded GPU integration accepted; full RGB preparation/readback complete | Operational smoke only; full pilot unlaunched |
 | [E003](../docs/research.md#tentative-experiment-direction) | One conditional pedestrian/full-track-conditioned scene-retrieval comparison | Tentative; depends on E002 evidence | Not run |
 | [E004](../docs/research.md#tentative-experiment-direction) | One complementary supervision source with an additional-data control | Tentative | Not run |
 
-[Research](../docs/research.md#tentative-experiment-direction) owns the tentative direction, branches and schedule. E002 owns the direction overview; E002a owns the first behavior pilot, its branch specification and preparatory evidence. Later comparisons may use different architectures. E003/E004 detailed records remain TBD. No E002–E004 behavior model or training results exist.
+[Research](../docs/research.md#tentative-experiment-direction) owns the tentative direction, branches and schedule. E002 owns the direction overview; E002a owns the first behavior pilot, its branch specification and preparatory evidence. Later comparisons may use different architectures. E003/E004 detailed records remain TBD. E002a has a behavior model and operational smoke evidence; no full E002–E004 comparison results exist.
 
 ## Before execution
 

@@ -1,6 +1,6 @@
 # E002a — First multimodal behavior pilot
 
-**Agreed pilot specification, updated 2026-10-21.** First behavior pilot within [E002](../E002-multimodal-reference/README.md). Scope, branch/tensor interfaces, dropout, fitting, batching policy and450 GB point-cache budget are settled below. Numeric execution limits and live throughput require the [implementation acceptance](#before-implementation-and-execution); modality benefit and final research architecture remain hypotheses. The [production feature-cache system](#production-feature-caches--2026-10-21) is implemented; no behavior model, pilot training command or behavior-training run exists yet. Completed extraction/resource/semantic probes are [preparatory evidence](#preparatory-work), not separate behavior experiments. Later E002 comparisons may use different architectures.
+**Agreed pilot specification, updated 2026-10-21.** First behavior pilot within [E002](../E002-multimodal-reference/README.md). Scope, branch/tensor interfaces, dropout, fitting, batching policy and450 GB point-cache budget are settled below. The [model, trainer and manual commands](#model-and-training-acceptance--2026-10-21) are implemented, with bounded GPU operational checks; full RGB preparation and all-entry readback are complete. Modality benefit and final research architecture remain hypotheses. The six full pilot attempts have not been launched. Completed extraction/resource/semantic probes are [preparatory evidence](#preparatory-work), not separate behavior experiments. Later E002 comparisons may use different architectures.
 
 The existing directory name is retained for stable commands, artifact references and links. This record owns the pilot specification, preparation, fitting settings and eventual behavior results.
 
@@ -184,7 +184,7 @@ Later modality ablations remain deferred: geometry+availability, +RGB, +LiDAR wi
 
 ## Deferred training pilot
 
-One seed0 attempt/arm/source gives **six planned exploratory attempts** across three arms/two sources, run **one at a time** with a manual sequential launcher; no execution command yet. Use readable W&B names `e002a-<source>-<arm>-s0`, with source `loki` or `road-waymo`; fresh local attempt directories distinguish manual restarts. These diagnose effects, not reliable winners. Repeat central comparisons before final claims. Do not multiply the pilot into a backbone/query/LR search.
+One seed0 attempt/arm/source gives **six planned exploratory attempts** across three arms/two sources, run **one at a time** with the [manual sequential launcher](../../README.md#e002a-source-validation-pilot). Use readable W&B names `e002a-<source>-<arm>-s0`, with source `loki` or `road-waymo`; fresh local attempt directories distinguish manual restarts. These diagnose effects, not reliable winners. Repeat central comparisons before final claims. Do not multiply the pilot into a backbone/query/LR search.
 
 Agreed fitting settings:
 
@@ -323,7 +323,7 @@ At nominal size, training-only hits are98.3% LOKI /85.3% ROAD with400 GB versus 
 
 **Disk check, 2026-10-21 12:29 UTC:** aalto's resolved E002a root is `/home/user20/projects/pedestrian-behavior-labeling/outputs/experiments/E002a/`; the review checkout links there. Its Linux filesystem has **539.12 GB available** (`df -B1`, user-available bytes), already accounting for the existing18.89 GB E002a directory, including extractor environment9.04 GB and weights1.45 GB. The native-data NTFS partition has only36.80 GB available and is not the proposed cache location. No files were deleted or moved.
 
-The frozen eligible train/validation populations contain753,019 temporal slots: dense float32 RGB CLS storage is **2.313 GB** at768 values/slot, even retaining all missing rows. Reserve3 GB for RGB/masks/identities,15 GB for point indexes/metadata and temporary writes, and10 GB for new pilot outputs/checkpoints/logs. These are planning allowances, not measured new artifacts; full RGB image/crop storage is not planned. A **450 GB point payload** leaves about61 GB beyond these allowances, versus only11 GB at500 GB (475 GB leaves36 GB). **User accepted450 GB as the final configurable default**, superseding the earlier500 GB agreement. Preserve the400 GB simulation as measured evidence; no450 GB hit rate or live speedup has been measured. The production implementation/acceptance is recorded below; no full-population cache has been built.
+The frozen eligible train/validation populations contain753,019 temporal slots: dense float32 RGB CLS storage is **2.313 GB** at768 values/slot, even retaining all missing rows. Reserve3 GB for RGB/masks/identities,15 GB for point indexes/metadata and temporary writes, and10 GB for new pilot outputs/checkpoints/logs. These are planning allowances, not measured new artifacts; full RGB image/crop storage is not planned. A **450 GB point payload** leaves about61 GB beyond these allowances, versus only11 GB at500 GB (475 GB leaves36 GB). **User accepted450 GB as the final configurable default**, superseding the earlier500 GB agreement. Preserve the400 GB simulation as measured evidence; no450 GB hit rate or live speedup has been measured. The production implementation/acceptance and subsequently completed full RGB cache are recorded below; point payloads remain lazy.
 
 ## Production feature caches — 2026-10-21
 
@@ -354,19 +354,62 @@ The whole-track partly cold pass starts with one retained entry from eviction ac
 
 [Native acceptance/provenance](../../outputs/experiments/E002a/cache-acceptance-02/acceptance.json) · [independent artifact/count/index audit](../../outputs/experiments/E002a/cache-acceptance-02/artifact-audit.json) · [final storage guard/all-entry audit](../../outputs/experiments/E002a/cache-acceptance-02/storage-ownership-audit.json) · [complete-track record](../../outputs/experiments/E002a/cache-stream-check-02/cache.json) · [fresh-process warm record](../../outputs/experiments/E002a/cache-stream-warm-02/cache.json) · [CPU](../../outputs/experiments/E002a/cache-cpu-tests.log) / [CUDA](../../outputs/experiments/E002a/cache-cuda-tests-final-guard.log) / [extractor tests](../../outputs/experiments/E002a/cache-extractor-tests-final-guard.log). Records/numerical reference fixtures are local and in `/home/user20/projects/pedestrian-behavior-labeling-review/outputs/experiments/E002a/`; test payloads stay on aalto in `cache-acceptance-02-data/`. Earlier `cache-acceptance` / `cache-stream-check` records at5271698 are retained; final acceptance adds the persistent cost-index checks. No behavior training or W&B runs.
 
-Full-population RGB preparation and representative-epoch physical I/O/throughput remain unexecuted; bounded OS-warm reads cannot establish the earlier modeled hit rates or training speedup. The final storage guard rereads/checksums all216 real entries and220 cost references without inference; extraction/selection semantics are unchanged from70e88de. The production system is implemented/tested; population-wide cache filling is separate from this acceptance.
+At that storage acceptance, full-population RGB preparation was unexecuted; it is now complete in the model/training acceptance below. Representative-epoch physical I/O/throughput remains unmeasured; bounded OS-warm reads cannot establish the earlier modeled hit rates or training speedup. The final storage guard rereads/checksums all216 real entries and220 cost references without inference; extraction/selection semantics are unchanged from70e88de. The production system is implemented/tested; population-wide cache filling is separate from this acceptance.
+
+## Model and training acceptance — 2026-10-21
+
+Implemented `models/multimodal.py`, complete-track packing/accumulation, the E002a feature adapter and [single-run/sequential-pilot commands](../../README.md#e002a-source-validation-pilot). Exact E001b source-normalized geometry and all frozen populations remain unchanged. Shared E001 loss, selection, atomic checkpoints, inference, prediction archives, strata, plots and W&B are reused through optional hooks; old callers/defaults pass regression checks. Trainable attention uses PyTorch SDPA **math/FP32**: fused CUDA attention failed mask-stride alignment on irregular point counts in the first calibration. That failed attempt is retained; determinism is not relaxed.
+
+Packing starts with persistent shuffled64-track logical membership, then stable first-fit by length/cost within each update. Unknown costs stay single until measured; no across-update bucketing. `packing.jsonl` records pass, logical/physical indices, locators, lengths, point counts and unknown-cost membership, since different physical shapes may draw different dropout masks. Ordinary execution is selected by **padded** spatial-token workload; expensive shapes checkpoint only the trainable readout with CPU inputs. Offload remains verified but is not the automatic default. Full temporal attention always sees every slot. One frozen encoder may stay resident across misses; preflight reserves2 GiB for miss transients and rejects unsafe measured shapes without retry.
+
+The completed-profile gate binds source code, PyTorch/CUDA version, device and GPU model. Full attempts require the matching completed full-population RGB preparation record; an RGB miss fails instead of silently encoding. Point capacity remains450 GB by default. Status/config/diff/provenance, per-update loss/LR, epochs, exact packing, cache traffic/timing, host memory and GPU telemetry stay local; provenance/support are config/table content in W&B. Checkpoints contain readout state and frozen references, not encoder weights. Only source validation is predicted after selection, with observed-RGB/LiDAR strata. The six-attempt launcher summarizes paired track changes for RGB versus geometry and LiDAR versus RGB as well as the combined change, using saved predictions.
+
+Full RGB preparation uses scene-order traversal, a preparation-only2 GB decoded-image LRU and four CPU cropping threads. Per-track ordered16-crop encoder batches and every pixel/CLS/mask/reference remain unchanged. Native acceptance compares this route against independent serial per-track extraction exactly. Earlier slow preparation attempts are retained as interrupted evidence; code changes use a new immutable cache namespace. No established collection, bbox cache or result is rewritten.
+
+**Operational acceptance complete.** Final feature extraction and calibration ran at `bea99d8`; subsequent protection, audit/configuration and explicit preparation-gate changes are accepted at `e50d79e`. Six configuration assemblies pass without inference, optimizer updates or W&B. Total model size is1,975,044 parameters; trainable counts are1,669,508 (`g`),1,767,940 (`g-rgb`) and1,975,044 (`g-rgb-dditr`). Frozen encoder parameters are separate.
+
+| Check | Expected → observed |
+|---|---|
+| Tensor/missingness/temporal contract | Shared flags and initialization; absent descriptors zero; GT ignored; future context/RoPE through gaps and padding exclusion pass |
+| Accumulation/recomputation | Unequal/final partial equal-track aggregation passes; ordinary/checkpoint/offload outputs, all gradients and AdamW updates agree at the prescribed tolerances, including dropout0.1 and frame concurrency1/2/4 |
+| Calibrated execution | Actual model CE/backward/clip/AdamW on six complete fixtures plus labeled shape stresses; final profile completes without OOM, peak CUDA allocation7.54 GB; one-frame spatial chunks selected from timed1/2/4 checks |
+| Native feature parity | Four-thread scene-image reuse matches independent serial RGB extraction exactly on six tracks; native point re-encoding/shared unions/eviction/RNG checks pass;15,944 protected files unchanged |
+| Cold/warm integration | One epoch/update on three training tracks plus one previously inspected source-validation track per dataset, cold then warm; warm attempts load neither encoder and make zero encoder calls |
+| Final-profile integration | Both datasets pass selected-checkpoint reload, saved-prediction metric reconstruction and22 PNG/SVG pairs each; no held-out inference |
+| W&B/local failures | Six actual smoke runs finished; cloud audit confirms only agreed scalar/table/image content, no checkpoint or full-prediction uploads; injected logging failures propagate with local evidence preserved |
+| Regression/dependencies | Full CPU157 tests (eight CUDA-only skips), CUDA157 with no skips; actual cu126 extractor13 model tests with no skips. Lock/package checks and documentation links pass |
+
+The selected [resource profile](../../outputs/experiments/E002a/model-calibration-05/profile.json) permits64 tracks,665,856 temporal cells,2,736,850 padded spatial tokens per physical microbatch/ordinary path, and524,288 tokens per one-frame spatial chunk. Larger measured workloads use CPU-input spatial recomputation; full temporal context remains intact. Calibration reserves2 GiB for frozen-encoder miss transients. These are profile-specific measured/estimated safety gates, not universal memory guarantees. Earlier calibration directories, including the failed fused-attention attempt, remain intact.
+
+| Final-profile smoke | End-to-end seconds | Peak CUDA allocated | W&B |
+|---|---:|---:|---|
+| LOKI |95.6|3.95 GB|[jwjag44d](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/jwjag44d)|
+| ROAD-Waymo |240.0|5.70 GB|[2mvj6nrx](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/2mvj6nrx)|
+
+These are tiny operational attempts, not behavior comparisons or epoch forecasts. [Cold/warm integration record](../../outputs/experiments/E002a/model-integration/integration.json) · [final local/cloud artifact audit](../../outputs/experiments/E002a/model-integration-final/artifact-audit.json) · [native extraction acceptance](../../outputs/experiments/E002a/cache-acceptance-04/acceptance.json) · [six-configuration readiness](../../outputs/experiments/E002a/launch-readiness-02/readiness.json) · [CPU](../../outputs/experiments/E002a/model-cpu-tests-handoff.log) / [CUDA](../../outputs/experiments/E002a/model-cuda-tests-handoff.log) / [cu126 model tests](../../outputs/experiments/E002a/model-extractor-tests-handoff.log).
+
+**Full 3× RGB cache complete:** 15,925 tracks /753,019 slots /366,653 valid CLS. Preparation took6,458.8 s;15,934 protected files were unchanged. All entries were then independently read/checksummed with15,925 hits, zero misses, zero writes and zero encoder calls; frozen per-track GT/class support matches setup. Active payload is2.62 GB (the root also retains older immutable namespaces). Missing RGB remains explicit:
+
+| Frozen split | Tracks | Context slots | Accepted GT frames | RGB slots | RGB-supported GT frames |
+|---|---:|---:|---:|---:|---:|
+| LOKI training |8,574|270,355|262,071|124,961|118,451 (45.2%)|
+| LOKI validation |1,861|61,900|60,231|26,079|24,784 (41.1%)|
+| ROAD-Waymo training |4,380|332,940|167,280|169,660|167,280 (100%)|
+| ROAD-Waymo validation |1,110|87,824|45,388|45,953|45,388 (100%)|
+
+[Completed preparation](../../outputs/experiments/E002a/rgb-cache-preparation-03/cache.json) · [all-entry readback and class/group/track support](../../outputs/experiments/E002a/rgb-cache-audit/audit.json). These counts describe the frozen pilot cohorts, not unrestricted native populations. Full-population LiDAR hit rate and epoch time remain unknown until the manual pilot; the450 GB LRU fills lazily. No six-attempt comparison or held-out inference was launched.
 
 ## Before implementation and execution
 
-The scientific pilot specification is settled. Remaining work is implementation and measured operational validation:
+The scientific specification and operational acceptance are complete. The six full source-validation attempts remain a manual next step:
 
-| Item | Required implementation/evidence |
+| Item | Status/evidence |
 |---|---|
-| Population/preparation | Verify frozen split identities/counts and class/missing-input support; prepare all3× RGB CLS/masks and input-only point-cost references without changing tracks/GT |
-| Model/trainer | Implement the agreed tensor flow, masks/dropout, equal-track accumulation, update-based warmup and selection; preserve old experiment defaults |
-| Feature supply | Implemented; retain the cache acceptance above, prepare full RGB and integrate lazy supply with the behavior loader |
-| Resource calibration | Measure actual20 m payloads and integrated cold/warm throughput; record safe microbatch/frame ceilings, memory-path thresholds and VRAM/host-RAM limits, including encoder residency; no guessed numeric limits |
-| Evidence/handoff | Verify local predictions reconstruct metrics and W&B content/failure behavior; provide a fresh-output single-run command and manual sequential six-attempt launcher |
+| Population/preparation | Complete full3× RGB cache and frozen GT/class/missing-input readback above; existing populations/GT unchanged |
+| Model/trainer | Implemented; masks, equal-track accumulation, update warmup and source-validation selection accepted |
+| Feature supply | Persistent RGB complete; lazy point supply/configurable450 GB LRU and persistent input-only cost references accepted |
+| Resource calibration | Final model profile05 and both-dataset cold/warm/final-profile smoke accepted; full-epoch throughput unknown |
+| Evidence/handoff | Local/cloud audit, prediction reconstruction, failure propagation and manual commands accepted; full pilot unlaunched |
 
 Acceptance before the six exploratory attempts:
 
@@ -376,9 +419,9 @@ Acceptance before the six exploratory attempts:
 4. Verify exact warmup/update counts, padding/unlabeled loss exclusion, nonfinite/empty-GT failures, full validation, F1/CE/earlier-epoch tie-breaking, patience/budget stops and selected-checkpoint predictions.
 5. Run required CPU/CUDA suites and a clearly labeled bounded integration smoke with actual W&B logging, source validation only, checkpoint/plot/prediction reconstruction and logging-error propagation. Smoke is operational evidence, not a comparison result. Save resource/throughput evidence before the manual six-attempt launcher; no automatic full-run launch.
 
-The earlier worst-case OOM and~1.15 TiB estimate remain historical warnings against assuming full preparation fits. Numeric resource ceilings and actual20 m I/O costs are **unknown until integrated calibration**; Utonia remains deferred. Never silently cap tokens, truncate tracks, change precision or relax deterministic training. Preserve failures; fresh attempt outputs, no automatic retry/resume. Local checkpoint/prediction backup outside this laptop remains **TBD** and separate from the cache budget.
+The earlier worst-case OOM and~1.15 TiB estimate remain historical warnings against assuming full preparation fits. Numeric ceilings and bounded20 m I/O are recorded in the integrated calibration above; full-population epoch cost remains unknown. Utonia remains deferred. Never silently cap tokens, truncate tracks, change precision or relax deterministic training. Preserve failures; fresh attempt outputs, no automatic retry/resume. Local checkpoint/prediction backup outside this laptop remains **TBD** and separate from the cache budget.
 
-**Results:** no behavior runs. Native/resource/semantic evidence is preserved below. Architectural novelty and modality utility remain hypotheses, not consequences of integrating these components.
+**Results:** no full pilot comparison runs. Bounded behavior-training smoke attempts are operational evidence only; see acceptance above. Native/resource/semantic preparatory evidence is preserved below. Architectural novelty and modality utility remain hypotheses, not consequences of integrating these components.
 
 ## Preparatory work
 

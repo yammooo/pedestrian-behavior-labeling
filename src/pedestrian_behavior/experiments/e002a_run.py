@@ -138,7 +138,7 @@ def assembly(args):
         selected = None
         if args.smoke:
             selected = {t["locator"] for t in json.loads(args.smoke_selection.read_text())["tracks"] if t["dataset"] == args.source}
-            if not selected or not selected.issubset(catalog.tracks):
+            if not selected or len(selected) > 10 or not selected.issubset(catalog.tracks):
                 raise ValueError("Smoke selection outside frozen source train/validation")
         datasets = {}
         for split in ("training", "validation"):

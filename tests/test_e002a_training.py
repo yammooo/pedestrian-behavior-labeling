@@ -3,6 +3,9 @@
 from copy import deepcopy
 from functools import partial
 import os
+import json
+from pathlib import Path
+import tempfile
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -17,6 +20,7 @@ from pedestrian_behavior.data.multimodal import LogicalBatches, collate_multimod
 from pedestrian_behavior.evaluation import track_cross_entropy
 from pedestrian_behavior.experiments.e002a_run import validate_profile
 from pedestrian_behavior.experiments.e002a_camera_cache import CameraReuse
+from pedestrian_behavior.experiments.e002a_sweep import attempts, attempt_command
 from pedestrian_behavior.models.multimodal import MultimodalClassifier, frame_chunks, rotary
 from pedestrian_behavior.training import seed_run
 
@@ -227,6 +231,63 @@ class MultimodalTest(unittest.TestCase):
             self.assertEqual(first[1][2], {"a": "2a"})
             self.assertEqual(second[0][2], {"b": "2b"})
             self.assertLessEqual(cache.snapshot()["peak_decoded_bytes"], 36)
+
+    def test_six_attempt_launcher_names_and_limits(self):
+        plan = attempts()
+        self.assertEqual(len(plan), 6)
+        self.assertEqual(len({t["name"] for t in plan}), 6)
+        command = attempt_command(plan[0], Path("outputs/new"), "cuda", ["--profile", "profile.json"])
+        self.assertIn("e002a-road-waymo-g-s0", " ".join(command))
+        self.assertEqual({t["seed"] for t in plan}, {0})
+
+    def test_shared_attempt_multimodal_validation_checkpoint_and_logging_failure(self):
+        from test_e001b_training import fixture, FakeRun
+        from pedestrian_behavior.experiments import e002a_run
+        from pedestrian_behavior.evaluation import load_predictions, prediction_metrics
+        from pedestrian_behavior.inspection.pretrained import DINO_PTH_SHA256
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            fixture(root / "experiments")
+            profile = root / "profile.json"
+            profile.write_text(json.dumps({"status": "complete", "device": "cpu", "code": e002a_run.resource_code(), "profile": PROFILE}))
+            setup = json.loads((root / "experiments/E001/data-setup/loki/setup.json").read_text())
+            selection = root / "selection.json"
+            selection.write_text(json.dumps({"tracks": [{"dataset": "loki", "locator": t["locator"]} for t in setup["tracks"]
+                                                          if not t["exclusions"] and t["split"] in ("training", "validation")]}))
+            def rgb(supply, dataset, key):
+                n = supply.catalogs[dataset].tracks[key]["slots"]
+                return {"cls": np.ones((n, 768), np.float32), "valid": np.ones(n, bool)}
+            def points(supply, dataset, key):
+                for _ in range(supply.catalogs[dataset].tracks[key]["slots"]):
+                    yield {"features": np.ones((2, 64), np.float32), "relative_xyz": np.ones((2, 3), np.float32), "inside_box": np.ones(2, bool)}
+            for fail in (None, "final"):
+                events = []
+                args = SimpleNamespace(source="loki", arm="g-rgb-dditr", device="cpu", smoke=True,
+                    outputs_root=root, output=root / "experiments/E002a" / ("failed" if fail else "complete"),
+                    probe=root / "unused", profile=profile, smoke_selection=selection,
+                    rgb_cache_root=root / "experiments/E002a/rgb", point_cache_root=root / "experiments/E002a/points",
+                    point_cache_gb=450, min_free_gb=0)
+                with patch.object(e002a_run, "load_configuration", return_value=({"rgb_checkpoint_sha256": DINO_PTH_SHA256}, root / "experiments/fixture-transform.json")), \
+                     patch.object(e002a_run.FeatureSupply, "rgb", rgb), patch.object(e002a_run.FeatureSupply, "iter_points", points), \
+                     patch.object(e002a_run.FeatureSupply, "point_cost", return_value={"tokens": 2, "inside_box_tokens": 2}), \
+                     patch("pedestrian_behavior.experiments.run.wandb.init", return_value=FakeRun(events, fail)):
+                    if fail:
+                        with self.assertRaisesRegex(RuntimeError, "logging"):
+                            e002a_run.run(args)
+                    else:
+                        e002a_run.run(args)
+                status = json.loads((args.output / "status.json").read_text())
+                self.assertEqual(status["status"], "failed" if fail else "complete")
+                self.assertFalse(any(args.output.glob("*-test")))
+                checkpoint = torch.load(args.output / "best.pt", weights_only=True)
+                self.assertEqual(checkpoint["config"]["experiment"], "E002a")
+                self.assertFalse(any("backbone" in k for k in checkpoint["model_state"]))
+                destination = args.output / "loki-validation-smoke"
+                actual = prediction_metrics(load_predictions(destination / "predictions.npz"), 4)
+                self.assertEqual(actual, json.loads((destination / "metrics.json").read_text())["primary"])
+                step = next(e for e in events if "train/loss_step" in e)
+                self.assertIn("train/learning_rate", step)
+                self.assertEqual(json.loads((args.output / "protected.json").read_text())["changed"], [])
 
 
 if __name__ == "__main__":

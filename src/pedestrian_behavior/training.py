@@ -82,10 +82,10 @@ def train_epoch(model, batches, optimizer, device, clip_norm, on_step=None, step
 
 
 def fit(model, batches, validate, optimizer, device, output, checkpoint_references, on_epoch,
-        epochs, patience, clip_norm, on_step=None):
+        epochs, patience, clip_norm, on_step=None, epoch_operation=train_epoch):
     history, best, stale, step_offset = [], None, 0, 0
     for epoch in range(1, epochs+1):
-        row = {"epoch": epoch} | train_epoch(model, batches, optimizer, device, clip_norm, on_step=on_step, step_offset=step_offset)
+        row = {"epoch": epoch} | epoch_operation(model, batches, optimizer, device, clip_norm, on_step=on_step, step_offset=step_offset)
         step_offset += row["optimizer_steps"]
         validation = validate(model)
         row.update(validation_ce=validation["track_ce"], validation_f1=validation["track_weighted"]["macro_f1"])

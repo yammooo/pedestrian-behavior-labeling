@@ -35,11 +35,13 @@ def bbox_conditions(arrays):
             "track-bbox": np.full(len(valid), cohort, dtype=np.int64)}
 
 
-def assemble(source, configuration, variant):
-    setups = {d: E001_ROOT/"data-setup"/d/"setup.json" for d in ("loki", "road-waymo")}
-    collections = {d: E001_ROOT/"reader-preparation"/d for d in setups}
+def assemble(source, configuration, variant, *, e001_root=None, e001b_root=None):
+    e001_root = E001_ROOT if e001_root is None else Path(e001_root)
+    e001b_root = E001B_ROOT if e001b_root is None else Path(e001b_root)
+    setups = {d: e001_root/"data-setup"/d/"setup.json" for d in ("loki", "road-waymo")}
+    collections = {d: e001_root/"reader-preparation"/d for d in setups}
     records = {d: json.loads(p.read_text()) for d, p in setups.items()}
-    extensions = {d: E001B_ROOT/"bbox-native"/d for d in setups}
+    extensions = {d: e001b_root/"bbox-native"/d for d in setups}
     caches = {d: load_extension(collections[d], setups[d], p) for d, p in extensions.items()}
     for d, cache in caches.items():
         if cache["baseline_normalization"] != records[d]["normalization"]["K+T+R"]:

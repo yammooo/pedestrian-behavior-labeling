@@ -104,6 +104,7 @@ def configure_logging(run):
     run.define_metric("optimizer_step", hidden=True, summary="none")
     run.define_metric("epoch", hidden=True, summary="none")
     run.define_metric("train/loss_step", step_metric="optimizer_step", step_sync=False, summary="none")
+    run.define_metric("train/learning_rate", step_metric="optimizer_step", step_sync=False, summary="none")
     run.define_metric("train/loss_epoch", step_metric="epoch", step_sync=False)
     run.define_metric("val/*", step_metric="epoch", step_sync=False)
     run.define_metric("details/*", hidden=True)
@@ -156,21 +157,24 @@ def run_attempt(source, configuration, variant, output, device, smoke=False, *, 
     started = time.monotonic()
     status = {"status": "incomplete", "failures": [], "kind": "gpu-smoke" if smoke else "comparison"}
     provenance = {"command": sys.orig_argv, "started_utc": datetime.now(timezone.utc).isoformat()}
-    run = None
+    run, prepared = None, None
     write_json(output/"status.json", status)
     try:
         if device.type == "cuda" and not torch.cuda.is_available():
             raise ValueError("CUDA requested but unavailable")
-        if smoke and (source != "road-waymo" or variant != "B" or device.type != "cuda"):
-            raise ValueError("Smoke requires ROAD BiLSTM on CUDA")
         deterministic = seed_run(settings["seed"])
         if device.type == "cuda":
             torch.cuda.reset_peak_memory_stats(device)
         prepared = assemble(source, configuration, variant)
+        if smoke and not prepared.get("custom_smoke") and (source != "road-waymo" or variant != "B" or device.type != "cuda"):
+            raise ValueError("Smoke requires ROAD BiLSTM on CUDA")
+        status["kind"] = prepared.get("kind", status["kind"])
         statistics = prepared["normalization"]
         config = prepared["config"] | {"source": source, "configuration": configuration, "variant": variant,
                   "classes": classes, "settings": settings, "determinism": deterministic,
                   "device": str(device), "kind": status["kind"], "smoke_limits": {"epochs": 1, "training_batches": 2, "validation_batches": 1, "held_out_tests": False} if smoke else None}
+        if "smoke_limits" in prepared:
+            config["smoke_limits"] = prepared["smoke_limits"]
         write_json(output/"config.json", config)
         diff = subprocess.check_output(["git", "diff", "HEAD"])
         (output/"source-diff.patch").write_bytes(diff)
@@ -185,25 +189,29 @@ def run_attempt(source, configuration, variant, output, device, smoke=False, *, 
             datasets=prepared["datasets"])
         model = prepared["build_model"]().to(device)
         provenance["parameters"] = sum(p.numel() for p in model.parameters())
+        provenance["trainable_parameters"] = sum(p.numel() for p in model.parameters() if p.requires_grad)
         write_json(output/"provenance.json", provenance)
         dataset = prepared["dataset"]
-        training = track_batches(dataset(source, "training"), training=True, seed=settings["seed"])
-        validation = track_batches(dataset(source, "validation"), seed=settings["seed"])
+        batching = prepared.get("batches", track_batches)
+        training = batching(dataset(source, "training"), training=True, seed=settings["seed"])
+        validation = batching(dataset(source, "validation"), seed=settings["seed"])
         # The same training loader survives every epoch; smoke only restricts iteration.
         class SmokeBatches:
             def __iter__(self):
                 return islice(training, 2)
         def validation_predictions(m):
-            tracks = predict(m, islice(validation, 1) if smoke else validation, device)
+            tracks = predict(m, islice(validation, 1) if smoke and not prepared.get("custom_smoke") else validation, device,
+                             prepared.get("forward_batch"))
             for t in tracks:
                 identity = json.loads(t["locator"])
                 t["group"] = identity.get("clip", identity.get("scenario"))
             return tracks
-        model_name = {"A": "MLP", "B": "BiLSTM"}[variant]
+        model_name = {"A": "MLP", "B": "BiLSTM"}.get(variant, variant)
         attempt_time = datetime.fromisoformat(provenance["started_utc"]).strftime("%Y%m%d-%H%M%S")
         run_name = f"{config['experiment']}-{source}-{configuration}-{model_name}-seed{settings['seed']}-{attempt_time}"
         if smoke:
             run_name += "-smoke"
+        run_name = prepared.get("run_name", run_name)
         run = wandb.init(entity="yammo-unipd", project="pedestrian-behaviour-labeling", name=run_name,
                          job_type=status["kind"], config=config | {"provenance": provenance},
                          dir=str(output.resolve()), save_code=False, resume="never", mode="online")
@@ -211,37 +219,46 @@ def run_attempt(source, configuration, variant, output, device, smoke=False, *, 
         configure_logging(run)
         def on_step(step, loss):
             row = {"optimizer_step": step, "training_ce": loss}
+            if prepared.get("log_learning_rate"):
+                row["learning_rate"] = optimizer.param_groups[0]["lr"]
             with (output/"steps.jsonl").open("a") as stream:
                 stream.write(json.dumps(row, allow_nan=False)+"\n")
-            run.log({"optimizer_step": step, "train/loss_step": loss})
+            run.log({"optimizer_step": step, "train/loss_step": loss} |
+                    ({"train/learning_rate": row["learning_rate"]} if "learning_rate" in row else {}))
         def on_epoch(row, history):
             write_json(output/"history.json", history)
             provenance.update(completed_epochs=len(history), last_completed_epoch=row["epoch"],
                 exposure={k: sum(r[k] for r in history) for k in ("optimizer_steps", "processed_tracks", "context_slots", "gt_slots", "padding_slots", "batch_slots")})
+            if "runtime_snapshot" in prepared:
+                provenance["runtime"] = prepared["runtime_snapshot"]()
             write_json(output/"provenance.json", provenance)
             run.log({"epoch": row["epoch"], "train/loss_epoch": row["training_ce"],
                      "val/loss": row["validation_ce"], "val/macro_f1": row["validation_f1"]})
-        fitted = fit(model, SmokeBatches() if smoke else training,
+        optimizer = torch.optim.AdamW((p for p in model.parameters() if p.requires_grad), **settings["optimizer"])
+        fitted = fit(model, SmokeBatches() if smoke and not prepared.get("custom_smoke") else training,
                      lambda m: prediction_metrics(validation_predictions(m), len(classes)),
-                     torch.optim.AdamW(model.parameters(), **settings["optimizer"]), device, output,
+                     optimizer, device, output,
                      {"config": config, "normalization": statistics, "provenance_file": "provenance.json"}, on_epoch,
-                     epochs=1 if smoke else settings["epochs"], patience=settings["patience"], clip_norm=settings["clip_norm"], on_step=on_step)
+                     epochs=1 if smoke else settings["epochs"], patience=settings["patience"], clip_norm=settings["clip_norm"], on_step=on_step,
+                     **({"epoch_operation": prepared["epoch_operation"]} if "epoch_operation" in prepared else {}))
         selected = reload_checkpoint(output/"best.pt", model, device)
         evaluations = {}
-        for d in ([source] if smoke else list(prepared["datasets"])):
-            destination = output/(d+"-validation-smoke" if smoke else d+"-test")
+        evaluation_splits = prepared.get("evaluation_splits", [(d, "validation-smoke" if smoke else "test") for d in ([source] if smoke else list(prepared["datasets"]))])
+        for d, split in evaluation_splits:
+            destination = output/(d+"-"+split)
             destination.mkdir()
-            tracks = validation_predictions(model) if smoke else predict(model, track_batches(dataset(d, "test"), seed=settings["seed"]), device)
+            tracks = validation_predictions(model) if split.startswith("validation") else predict(model, batching(dataset(d, split), seed=settings["seed"]), device, prepared.get("forward_batch"))
             for t in tracks:
                 metadata, arrays = load_track(t["archive"])
                 identity = json.loads(t["locator"])
                 t["group"] = identity.get("clip", identity.get("scenario"))
-                t["conditions"], t["source_flags"] = prepared["conditions"](metadata, arrays, t, d)
+                t["conditions"], flags = prepared["conditions"](metadata, arrays, t, d)
+                t["source_flags"] = t.get("source_flags", {}) | flags
                 t["source_times_us"] = source_times(metadata)
                 t["native_extent_us"] = metadata["native_extent_us"]
                 t["grid_times_us"] = (metadata["native_extent_us"][0]+np.arange(len(t["targets"]))*200000).tolist()
             save_predictions(destination/"predictions.npz", tracks)
-            result = {"split": "validation-smoke" if smoke else "test", "primary": prediction_metrics(tracks, len(classes)),
+            result = {"split": split, "primary": prediction_metrics(tracks, len(classes)),
                       "strata": stratified_metrics(tracks, len(classes), axes)}
             write_json(destination/"metrics.json", result)
             evaluations[d] = result
@@ -269,8 +286,20 @@ def run_attempt(source, configuration, variant, output, device, smoke=False, *, 
                 status["failures"].append({"type": type(finish_error).__name__, "message": str(finish_error)})
         raise
     finally:
+        cleanup_error = None
+        try:
+            if prepared is not None and "runtime_snapshot" in prepared:
+                provenance["runtime"] = prepared["runtime_snapshot"]()
+            if prepared is not None and "close" in prepared:
+                prepared["close"]()
+        except BaseException as error:
+            cleanup_error = error
+            status["status"] = "failed"
+            status["failures"].append({"type": type(error).__name__, "message": str(error), "traceback": traceback.format_exc()})
         provenance.update(finished_utc=datetime.now(timezone.utc).isoformat(), elapsed_seconds=time.monotonic()-started,
             peak_cuda_allocated_bytes=torch.cuda.max_memory_allocated(device) if device.type == "cuda" and torch.cuda.is_available() else None)
         write_json(output/"provenance.json", provenance)
         write_json(output/"status.json", status)
+        if cleanup_error is not None:
+            raise cleanup_error
 

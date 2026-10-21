@@ -37,6 +37,17 @@ def resource_code():
     return {m.__name__: checksum(m.__file__) for m in (multimodal, loading, accumulation)}
 
 
+class TrainingEncoders(FrozenEncoders):
+    def __init__(self, config, device, require_rgb_cache):
+        super().__init__(config, device)
+        self.require_rgb_cache = require_rgb_cache
+
+    def __call__(self, kind, inputs):
+        if self.require_rgb_cache and kind == "rgb":
+            raise ValueError("RGB cache miss: complete the matching full RGB preparation before the pilot")
+        return super().__call__(kind, inputs)
+
+
 def validate_profile(profile):
     required = ("max_tracks", "temporal_cells", "microbatch_tokens", "ordinary_tokens", "frame_chunk", "frame_tokens")
     if any(type(profile.get(k)) is not int or profile[k] < 1 for k in required):
@@ -116,9 +127,16 @@ def assembly(args):
         rgb = stack.enter_context(FeatureCache(args.rgb_cache_root, min_free_bytes=gb_bytes(args.min_free_gb)))
         points = stack.enter_context(FeatureCache(args.point_cache_root, capacity_bytes=gb_bytes(args.point_cache_gb),
                                                  min_free_bytes=gb_bytes(args.min_free_gb)))
-        encoders = FrozenEncoders(config, args.device)
+        encoders = TrainingEncoders(config, args.device, require_rgb_cache=not args.smoke)
         stack.callback(encoders.release)
         identity = extraction_identity(args.device, config)
+        if not args.smoke:
+            preparation = json.loads(args.rgb_preparation.read_text())
+            expected = {k for k in catalog.tracks}
+            actual = {t["locator"] for t in preparation.get("tracks", []) if t["dataset"] == args.source}
+            if (preparation.get("status") != "complete" or preparation.get("extraction") != identity
+                    or expected != actual or Path(preparation["config"]["rgb_cache_root"]).resolve() != args.rgb_cache_root.resolve()):
+                raise ValueError("Matching full source train/validation RGB cache preparation required")
         supply = FeatureSupply({args.source: catalog}, rgb, points, encoders, identity)
         baseline = e001b_run.assemble(args.source, "geometry", "B", e001_root=args.outputs_root / "experiments/E001",
                                      e001b_root=args.outputs_root / "experiments/E001b")
@@ -202,6 +220,7 @@ def add_arguments(parser):
     parser.add_argument("--outputs-root", type=Path, default=Path("outputs"))
     parser.add_argument("--probe", type=Path, default=Path("outputs/experiments/E002a/native-probe-07"))
     parser.add_argument("--rgb-cache-root", type=Path, default=Path("outputs/experiments/E002a/rgb-cache"))
+    parser.add_argument("--rgb-preparation", type=Path, default=Path("outputs/experiments/E002a/rgb-cache-preparation/cache.json"))
     parser.add_argument("--point-cache-root", type=Path, default=Path("outputs/experiments/E002a/point-cache"))
     parser.add_argument("--point-cache-gb", type=float, default=450)
     parser.add_argument("--min-free-gb", type=float, default=20)

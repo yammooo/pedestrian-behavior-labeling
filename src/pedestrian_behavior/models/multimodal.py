@@ -6,6 +6,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 from torch.nn.utils.rnn import pad_sequence
+from torch.nn.attention import SDPBackend, sdpa_kernel
 from torch.utils.checkpoint import checkpoint
 
 
@@ -30,8 +31,10 @@ class TemporalBlock(nn.Module):
     def forward(self, x, valid):
         b, t, _ = x.shape
         q, k, v = self.qkv(self.norm(x)).reshape(b, t, 3, 4, 64).permute(2, 0, 3, 1, 4)
-        y = F.scaled_dot_product_attention(rotary(q), rotary(k), v, attn_mask=valid[:, None, None, :],
-                                           dropout_p=.1 if self.training else 0.)
+        # FP32 math avoids fused-backend mask-alignment limits on irregular track lengths.
+        with sdpa_kernel(SDPBackend.MATH):
+            y = F.scaled_dot_product_attention(rotary(q), rotary(k), v, attn_mask=valid[:, None, None, :],
+                                               dropout_p=.1 if self.training else 0.)
         x = x + self.dropout(self.out(y.transpose(1, 2).reshape(b, t, 256)))
         return x + self.dropout(self.ffn(self.norm_ffn(x)))
 
@@ -61,8 +64,9 @@ class SpatialReadout(nn.Module):
         b, n, _ = h.shape
         q = self.q(self.seed_norm(seed)).reshape(1, 1, 4, 32).transpose(1, 2).expand(b, -1, -1, -1)
         k, v = (linear(h).reshape(b, n, 4, 32).transpose(1, 2) for linear in (self.k, self.v))
-        y = F.scaled_dot_product_attention(q, k, v, attn_mask=valid[:, None, None, :],
-                                           dropout_p=.1 if self.training else 0.)
+        with sdpa_kernel(SDPBackend.MATH):
+            y = F.scaled_dot_product_attention(q, k, v, attn_mask=valid[:, None, None, :],
+                                               dropout_p=.1 if self.training else 0.)
         u = seed + self.dropout(self.out(y.transpose(1, 2).reshape(b, 128)))
         return u + self.dropout(self.ffn(self.norm_ffn(u)))
 

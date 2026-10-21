@@ -10,7 +10,7 @@ import time
 from .run import write_json
 
 
-def run_sweep(output, plan, command, jobs=2, seeds=(0, 1, 2, 3, 4), device="cuda"):
+def run_sweep(output, plan, command, jobs=2, seeds=(0, 1, 2, 3, 4), device="cuda", *, settings=None):
     if jobs < 1 or not seeds or len(set(seeds)) != len(seeds) or any(not 0 <= s < 2**32 for s in seeds):
         raise ValueError("Positive jobs and distinct seeds in [0, 2**32) are required")
     names = [row["name"] for row in plan]
@@ -22,6 +22,8 @@ def run_sweep(output, plan, command, jobs=2, seeds=(0, 1, 2, 3, 4), device="cuda
     state = {"status": "incomplete", "started_utc": datetime.now(timezone.utc).isoformat(),
              "jobs": jobs, "device": device, "epochs": 75, "patience": 8, "seeds": list(seeds),
              "cpu_threads_per_process": 2, "attempts": plan, "failures": []}
+    if settings is not None:
+        state.update(settings)
     environment = os.environ | {"OMP_NUM_THREADS": "2", "MKL_NUM_THREADS": "2",
                                 "OPENBLAS_NUM_THREADS": "2", "PYTHONUNBUFFERED": "1"}
     queued, active = iter(plan), {}

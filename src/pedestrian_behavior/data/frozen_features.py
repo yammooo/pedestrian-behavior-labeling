@@ -16,7 +16,7 @@ def validate_rgb(arrays):
             arrays["valid"].shape != (n,) or arrays["valid"].dtype != bool or
             arrays["times_us"].shape != (n,) or arrays["times_us"].dtype != np.int64 or
             arrays["source_keys"].shape != (n,) or arrays["source_keys"].dtype.kind != "U" or
-            arrays["crop_info"].shape != (n,) or arrays["crop_info"].dtype.kind != "U" or
+            arrays["crop_info"].shape != (n,) or arrays["crop_info"].dtype.kind not in "US" or
             np.any(arrays["cls"][~arrays["valid"]] != 0)):
         raise ValueError("Misaligned/nonzero-missing RGB features")
 

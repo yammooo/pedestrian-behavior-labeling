@@ -45,11 +45,11 @@ def backend_identity(device):
 def extraction_identity(device, config=None):
     # Relevant source content, not the Git revision: doc-only commits do not expire features.
     from pedestrian_behavior.inspection import pretrained, feature_probe, native_features
-    from pedestrian_behavior.data import frozen_features
+    from pedestrian_behavior.data import feature_cache, frozen_features
     return {"schema": 1, "backend": backend_identity(device),
             "rgb_checkpoint_sha256": config["rgb_checkpoint_sha256"] if config else DINO_PTH_SHA256,
             "implementation": {m.__name__: checksum(m.__file__) for m in
-                               (pretrained, feature_probe, native_features, frozen_features)},
+                               (pretrained, feature_probe, native_features, feature_cache, frozen_features)},
             "policy_sha256": checksum(__file__)}
 
 
@@ -229,7 +229,7 @@ class FeatureSupply:
             flush()
             return {"cls": values, "valid": valid, "source_keys": np.array([str(k) if k is not None else "" for k in track["source_keys"]]),
                 "times_us": np.array([int(t) if t is not None else -1 for t in track["times_us"]], np.int64),
-                "crop_info": np.array([canonical(i) for i in info])}
+                "crop_info": np.array([canonical(i).encode("utf-8") for i in info], dtype="S")}
         return self.rgb_cache.get(identity, produce, validate_rgb)
 
     def point_identity(self, dataset, locator, slot):

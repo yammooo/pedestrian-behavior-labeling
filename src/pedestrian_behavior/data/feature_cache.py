@@ -72,7 +72,7 @@ def validate_arrays(arrays):
     for name, value in arrays.items():
         if not isinstance(name, str) or not name.isidentifier() or not isinstance(value, np.ndarray):
             raise ValueError("Feature payload must contain named NumPy arrays")
-        if value.dtype.kind not in "biufU" or (value.dtype.kind == "f" and not np.isfinite(value).all()):
+        if value.dtype.kind not in "biufUS" or (value.dtype.kind == "f" and not np.isfinite(value).all()):
             raise ValueError(f"Nonfinite/unsafe feature array: {name}")
 
 

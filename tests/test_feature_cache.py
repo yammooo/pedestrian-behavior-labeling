@@ -233,6 +233,35 @@ class SupplyTest(unittest.TestCase):
             path.write_text(json.dumps({"tracks":[{"dataset":"test","locator":"not-eligible"}]}))
             with self.assertRaises(ValueError):selected_tracks({"test":self.catalog()},path)
 
+    def test_catalog_uses_full_frozen_train_validation_and_never_opens_test_archives(self):
+        from pedestrian_behavior.data.preparation import checksum
+        with tempfile.TemporaryDirectory() as root:
+            root=Path(root)
+            collection=root/"experiments/E001/reader-preparation/loki"
+            setup=root/"experiments/E001/data-setup/loki/setup.json"
+            (collection/"tracks").mkdir(parents=True);setup.parent.mkdir(parents=True)
+            transform=root/"transform.json";transform.write_text("{}")
+            manifest=collection/"manifest.json";manifest.write_text(json.dumps({"sources":{"transform":{}}}))
+            entries=[]
+            for split in ("training","validation","test"):
+                entries.append({"locator":json.dumps({"scenario":split,"track_id":"a"}),"group":split,
+                                "archive":split+".npz","slots":2,"split":split,"exclusions":[]})
+                if split!="test":(collection/"tracks"/(split+".npz")).write_bytes(b"frozen-reference")
+            setup.write_text(json.dumps({"status":"complete","collection":{"manifest_sha256":checksum(manifest)},
+                                        "groups":{s:s for s in ("training","validation","test")},"tracks":entries}))
+            def load(path):
+                self.assertNotEqual(path.name,"test.npz")
+                entry=next(e for e in entries if e["archive"]==path.name)
+                return {"track_locator":entry["locator"],"source_frames":["0000","0002"],"source_time_us":[0,200000],
+                        "anchor_valid":True,"availability":[{"native_3d":True},{"native_3d":False}]}, \
+                       {"ped_position_valid":np.ones(2,bool),"ego_pose_valid":np.ones(2,bool)}
+            with patch("pedestrian_behavior.experiments.e002a_features.load_track",side_effect=load):
+                catalog=FeatureCatalog(root,"loki",{},transform)
+            self.assertEqual({t["split"] for t in catalog.tracks.values()},{"training","validation"})
+            self.assertEqual(len(catalog.tracks),2)
+            for track in catalog.tracks.values():np.testing.assert_array_equal(track["point_usable"],[1,0])
+            self.assertEqual(len(catalog.frames),2)
+
     def test_cache_roots_cannot_overlap_data_or_each_other(self):
         with tempfile.TemporaryDirectory() as root:
             base=Path(root)

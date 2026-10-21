@@ -242,6 +242,13 @@ class MultimodalTest(unittest.TestCase):
         self.assertIn("e002a-road-waymo-g-s0", " ".join(command))
         self.assertEqual({t["seed"] for t in plan}, {0})
 
+    def test_rgb_cache_readback_support_excludes_unlabeled_context(self):
+        from pedestrian_behavior.experiments.e002a_rgb_audit import support
+        row = support(np.array([0, 1, -100]), np.array([True, True, False]), np.array([True, False, True]))
+        self.assertEqual(row["class_gt_frames"], [1, 1, 0, 0])
+        self.assertEqual(row["rgb_class_gt_frames"], [1, 0, 0, 0])
+        self.assertEqual((row["rgb_slots"], row["rgb_gt_frames"], row["rgb_tracks"]), (2, 1, 1))
+
     def test_paired_summary_uses_saved_predictions_and_checks_availability(self):
         from pedestrian_behavior.evaluation import save_predictions
         from pedestrian_behavior.experiments.e002a_summary import summarize

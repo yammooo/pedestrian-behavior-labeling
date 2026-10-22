@@ -1,6 +1,6 @@
 # E002a — First multimodal behavior pilot
 
-**Agreed pilot specification, updated 2026-10-21.** First behavior pilot within [E002](../E002-multimodal-reference/README.md). Scope, branch/tensor interfaces, dropout, fitting, batching policy and450 GB point-cache budget are settled below. The [model, trainer and manual commands](#model-and-training-acceptance--2026-10-21) are implemented, with bounded GPU operational checks; full RGB preparation and all-entry readback are complete. Modality benefit and final research architecture remain hypotheses. The six full pilot attempts have not been launched. Completed extraction/resource/semantic probes are [preparatory evidence](#preparatory-work), not separate behavior experiments. Later E002 comparisons may use different architectures.
+**Agreed pilot specification, updated 2026-10-22.** First behavior pilot within [E002](../E002-multimodal-reference/README.md). Scope, branch/tensor interfaces, dropout, fitting, batching policy and450 GB point-cache budget are settled below. The [model, trainer and manual commands](#model-and-training-acceptance--2026-10-21) are implemented, with bounded GPU operational checks; full RGB preparation and all-entry readback are complete. Modality benefit and final research architecture remain hypotheses. The first full ROAD geometry attempt is active; the [population-scale throughput check](#full-population-throughput-check--2026-10-22) reveals an input-pipeline problem. No full attempt has completed. Completed extraction/resource/semantic probes are [preparatory evidence](#preparatory-work), not separate behavior experiments. Later E002 comparisons may use different architectures.
 
 The existing directory name is retained for stable commands, artifact references and links. This record owns the pilot specification, preparation, fitting settings and eventual behavior results.
 
@@ -399,9 +399,28 @@ These are tiny operational attempts, not behavior comparisons or epoch forecasts
 
 [Completed preparation](../../outputs/experiments/E002a/rgb-cache-preparation-03/cache.json) · [all-entry readback and class/group/track support](../../outputs/experiments/E002a/rgb-cache-audit/audit.json). These counts describe the frozen pilot cohorts, not unrestricted native populations. Full-population LiDAR hit rate and epoch time remain unknown until the manual pilot; the450 GB LRU fills lazily. No six-attempt comparison or held-out inference was launched.
 
+## Full-population throughput check — 2026-10-22
+
+Read-only inspection at03:53 UTC of the user-launched `pilot-20261021-183026-855079/e002a-road-waymo-g-s0`, code `6050233`. [Progress/cache/process snapshot](../../outputs/experiments/E002a/throughput-check-20261022/snapshot.json) · [actual W&B step timestamps](../../outputs/experiments/E002a/throughput-check-20261022/wandb-timing.json) · [run81h8shqe](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/81h8shqe).
+
+| Measure | Observed |
+|---|---:|
+| Elapsed / completed epochs |9 h23 min /0|
+| Completed optimizer updates |33 /69 in training epoch1|
+| Median inter-update interval / latest five mean |14.82 min /13.56 min|
+| GPU mean utilization / zero-utilization samples |20.3% /68.1%|
+| Process block read/write counters |3.14 TB /619 GB|
+| Point payload / retained entries |449.97 GB /23,424|
+
+The first geometry arm computes the same measured LiDAR-availability flags as the other arms. `FeatureDataset.__getitem__` therefore calls full `iter_points` whenever point-cost metadata is unknown, loading or producing complete frozen feature unions merely to obtain crop counts. Random track visits also repeat native scene indexing/Parquet traversal; hits read/checksum/validate entire frame unions. The first epoch is dominated by feature supply. Once its metadata exists, geometry/RGB arms bypass point payloads; this does not establish usable LiDAR-arm throughput. Per-stage live timing is not persisted until epoch completion, so precise shares of decoding, encoding, cache reads/writes and synchronization are still unknown.
+
+At the recent rate, the remaining36 training updates alone would take about8.1 h, plus validation; this is a conditional extrapolation, not an epoch measurement. Bounded three-track smoke acceptance checked correctness but was insufficient to establish practical population-scale throughput. The earlier declaration of pilot readiness is qualified by this finding; do not infer acceptable performance from cache-hit percentages or fitting model shapes.
+
+Recommended next increment: derive exact availability/cost metadata from native voxel coordinates without encoder inference, verify parity with existing crop counts/flags, and keep geometry/RGB fitting independent of point-feature payloads. Then measure representative full64-track cold/warm multimodal updates and native/cache stage costs before proceeding with the sweep. Preserve existing valid cache entries, every track/token, frozen data and scientific settings. This inspection changes no training code or running process; execution-path changes need measured parity/throughput acceptance. No architecture change or new encoder is justified by this bottleneck.
+
 ## Before implementation and execution
 
-The scientific specification and operational acceptance are complete. The six full source-validation attempts remain a manual next step:
+Scientific specification and bounded correctness/memory acceptance are complete. The population-scale throughput follow-up above must be addressed before further execution:
 
 | Item | Status/evidence |
 |---|---|
@@ -421,7 +440,7 @@ Acceptance before the six exploratory attempts:
 
 The earlier worst-case OOM and~1.15 TiB estimate remain historical warnings against assuming full preparation fits. Numeric ceilings and bounded20 m I/O are recorded in the integrated calibration above; full-population epoch cost remains unknown. Utonia remains deferred. Never silently cap tokens, truncate tracks, change precision or relax deterministic training. Preserve failures; fresh attempt outputs, no automatic retry/resume. Local checkpoint/prediction backup outside this laptop remains **TBD** and separate from the cache budget.
 
-**Results:** no full pilot comparison runs. Bounded behavior-training smoke attempts are operational evidence only; see acceptance above. Native/resource/semantic preparatory evidence is preserved below. Architectural novelty and modality utility remain hypotheses, not consequences of integrating these components.
+**Results:** no completed full pilot comparison attempts. Bounded behavior-training smoke attempts are operational evidence only; see acceptance above. Native/resource/semantic preparatory evidence is preserved below. Architectural novelty and modality utility remain hypotheses, not consequences of integrating these components.
 
 ## Preparatory work
 

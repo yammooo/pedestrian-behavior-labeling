@@ -446,7 +446,7 @@ uv run --no-project --python "$probe_root/extractor-env/bin/python" python scrip
 
 ### E002a source-validation pilot
 
-Run from `/home/user20/projects/pedestrian-behavior-labeling-review` on `aalto`, using the calibrated RTX4080 extractor environment. The completed preparation record and resource profile are explicit inputs; changing model/execution code or backend requires new calibration. Full attempts reject incomplete/mismatched RGB preparation and RGB misses. Point features fill the450 GB LRU lazily. Fresh attempt/sweep outputs only; no automatic restart/resume.
+The first full attempt exposed a [population-scale input-pipeline bottleneck](experiments/E002a-feature-feasibility/README.md#full-population-throughput-check--2026-10-22); address that before further pilot execution. Commands below remain the reproducibility interface. Run from `/home/user20/projects/pedestrian-behavior-labeling-review` on `aalto`, using the calibrated RTX4080 extractor environment. The completed preparation record and resource profile are explicit inputs; changing model/execution code or backend requires new calibration. Full attempts reject incomplete/mismatched RGB preparation and RGB misses. Point features fill the450 GB LRU lazily. Fresh attempt/sweep outputs only; no automatic restart/resume.
 
 ```bash
 probe_root="$PWD/outputs/experiments/E002a"

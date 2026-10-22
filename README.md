@@ -411,13 +411,13 @@ The [pilot specification](experiments/E002a-feature-feasibility/README.md#deferr
 
 ### E002a feature caches
 
-The [cache inventory](experiments/E002a-feature-feasibility/README.md#cache-inventory-and-retirement--2026-10-22) records current paths. The old450 GB point LRU was deleted at the user's request; geometry and geometry+RGB training remain independent of it. Legacy LiDAR commands below would recreate that cache. The indexed reader is a bounded prototype, not yet production training supply. Its existing shards remain usable, but rebuilding its ROAD inputs now requires re-extraction.
+The [cache inventory](experiments/E002a-feature-feasibility/README.md#cache-inventory-and-retirement--2026-10-22) records current paths. The old450 GB point LRU was deleted at the user's request; geometry and geometry+RGB training remain independent of it. Legacy LiDAR commands below would recreate that cache. Indexed storage passes bounded checks; full preparation and training integration remain pending. Existing prototype shards remain usable, while new preparation extracts directly from native sweeps.
 
-The standalone indexed builder reads native LiDAR directly and does not use the retired LRU. From the checkout containing this command, prepare **one source at a time**:
+The standalone indexed builder reads native LiDAR directly and does not use the retired LRU. The verified builder checkout on aalto is `/home/user20/projects/pedestrian-behavior-labeling-indexed-build`; its outputs alias the canonical root. It leaves the other checkouts unchanged. From that checkout, prepare **one source at a time**:
 
 ```bash
 probe_root="$PWD/outputs/experiments/E002a"
-OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 \
+PYTHONPATH="$PWD/src" OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 \
 uv run --no-project --python "$probe_root/extractor-env/bin/python" python scripts/build-e002a-point-cache.py \
   --device cuda --dataset road-waymo --output "$probe_root/indexed-road-waymo"
 ```

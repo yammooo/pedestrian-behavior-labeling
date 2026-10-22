@@ -112,6 +112,8 @@ def prepare_tracks(args,record,protected):
     for item in execution["tracks"]:
         if item["split"] not in ("training","validation"):
             raise ValueError("Held-out track forbidden")
+        rgb = (args.fixtures/item["rgb_cache"]).resolve()
+        protected[str(rgb)] = checksum(rgb)
         grouped[item["dataset"],item["group"]].append(item)
     for (dataset,group), items in grouped.items():
         collection,manifest,setup,reader = context(dataset,outputs,source["config"],args.probe,protected)

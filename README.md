@@ -454,6 +454,16 @@ uv run --no-project --python "$probe_root/extractor-env/bin/python" python scrip
 
 It compares original tokens, constant10/20 cm and original target-near tokens with20 cm context. Diagnostic FP16 storage does not enable FP16 training. [Measurement scope/results](experiments/E002a-feature-feasibility/README.md#output-pooling-measurement--2026-10-22).
 
+The separate target-specific two-resolution prototype reuses those frozen outputs and six complete development tracks. It writes new scene shards, checks selections/integrity and times complete-track loading plus bounded model CE/backward/validation; it does not change production caches or launch a comparison run:
+
+```bash
+OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 \
+uv run --no-project --python "$probe_root/extractor-env/bin/python" python scripts/prototype-e002a-indexed.py \
+  --device cuda --output "$probe_root/my-indexed-prototype"
+```
+
+Defaults use `native-probe-07`, `output-pooling-20261022/measurement.json`, `execution-probe-04` and `geometry-revision-calibration/profile.json`; each is overridable. A fresh output and25 GB free disk are required; the GPU probe requires10 GiB free VRAM and stops on failures. [Protocol and acceptance](experiments/E002a-feature-feasibility/README.md#target-specific-indexed-prototype--2026-10-22).
+
 ### E002a source-validation pilot
 
 The first full attempt exposed a [population-scale input-pipeline bottleneck](experiments/E002a-feature-feasibility/README.md#full-population-throughput-check--2026-10-22); meet the [agreed throughput gate](experiments/E002a-feature-feasibility/README.md#throughput-gate--agreed-2026-10-22) before further pilot execution. The gate is a documentation prerequisite, not an automated launcher check. Commands below remain the reproducibility interface. Run from `/home/user20/projects/pedestrian-behavior-labeling-review` on `aalto`, using the calibrated RTX4080 extractor environment. The completed preparation record and resource profile are explicit inputs; changing model/execution code or backend requires new calibration. The enabled-branch revision uses65/194/323→256 fusion and records `fusion_protocol=enabled-branches-v2`; profile05 belongs to the previous protocol and is rejected by changed model/execution hashes. Create a fresh calibration (commands below) before using these examples. Full RGB-enabled attempts reject incomplete/mismatched RGB preparation and RGB misses; geometry requires neither RGB preparation nor an encoder probe and opens no feature caches. Only the LiDAR arm fills/reads the450 GB point LRU. Geometry+RGB never queries point costs. Fresh attempt/sweep outputs only; no automatic restart/resume.

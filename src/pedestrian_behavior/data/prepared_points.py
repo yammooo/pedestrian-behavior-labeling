@@ -37,7 +37,7 @@ class PreparedPoints:
         entries = {t["locator"]: t for t in r["tracks"]}
         if len(entries) != len(r["tracks"]) or not set(entries).issubset(tracks):
             raise ValueError("Duplicate/unknown indexed tracks")
-        if not allow_partial and set(entries) != set(tracks):
+        if r["scope"] == "full-frozen-source-train-validation" and set(entries) != set(tracks):
             raise ValueError("Indexed cache changed frozen source population")
         expected = defaultdict(lambda: defaultdict(set))
         for locator, t in entries.items():

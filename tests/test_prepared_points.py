@@ -100,6 +100,8 @@ class PreparedInputsTest(unittest.TestCase):
                 path.write_text(json.dumps(original | {field: value}))
                 with self.assertRaises(ValueError):
                     open_points(root, catalog)
+                with self.assertRaises(ValueError):
+                    open_points(root, catalog, allow_partial=True)
             partial = original | {"scope": "bounded-native-check"}
             path.write_text(json.dumps(partial))
             with self.assertRaisesRegex(ValueError, "Full"):

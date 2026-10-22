@@ -411,6 +411,8 @@ The [pilot specification](experiments/E002a-feature-feasibility/README.md#deferr
 
 ### E002a feature caches
 
+The [cache inventory](experiments/E002a-feature-feasibility/README.md#cache-inventory-and-retirement--2026-10-22) records current paths. The old450 GB point LRU was deleted at the user's request; geometry and geometry+RGB training remain independent of it. Legacy LiDAR commands below would recreate that cache. The indexed reader is a bounded prototype, not yet production training supply. Its existing shards remain usable, but rebuilding its ROAD inputs now requires re-extraction.
+
 Run from the isolated aalto checkout using its pinned extractor environment. This prepares **all frozen eligible training/validation RGB**, with3× crops; it performs no behavior training or test inference:
 
 ```bash

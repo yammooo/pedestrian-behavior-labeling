@@ -545,6 +545,34 @@ These projections include shared coarse/fine features/XYZ, representative native
 
 [Final numerical/provenance record](../../outputs/experiments/E002a/indexed-prototype-20261022-03/prototype.json) · [sizing/loading/epoch arithmetic](../../outputs/experiments/E002a/indexed-prototype-20261022-03/analysis.json) · [report](../../outputs/experiments/E002a/indexed-prototype-20261022-03/report.md) · [acceptance/log hashes](../../outputs/experiments/E002a/indexed-prototype-20261022-03/acceptance.json). Retained attempts: `indexed-prototype-20261022` failed after preparation/loading because the temporary checkout lacked its standard output-root link; `-02` completed after that environment fix; `-03` adds full-cohort loading. Fresh roots, preserved evidence, no automatic retry/resume.
 
+### Cache inventory and retirement — 2026-10-22
+
+User-authorized deletion of the **old** `E002a/point-cache/`:23,305 entries/449.97 GB encoded payload,450.26 GB allocated directory. Ownership lock was free and no training/preparation/prototype process was active. Removed the directory while holding its lock; retained its229 MB SQLite index as historical unpooled cost evidence under `E002a/cache-inventory-20261022/retired-point-index.sqlite3`. This snapshot is not a usable cache or a source of new pooled-token costs. Free space increased to518 GB. No other cache, dataset, model run/checkpoint or native input was deleted. [Removal evidence](../../outputs/experiments/E002a/cache-inventory-20261022/retirement.json) · [full allocated-size inventory](../../outputs/experiments/E002a/cache-inventory-20261022/inventory.json).
+
+Canonical **aalto** output root: `/home/user20/projects/pedestrian-behavior-labeling/outputs/`. Review/viewer outputs and the older experiment checkouts' E001/E001b/E001c directories alias this same storage; they are not duplicate dataset caches. ThinkPad outputs are separate local copies (about5.8 GB total experiments), unchanged.
+
+| Path relative to `outputs/experiments/` | On-disk size | Role in E002a training |
+|---|---:|---|
+| `E001/reader-preparation/` |0.486 GB|Keep: frozen tracks, labels, masks and native references; all arms |
+| `E001/data-setup/` |0.015 GB|Keep: frozen populations/splits/source normalization; all arms |
+| `E001b/bbox-native/` |0.116 GB|Keep: current geometry's native2D bbox extension; all arms |
+| `E002a/rgb-cache/` |2.95 GB|Keep: complete3× DINO CLS for RGB-enabled arms;2.62 GB current payload/15,925 tracks, plus2,377 older namespace entries/0.254 GB and index/block overhead |
+| `E002a/rgb-cache-preparation-03/cache.json` |small|Keep: full-population RGB preparation identity/gate |
+| `E002a/geometry-revision-calibration/profile.json` |small|Current model execution profile; recalibrate when the indexed adapter/execution changes |
+| Full target-specific indexed LiDAR cache |not built|Planned supply for LiDAR arm; production root TBD; prototype208 GB ROAD projection is not a prepared dataset |
+| `E002a/indexed-prototype-20261022[-02,-03]/` |0.38 GB each|Bounded shared coarse/fine shards, correctness/performance evidence; not full training populations |
+| `E001b/bbox/`, `E001c/box-cache/` |0.116/0.190 GB|Historical alternative preparations; E002a uses neither |
+| `E002a/model-integration/points/` |7.63 GB|Historical bounded LiDAR acceptance cache; not current training supply |
+| `E002a/cache-acceptance-data/`, `cache-acceptance-02-data/` |4.15 GB each|Historical acceptance caches; not current training supply |
+| Other `cache-acceptance-*-data/` |about0.022 GB each|Small acceptance fixtures |
+| `E002a/execution-probe/`, `execution-probe-02/`, `execution-probe-04/` |0.75/1.38/0.039 GB|Resource fixtures; `-04` references `-02` files, so directory names alone do not establish redundancy |
+| `E002a/native-probe-06/`, `native-probe-07/` |1.32 GB each|Historical native fixtures; current RGB/extraction wiring still reads `-07/probe.json` and `loki-transform.json` |
+| `E002a/point-pca-comparison-02/`, `-03/`, `linear-semantic-probe/`, DINO galleries |several GB combined|Diagnostic features/visualizations; not training supply |
+
+`outputs/inspection/prediction-viewer/context/` adds0.374 GB cached RGB/BEV context; viewer indexes about0.007 GB. Neither feeds training. `E002a/weights/` (1.45 GB: DINO0.343, D-DITR0.555, deferred Utonia0.549 GB) and `extractor-env/` (9.04 GB) are model assets/environment, not dataset caches. Preserve experiment `runs/` separately: checkpoints, predictions and W&B/local evidence are results, not disposable feature caches.
+
+**Current executable behavior:** geometry opens no RGB/point cache; geometry+RGB uses the existing RGB cache. The full LiDAR arm still opens the legacy `FeatureCache` path and would recreate `point-cache/` on misses. The new indexed reader is not wired into `train-e002a.py`; do not use the legacy full-arm/preparation command expecting indexed data. Existing prototype shards remain usable for loading/model work. Rebuilding the prototype from raw frozen outputs now requires re-extracting its retired ROAD source entries; historical protected hashes remain evidence, not a promise those deleted files still exist. No additional cleanup is implied by this inventory.
+
 ### Throughput gate — agreed 2026-10-22
 
 **Before further full training, target strictly under30 minutes for a conservative worst-case complete training+source-validation epoch on aalto**, for both source populations and every pilot arm. Include loading/native decoding, cache verification/writes and eviction misses, transfer, forward/backward/optimizer, full validation and routine checkpoint/logging costs. Verify representative complete64-track updates, long/dense cases and cold as well as sustained LRU-pressure conditions; an all-hit toy example cannot pass this gate. This is an acceptance target, not an achieved result or universal wall-time guarantee. Build6050233 fails it.

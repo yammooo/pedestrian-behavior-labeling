@@ -456,6 +456,17 @@ class MultimodalTest(unittest.TestCase):
                 self.assertEqual(checkpoint["config"]["feature_supply"], "prepared-read-only-no-inference")
                 self.assertEqual(checkpoint["config"]["point_storage_protocol"],
                                  e002a_run.POINT_PROTOCOL if arm == "g-rgb-dditr" else None)
+            saved_profile = profile.read_text()
+            changed_profile = json.loads(saved_profile)
+            changed_profile["profile"]["frame_tokens"] = 1
+            profile.write_text(json.dumps(changed_profile))
+            args.output = root / "experiments/E002a/oversize-frame"
+            with patch.object(e002a_run, "load_configuration", return_value=(config, root / "experiments/fixture-transform.json")), \
+                 patch("pedestrian_behavior.experiments.run.wandb.init") as initialize, \
+                 self.assertRaisesRegex(ValueError, "token ceiling"):
+                e002a_run.run(args)
+            initialize.assert_not_called()
+            profile.write_text(saved_profile)
             # In-progress cache roots must fail before creating a cloud run or falling back.
             (points_root / "manifest.json").unlink()
             args.output = root / "experiments/E002a/missing-manifest"

@@ -209,9 +209,13 @@ def assembly(args):
                 d.entries = [e for e in d.entries if e["locator"] in selected]
                 if not d.entries:
                     raise ValueError("Smoke needs explicit source training and validation tracks")
-            if points is not None:
-                for entry in d.entries:
+            for entry in d.entries:
+                if entry["slots"] ** 2 > profile["temporal_cells"]:
+                    raise ValueError("Complete track exceeds calibrated temporal ceiling")
+                if points is not None:
                     points.require_track(entry["locator"])
+                    if points.counts[entry["locator"]].max(initial=0) > profile["frame_tokens"]:
+                        raise ValueError("Prepared frame exceeds calibrated token ceiling; recalibrate")
             datasets[split] = FeatureDataset(d, supply, args.source, args.arm)
         full_training_count = sum(t["split"] == "training" for t in full_entries.values())
         warmup = 3 * ((full_training_count + 63) // 64)

@@ -413,6 +413,17 @@ The [pilot specification](experiments/E002a-feature-feasibility/README.md#deferr
 
 The [cache inventory](experiments/E002a-feature-feasibility/README.md#cache-inventory-and-retirement--2026-10-22) records current paths. The old450 GB point LRU was deleted at the user's request; geometry and geometry+RGB training remain independent of it. Legacy LiDAR commands below would recreate that cache. The indexed reader is a bounded prototype, not yet production training supply. Its existing shards remain usable, but rebuilding its ROAD inputs now requires re-extraction.
 
+The standalone indexed builder reads native LiDAR directly and does not use the retired LRU. From the checkout containing this command, prepare **one source at a time**:
+
+```bash
+probe_root="$PWD/outputs/experiments/E002a"
+OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 \
+uv run --no-project --python "$probe_root/extractor-env/bin/python" python scripts/build-e002a-point-cache.py \
+  --device cuda --dataset road-waymo --output "$probe_root/indexed-road-waymo"
+```
+
+For LOKI, change `--dataset` to `loki` and `--output` to `"$probe_root/indexed-loki"`. Check remaining space after the first source; the208 GB ROAD and112–251 GB LOKI projections are estimates. Each command prepares only frozen eligible source training/validation tracks, using the existing full-sweep5 cm D-DITR input and target-specific20 cm output pooling. Features are stored FP16 and loaded FP32. No RGB inference, W&B or training is invoked. `--min-free-gb` defaults to20 (decimal GB); it guards each frame write, not total-cache fit. Fresh directories only; failures propagate with local `cache.json` evidence, no automatic retry/resume. A successful root publishes `manifest.json` after scene checksum/readback and frozen-input checks. For bounded native acceptance only, add `--max-scenes 1 --max-frames-per-scene 2`; that manifest is explicitly tagged partial. **Training wiring remains pending:** the existing full-arm trainer does not consume this format yet. [Builder protocol/evidence](experiments/E002a-feature-feasibility/README.md#standalone-indexed-cache-builder--2026-10-22).
+
 Run from the isolated aalto checkout using its pinned extractor environment. This prepares **all frozen eligible training/validation RGB**, with3× crops; it performs no behavior training or test inference:
 
 ```bash

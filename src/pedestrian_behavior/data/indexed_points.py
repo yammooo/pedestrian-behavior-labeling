@@ -1,10 +1,11 @@
-"""Bounded prototype: target-specific coarse/fine point tables and immutable indexed shards."""
+"""Target-specific coarse/fine point tables and immutable indexed shards."""
 
 from collections import OrderedDict
 import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
 
 import numpy as np
 
@@ -77,9 +78,12 @@ def build_frame(arrays):
 class ShardWriter:
     """Append bounded frames; publish the manifest last. Failed directories cannot be reopened."""
 
-    def __init__(self, root, identity):
+    def __init__(self, root, identity, min_free_bytes=0):
+        if min_free_bytes < 0:
+            raise ValueError("Negative free-space floor")
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=False)
+        self.min_free_bytes = min_free_bytes
         self.streams = {k: (self.root / (k + ".bin")).open("xb") for k in DTYPES}
         self.record = {"protocol": PROTOCOL, "identity": identity, "chunk_rows": CHUNK_ROWS, "frames": {}, "arrays": {}}
         self.rows, self.indices = 0, 0
@@ -88,6 +92,9 @@ class ShardWriter:
         if str(key) in self.record["frames"]:
             raise ValueError("Duplicate native frame")
         payload, metadata = build_frame(arrays)
+        needed = sum(value.nbytes for value in payload.values())
+        if shutil.disk_usage(self.root).free < self.min_free_bytes + needed:
+            raise OSError("Insufficient disk space for indexed frame and free-space floor")
         for name, (dtype, width) in DTYPES.items():
             np.asarray(payload[name], dtype=dtype).tofile(self.streams[name])
         metadata.update(start=self.rows, count=len(payload["features"]), index_start=self.indices)
@@ -110,8 +117,16 @@ class ShardWriter:
             self.record["arrays"][name] = {"dtype": dtype, "width": width, "rows": self.indices if name == "indices" else self.rows,
                 "bytes": path.stat().st_size, "sha256": checksum(path), "chunks": chunks}
         temporary = self.root / "manifest.tmp"
-        temporary.write_text(json.dumps(self.record, separators=(",", ":"), allow_nan=False))
+        with temporary.open("w") as stream:
+            stream.write(json.dumps(self.record, separators=(",", ":"), allow_nan=False))
+            stream.flush()
+            os.fsync(stream.fileno())
         temporary.replace(self.root / "manifest.json")
+        directory = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
         return checksum(self.root / "manifest.json")
 
     def close(self):

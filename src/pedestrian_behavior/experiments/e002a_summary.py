@@ -18,6 +18,7 @@ def summarize(root):
     root = Path(root)
     result = {"scope": "exploratory source validation, one seed; no held-out results or superiority claim", "sources": {}}
     protocols = set()
+    point_protocols = set()
     for source in ("road-waymo", "loki"):
         arms = {}
         for arm in ARMS:
@@ -26,6 +27,10 @@ def summarize(root):
                 raise ValueError("All six attempts must complete before paired summary")
             config = json.loads((run / "config.json").read_text())
             protocol = config.get("fusion_protocol", "shared-availability-v1")
+            if arm == "g-rgb-dditr":
+                point_protocols.add(config.get("point_storage_protocol") or "legacy-unpooled")
+                if len(point_protocols) != 1:
+                    raise ValueError("Paired sources use different point storage protocols")
             protocols.add(protocol)
             if len(protocols) != 1 or protocol not in (FUSION_PROTOCOL, "shared-availability-v1"):
                 raise ValueError("Paired arms use different or unknown fusion protocols")
@@ -59,6 +64,7 @@ def summarize(root):
                               "ce_change": a["track_ce"] - b["track_ce"], "gt_frames": int(track["gt_valid"].sum())})
         result["sources"][source] = {"metrics": scores, "paired_track_changes": pairs}
     result["fusion_protocol"] = protocols.pop()
+    result["point_storage_protocol"] = point_protocols.pop()
     write_json(root / "paired-validation.json", result)
     fig, axes = plt.subplots(1, 2, figsize=(10, 4), sharey=True)
     for ax, (source, value) in zip(axes, result["sources"].items()):

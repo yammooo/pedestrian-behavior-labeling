@@ -5,6 +5,7 @@ from copy import deepcopy
 import gc
 import json
 from pathlib import Path
+from contextlib import ExitStack
 import resource
 import subprocess
 import sys
@@ -21,11 +22,14 @@ from pedestrian_behavior.models.multimodal import MultimodalClassifier, frame_ch
 from pedestrian_behavior.training import seed_run
 from . import e001b_run
 from .e002a_execution_probe import loaded_track
-from .e002a_run import FUSION_PROTOCOL, resource_code, SETTINGS
+from .e002a_run import FUSION_PROTOCOL, resource_code, SETTINGS, POINT_PROTOCOL
+from .e002a_features import FeatureCatalog, load_configuration
+from pedestrian_behavior.data.prepared_points import PreparedPoints
+from pedestrian_behavior.inspection.pretrained import DITR_REVISION, DITR_SHA256, DITR_CONFIG_SHA256
 from .run import write_json
 
 
-def fixture_samples(fixtures):
+def fixture_samples(fixtures, point_sources=None):
     record = json.loads((fixtures / "execution.json").read_text())
     if record["status"] != "complete" or len(record["tracks"]) != 6:
         raise ValueError("Completed six-track verified resource fixture required")
@@ -41,7 +45,13 @@ def fixture_samples(fixtures):
             raise ValueError("Calibration fixture not in frozen source development population")
         dataset, index = matches[0]
         sample = dataset[index]
-        frames, rgb, valid = loaded_track(item, fixtures)
+        if point_sources is None:
+            frames, rgb, valid = loaded_track(item, fixtures)
+        else:
+            frames = [torch.from_numpy(f) for f in point_sources[d].iter_track(item["locator"])]
+            with np.load(fixtures / item["rgb_cache"], allow_pickle=False) as cache:
+                rgb = torch.from_numpy(cache["cls"].copy())
+                valid = torch.from_numpy(cache["valid"].astype(np.float32))
         geometry = sample.pop("inputs")
         if len(frames) != len(geometry):
             raise ValueError("Fixture/geometry slots differ")
@@ -104,11 +114,13 @@ def run(args):
               "command": sys.orig_argv, "workloads": [], "failures": [], "held_out_tests": False,
               "fixture_sha256": checksum(args.fixtures / "execution.json"), "settings": SETTINGS}
     telemetry = log = None
+    sources = {}
+    stack = ExitStack()
     try:
         seed_run(0)
         total = torch.cuda.get_device_properties(0).total_memory if args.device == "cuda" else 12 * 2**30
         record.update(gpu=torch.cuda.get_device_name() if args.device == "cuda" else None,
-                      total_vram=total, allocated_ceiling=int(total * .78), frozen_miss_reserve_bytes=2 * 2**30,
+                      total_vram=total, allocated_ceiling=int(total * .78), frozen_miss_reserve_bytes=0 if args.indexed_cache_root is not None else 2 * 2**30,
                       interpretation="Real model/GT CE updates on development fixtures; optimizer resets per shape; no selected behavior result")
         if args.device == "cuda":
             log = (args.output / "system.csv").open("w")
@@ -117,7 +129,18 @@ def run(args):
         with (args.output / "equivalence-tests.log").open("w") as stream:
             subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", "tests", "-p", "test_e002a_training.py"],
                            stdout=stream, stderr=subprocess.STDOUT, check=True)
-        samples = fixture_samples(args.fixtures)
+        if args.indexed_cache_root is not None:
+            config, transform = load_configuration(args.probe)
+            for dataset in ("loki", "road-waymo"):
+                catalog = FeatureCatalog(Path("outputs"), dataset, config, transform)
+                points = PreparedPoints(args.indexed_cache_root / ("indexed-" + dataset), dataset,
+                    catalog.identity, catalog.tracks,
+                    {"revision": DITR_REVISION, "checkpoint": DITR_SHA256, "configuration": DITR_CONFIG_SHA256})
+                stack.callback(points.close)
+                sources[dataset] = points
+        record["point_storage_protocol"] = POINT_PROTOCOL if sources else "legacy-unpooled"
+        record["indexed_point_caches"] = {d: p.identity for d, p in sources.items()}
+        samples = fixture_samples(args.fixtures, sources or None)
         max_length = max(len(s["targets"]) for _, s in samples)
         profile = {"max_tracks": 64, "temporal_cells": 64 * max_length**2, "microbatch_tokens": 1,
                    "ordinary_tokens": 1, "frame_chunk": 2, "frame_tokens": 524288}
@@ -193,6 +216,7 @@ def run(args):
     except BaseException:
         record["status"] = "failed"; record["failures"].append(traceback.format_exc()); raise
     finally:
+        stack.close()
         if telemetry is not None:
             telemetry.terminate(); telemetry.wait(timeout=10); log.close()
         write_json(args.output / "profile.json", record)
@@ -201,6 +225,8 @@ def run(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--fixtures", type=Path, default=Path("outputs/experiments/E002a/execution-probe-04"))
+    parser.add_argument("--indexed-cache-root", type=Path, help="Parent of completed indexed source caches; required for new LiDAR fitting")
+    parser.add_argument("--probe", type=Path, default=Path("outputs/experiments/E002a/native-probe-07"))
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--device", choices=("cpu", "cuda"), required=True)
     run(parser.parse_args())

@@ -12,14 +12,17 @@ import numpy as np
 import torch
 
 from pedestrian_behavior.accumulation import train_accumulated_epoch
-from pedestrian_behavior.data.feature_cache import FeatureCache, gb_bytes
+from pedestrian_behavior.data.prepared_rgb import PreparedRGB
+from pedestrian_behavior.data.prepared_points import PreparedPoints
+from pedestrian_behavior.data.indexed_points import PROTOCOL as POINT_PROTOCOL
 from pedestrian_behavior.data.multimodal import LogicalBatches, PredictionBatches
 from pedestrian_behavior.data.preparation import checksum
 from pedestrian_behavior.models.multimodal import ARM_FLAGS, MultimodalClassifier
 from . import e001b_run
 from .e001 import CLASSES
-from .e002a_features import (FeatureCatalog, FeatureSupply, FrozenEncoders, extraction_identity,
+from .e002a_features import (FeatureCatalog, FeatureSupply, extraction_identity,
                              load_configuration, validate_roots)
+from pedestrian_behavior.inspection.pretrained import DITR_REVISION, DITR_SHA256, DITR_CONFIG_SHA256
 from .run import run_attempt as execute_attempt, write_json
 
 
@@ -51,18 +54,30 @@ def resource_code():
     from pedestrian_behavior.models import multimodal
     from pedestrian_behavior.data import multimodal as loading
     from pedestrian_behavior import accumulation
-    return {m.__name__: checksum(m.__file__) for m in (multimodal, loading, accumulation)}
+    from pedestrian_behavior.data import indexed_points, prepared_points, prepared_rgb
+    return {m.__name__: checksum(m.__file__) for m in (multimodal, loading, accumulation, indexed_points, prepared_points, prepared_rgb)}
 
 
-class TrainingEncoders(FrozenEncoders):
-    def __init__(self, config, device, require_rgb_cache):
-        super().__init__(config, device)
-        self.require_rgb_cache = require_rgb_cache
+class PreparedSupply:
+    def __init__(self, catalog, rgb, points, identity):
+        self.catalogs = {catalog.dataset: catalog}
+        self.points = points
+        self.rgb_supply = FeatureSupply(self.catalogs, rgb, None, None, identity)
+        self.identity = {"rgb": identity, "points": points.identity if points is not None else None}
 
-    def __call__(self, kind, inputs):
-        if self.require_rgb_cache and kind == "rgb":
-            raise ValueError("RGB cache miss: complete the matching full RGB preparation before the pilot")
-        return super().__call__(kind, inputs)
+    def rgb(self, source, locator):
+        return self.rgb_supply.rgb(source, locator)
+
+    def track_cost(self, source, locator):
+        return self.points.track_cost(locator)
+
+    def point_tensors(self, source, locator):
+        return self.points.iter_track(locator)
+
+
+def indexed_path(args):
+    return args.indexed_point_cache if args.indexed_point_cache is not None else (
+        args.outputs_root / "experiments/E002a" / ("indexed-" + args.source))
 
 
 def validate_profile(profile):
@@ -86,8 +101,7 @@ class FeatureDataset:
         if self.arm != "g-rgb-dditr":
             return 0
         entry = self.entries[index]
-        values = [self.supply.point_cost(self.source, entry["locator"], i) for i in range(entry["slots"])]
-        return None if any(v is None for v in values) else sum(v["tokens"] for v in values)
+        return self.supply.track_cost(self.source, entry["locator"])
 
     def __getitem__(self, index):
         sample = self.baseline[index]
@@ -106,9 +120,7 @@ class FeatureDataset:
             flags.append(torch.from_numpy(rgb["valid"]))
             source_flags["rgb_valid"] = rgb["valid"]
         if self.arm == "g-rgb-dditr":
-            frames = [torch.from_numpy(np.c_[crop["features"], crop["relative_xyz"] / 20,
-                                            crop["inside_box"]].astype(np.float32))
-                      for crop in self.supply.iter_points(self.source, locator)]
+            frames = [torch.from_numpy(value) for value in self.supply.point_tensors(self.source, locator)]
             if len(frames) != n:
                 raise ValueError("LiDAR/geometry complete-track mismatch")
             counts = np.array([len(f) for f in frames], np.int64)
@@ -124,7 +136,8 @@ class FeatureDataset:
 def assembly(args):
     """Open only the source train/validation archives; own resources until attempt exit."""
     config, transform = load_configuration(args.probe) if args.arm != "g" else ({}, None)
-    validate_roots(args, config)
+    point_root = indexed_path(args)
+    validate_roots(argparse.Namespace(**(vars(args) | {"point_cache_root": point_root})), config)
     profile_record = json.loads(args.profile.read_text())
     if profile_record.get("status") != "complete" or profile_record.get("device") != args.device:
         raise ValueError("Completed calibration on the requested device required")
@@ -141,24 +154,30 @@ def assembly(args):
         baseline = e001b_run.assemble(args.source, "geometry", "B", e001_root=args.outputs_root / "experiments/E001",
                                      e001b_root=args.outputs_root / "experiments/E001b")
         catalog = FeatureCatalog(args.outputs_root, args.source, config, transform) if args.arm != "g" else None
-        rgb = points = encoders = supply = identity = None
+        rgb = points = supply = identity = None
         protected = {}
         if catalog is not None:
-            rgb = stack.enter_context(FeatureCache(args.rgb_cache_root, min_free_bytes=gb_bytes(args.min_free_gb)))
+            rgb = PreparedRGB(args.rgb_cache_root)
+            stack.callback(rgb.close)
             if args.arm == "g-rgb-dditr":
-                points = stack.enter_context(FeatureCache(args.point_cache_root, capacity_bytes=gb_bytes(args.point_cache_gb),
-                                                         min_free_bytes=gb_bytes(args.min_free_gb)))
-            encoders = TrainingEncoders(config, args.device, require_rgb_cache=not args.smoke)
-            stack.callback(encoders.release)
+                points = PreparedPoints(point_root, args.source, catalog.identity, catalog.tracks,
+                    {"revision": DITR_REVISION, "checkpoint": DITR_SHA256, "configuration": DITR_CONFIG_SHA256},
+                    allow_partial=args.smoke)
+                stack.callback(points.close)
+                if profile_record.get("point_storage_protocol") != POINT_PROTOCOL:
+                    raise ValueError("Resource calibration for indexed point storage required")
             identity = extraction_identity(args.device, config)
-            supply = FeatureSupply({args.source: catalog}, rgb, points, encoders, identity)
+            supply = PreparedSupply(catalog, rgb, points, identity)
             protected = catalog.protected
+            if points is not None:
+                protected.update(points.protected)
+            protected[str(args.rgb_preparation.resolve())] = checksum(args.rgb_preparation)
             assets = [args.probe / "probe.json", transform, Path(config["dino_weights"])]
             if points is not None:
                 assets += [Path(config[k]) for k in ("ditr_weights", "ditr_config")]
             for path in assets:
                 protected[str(path.resolve())] = checksum(path)
-        if catalog is not None and not args.smoke:
+        if catalog is not None:
             preparation = json.loads(args.rgb_preparation.read_text())
             expected = {k for k in catalog.tracks}
             actual = {t["locator"] for t in preparation.get("tracks", []) if t["dataset"] == args.source}
@@ -190,6 +209,9 @@ def assembly(args):
                 d.entries = [e for e in d.entries if e["locator"] in selected]
                 if not d.entries:
                     raise ValueError("Smoke needs explicit source training and validation tracks")
+            if points is not None:
+                for entry in d.entries:
+                    points.require_track(entry["locator"])
             datasets[split] = FeatureDataset(d, supply, args.source, args.arm)
         full_training_count = sum(t["split"] == "training" for t in full_entries.values())
         warmup = 3 * ((full_training_count + 63) // 64)
@@ -200,9 +222,9 @@ def assembly(args):
 
         def snapshot():
             caches = {k: v for k, v in (("rgb", rgb), ("points", points)) if v is not None}
-            return {**{k: v.snapshot() for k, v in caches.items()}, "encoder_loads": encoders.loads if encoders else {},
+            return {**{k: v.snapshot() for k, v in caches.items()}, "encoder_loads": {},
                     "initial": {k: v.initial for k, v in caches.items()},
-                    "encoder_calls": encoders.calls if encoders else {}, "encoder_seconds": encoders.seconds if encoders else {},
+                    "encoder_calls": {}, "encoder_seconds": {},
                     "host_peak_rss_bytes": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024,
                     "cuda_allocated_bytes": torch.cuda.memory_allocated() if args.device == "cuda" else None,
                     "cuda_reserved_bytes": torch.cuda.memory_reserved() if args.device == "cuda" else None}
@@ -236,9 +258,9 @@ def assembly(args):
         return {"config": {"experiment": "E002a", "arm": args.arm, "fusion_protocol": FUSION_PROTOCOL,
                     "model": model_spec(args.arm), "geometry": "E001b-native-geometry",
                     "frozen_features": identity, "profile": profile, "profile_sha256": checksum(args.profile),
-                    "point_cache_root": str(args.point_cache_root.resolve()) if points is not None else None,
-                    "point_cache_gb": args.point_cache_gb if points is not None else None,
-                    "frozen_encoder_residency": "one encoder retained across misses; calibration reserves 2 GiB" if encoders else None,
+                    "indexed_point_cache": points.identity if points is not None else None,
+                    "point_storage_protocol": POINT_PROTOCOL if points is not None else None,
+                    "feature_supply": "prepared-read-only-no-inference",
                     "rgb_cache_root": str(args.rgb_cache_root.resolve()) if rgb is not None else None, "warmup_updates": warmup,
                     "held_out_tests": False, "exploratory": True},
                 "normalization": baseline["normalization"], "datasets": {args.source: baseline["datasets"][args.source]},
@@ -269,9 +291,8 @@ def add_arguments(parser):
     parser.add_argument("--probe", type=Path, default=Path("outputs/experiments/E002a/native-probe-07"))
     parser.add_argument("--rgb-cache-root", type=Path, default=Path("outputs/experiments/E002a/rgb-cache"))
     parser.add_argument("--rgb-preparation", type=Path, help="Required for full RGB-enabled attempts: matching RGB preparation JSON")
-    parser.add_argument("--point-cache-root", type=Path, default=Path("outputs/experiments/E002a/point-cache"))
-    parser.add_argument("--point-cache-gb", type=float, default=450)
-    parser.add_argument("--min-free-gb", type=float, default=20)
+    parser.add_argument("--indexed-point-cache", type=Path,
+                        help="Completed source cache; default outputs-root/experiments/E002a/indexed-<source>")
     parser.add_argument("--smoke", action="store_true")
     parser.add_argument("--smoke-selection", type=Path, help="Explicit bounded track selection; required for smoke")
 
@@ -279,8 +300,8 @@ def add_arguments(parser):
 def run(args):
     if args.smoke and args.smoke_selection is None:
         raise ValueError("Smoke requires an explicit bounded source train/validation selection")
-    if not args.smoke and args.arm != "g" and args.rgb_preparation is None:
-        raise ValueError("Full attempt requires --rgb-preparation with completed matching RGB preparation")
+    if args.arm != "g" and args.rgb_preparation is None:
+        raise ValueError("RGB-enabled attempt requires --rgb-preparation with completed matching RGB preparation")
     torch.set_num_threads(2)
     return execute_attempt(args.source, args.arm, "Transformer", args.output, args.device, args.smoke,
                            settings=SETTINGS, assemble=lambda *_: assembly(args), classes=CLASSES,

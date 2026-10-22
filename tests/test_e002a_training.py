@@ -299,6 +299,12 @@ class MultimodalTest(unittest.TestCase):
         command = attempt_command(plan[0], Path("outputs/new"), "cuda", ["--profile", "profile.json"])
         self.assertIn("e002a-road-waymo-g-s0", " ".join(command))
         self.assertEqual({t["seed"] for t in plan}, {0})
+        for row in plan:
+            command = attempt_command(row, Path("outputs/new"), "cuda", [], indexed_root=Path("outputs/prepared"))
+            self.assertEqual("--indexed-point-cache" in command, row["arm"] == "g-rgb-dditr")
+            if row["arm"] == "g-rgb-dditr":
+                self.assertIn("outputs/prepared/indexed-" + row["source"], command)
+            self.assertNotIn("--point-cache-gb", command)
         from pedestrian_behavior.experiments.e002a_run import run
         with self.assertRaisesRegex(ValueError, "rgb-preparation"):
             run(SimpleNamespace(smoke=False, arm="g-rgb", rgb_preparation=None))
@@ -339,6 +345,12 @@ class MultimodalTest(unittest.TestCase):
             self.assertTrue(all(p["accuracy_change"] == 0 for p in pairs))
             self.assertIn(("g-rgb-dditr", "g-rgb"), {(p["arm"], p["reference_arm"]) for p in pairs})
             self.assertEqual(result["fusion_protocol"], FUSION_PROTOCOL)
+            point_config = root / "e002a-road-waymo-g-rgb-dditr-s0/config.json"
+            original_config = point_config.read_text()
+            point_config.write_text(json.dumps({"fusion_protocol": FUSION_PROTOCOL, "point_storage_protocol": "pooled"}))
+            with self.assertRaisesRegex(ValueError, "point storage protocols"):
+                summarize(root)
+            point_config.write_text(original_config)
             destination = root / "e002a-loki-g-rgb-dditr-s0/loki-validation/predictions.npz"
             from pedestrian_behavior.evaluation import load_predictions
             tracks = load_predictions(destination)
@@ -376,9 +388,22 @@ class MultimodalTest(unittest.TestCase):
                 path = probe / key
                 path.write_text("fixture-only asset")
                 config[key] = str(path)
+            from test_prepared_points import prepared_fixture
+            from pedestrian_behavior.experiments.e002a_features import FeatureCatalog, extraction_identity
+            from pedestrian_behavior.data.feature_cache import FeatureCache
+            catalog = FeatureCatalog(root, "loki", config, root / "experiments/fixture-transform.json")
+            points_root = prepared_fixture(root / "experiments/E002a/indexed-loki", catalog)
+            rgb_root = root / "experiments/E002a/prepared-rgb"
+            with FeatureCache(rgb_root, min_free_bytes=0) as cache:
+                cache.get({"fixture": True}, lambda: {"values": np.ones(1, np.float32)})
+            rgb_preparation = root / "rgb-preparation.json"
+            rgb_preparation.write_text(json.dumps({"status": "complete", "extraction": extraction_identity("cpu", config),
+                "config": {"rgb_cache_root": str(rgb_root)},
+                "tracks": [{"dataset": "loki", "locator": k} for k in catalog.tracks]}))
             profile = root / "profile.json"
             profile.write_text(json.dumps({"status": "complete", "device": "cpu", "torch": str(torch.__version__), "cuda": torch.version.cuda,
-                                           "code": e002a_run.resource_code(), "profile": PROFILE}))
+                                           "code": e002a_run.resource_code(), "profile": PROFILE,
+                                           "point_storage_protocol": e002a_run.POINT_PROTOCOL}))
             setup = json.loads((root / "experiments/E001/data-setup/loki/setup.json").read_text())
             selection = root / "selection.json"
             selection.write_text(json.dumps({"tracks": [{"dataset": "loki", "locator": t["locator"]} for t in setup["tracks"]
@@ -386,21 +411,18 @@ class MultimodalTest(unittest.TestCase):
             def rgb(supply, dataset, key):
                 n = supply.catalogs[dataset].tracks[key]["slots"]
                 return {"cls": np.ones((n, 768), np.float32), "valid": np.ones(n, bool)}
-            def points(supply, dataset, key):
-                for _ in range(supply.catalogs[dataset].tracks[key]["slots"]):
-                    yield {"features": np.ones((2, 64), np.float32), "relative_xyz": np.ones((2, 3), np.float32), "inside_box": np.ones(2, bool)}
             for arm, fail in (("g", None), ("g-rgb", None), ("g-rgb-dditr", None), ("g-rgb-dditr", "final")):
                 events = []
                 args = SimpleNamespace(source="loki", arm=arm, device="cpu", smoke=True,
                     outputs_root=root, output=root / "experiments/E002a" / ("failed" if fail else arm),
                     probe=probe, profile=profile, smoke_selection=selection,
-                    rgb_cache_root=root / "experiments/E002a" / (arm + "-rgb-cache"),
-                    point_cache_root=root / "experiments/E002a" / (arm + "-point-cache"),
-                    point_cache_gb=450, min_free_gb=0)
+                    rgb_cache_root=rgb_root, rgb_preparation=rgb_preparation, indexed_point_cache=points_root)
                 with patch.object(e002a_run, "load_configuration", return_value=(config, root / "experiments/fixture-transform.json")) as load_config, \
                      patch.object(e002a_run.FeatureSupply, "rgb", side_effect=rgb, autospec=True) as rgb_read, \
-                     patch.object(e002a_run.FeatureSupply, "iter_points", side_effect=points, autospec=True) as point_read, \
-                     patch.object(e002a_run.FeatureSupply, "point_cost", return_value={"tokens": 2, "inside_box_tokens": 2}) as cost_read, \
+                     patch.object(e002a_run.PreparedSupply, "point_tensors", autospec=True,
+                                  side_effect=lambda supply, source, key: supply.points.iter_track(key)) as point_read, \
+                     patch.object(e002a_run.PreparedSupply, "track_cost", autospec=True,
+                                  side_effect=lambda supply, source, key: supply.points.track_cost(key)) as cost_read, \
                      patch("pedestrian_behavior.experiments.run.wandb.init", return_value=FakeRun(events, fail)):
                     if fail:
                         with self.assertRaisesRegex(RuntimeError, "logging"):
@@ -411,8 +433,7 @@ class MultimodalTest(unittest.TestCase):
                     self.assertEqual(load_config.called, arm != "g")
                     self.assertEqual(point_read.called, arm == "g-rgb-dditr")
                     self.assertEqual(cost_read.called, arm == "g-rgb-dditr")
-                self.assertEqual(args.rgb_cache_root.exists(), arm != "g")
-                self.assertEqual(args.point_cache_root.exists(), arm == "g-rgb-dditr")
+                self.assertFalse((root / "experiments/E002a/point-cache").exists())
                 status = json.loads((args.output / "status.json").read_text())
                 self.assertEqual(status["status"], "failed" if fail else "complete")
                 self.assertFalse(any(args.output.glob("*-test")))
@@ -430,6 +451,21 @@ class MultimodalTest(unittest.TestCase):
                 step = next(e for e in events if "train/loss_step" in e)
                 self.assertIn("train/learning_rate", step)
                 self.assertEqual(json.loads((args.output / "protected.json").read_text())["changed"], [])
+                provenance = json.loads((args.output / "provenance.json").read_text())
+                self.assertEqual(provenance["runtime"]["encoder_calls"], {})
+                self.assertEqual(checkpoint["config"]["feature_supply"], "prepared-read-only-no-inference")
+                self.assertEqual(checkpoint["config"]["point_storage_protocol"],
+                                 e002a_run.POINT_PROTOCOL if arm == "g-rgb-dditr" else None)
+            # In-progress cache roots must fail before creating a cloud run or falling back.
+            (points_root / "manifest.json").unlink()
+            args.output = root / "experiments/E002a/missing-manifest"
+            with patch.object(e002a_run, "load_configuration", return_value=(config, root / "experiments/fixture-transform.json")), \
+                 patch("pedestrian_behavior.experiments.run.wandb.init") as initialize, \
+                 self.assertRaises(FileNotFoundError):
+                e002a_run.run(args)
+            initialize.assert_not_called()
+            self.assertEqual(json.loads((args.output / "status.json").read_text())["status"], "failed")
+            self.assertFalse((root / "experiments/E002a/point-cache").exists())
 
 
 if __name__ == "__main__":

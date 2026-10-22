@@ -411,7 +411,7 @@ The [pilot specification](experiments/E002a-feature-feasibility/README.md#deferr
 
 ### E002a feature caches
 
-The [cache inventory](experiments/E002a-feature-feasibility/README.md#cache-inventory-and-retirement--2026-10-22) records current paths. The old450 GB point LRU was deleted at the user's request; geometry and geometry+RGB training remain independent of it. Legacy LiDAR commands below would recreate that cache. Indexed storage passes bounded checks; full preparation and training integration remain pending. Existing prototype shards remain usable, while new preparation extracts directly from native sweeps.
+The [cache inventory](experiments/E002a-feature-feasibility/README.md#cache-inventory-and-retirement--2026-10-22) records current paths. The old450 GB point LRU was deleted at the user's request; geometry and geometry+RGB training remain independent of it. Historical LRU cache utilities below can recreate that cache; current training cannot. Indexed storage and training wiring pass bounded checks; full preparation and operational acceptance remain pending. Existing prototype shards remain usable, while new preparation extracts directly from native sweeps.
 
 The standalone indexed builder reads native LiDAR directly and does not use the retired LRU. The verified builder checkout on aalto is `/home/user20/projects/pedestrian-behavior-labeling-indexed-build`; its outputs alias the canonical root. It leaves the other checkouts unchanged. From that checkout, prepare **one source at a time**:
 
@@ -479,38 +479,48 @@ Defaults use `native-probe-07`, `output-pooling-20261022/measurement.json`, `exe
 
 ### E002a source-validation pilot
 
-The first full attempt exposed a [population-scale input-pipeline bottleneck](experiments/E002a-feature-feasibility/README.md#full-population-throughput-check--2026-10-22); meet the [agreed throughput gate](experiments/E002a-feature-feasibility/README.md#throughput-gate--agreed-2026-10-22) before further pilot execution. The gate is a documentation prerequisite, not an automated launcher check. Commands below remain the reproducibility interface. Run from `/home/user20/projects/pedestrian-behavior-labeling-review` on `aalto`, using the calibrated RTX4080 extractor environment. The completed preparation record and resource profile are explicit inputs; changing model/execution code or backend requires new calibration. The enabled-branch revision uses65/194/323→256 fusion and records `fusion_protocol=enabled-branches-v2`; profile05 belongs to the previous protocol and is rejected by changed model/execution hashes. Create a fresh calibration (commands below) before using these examples. Full RGB-enabled attempts reject incomplete/mismatched RGB preparation and RGB misses; geometry requires neither RGB preparation nor an encoder probe and opens no feature caches. Only the LiDAR arm fills/reads the450 GB point LRU. Geometry+RGB never queries point costs. Fresh attempt/sweep outputs only; no automatic restart/resume.
+The first full attempt exposed a [population-scale input-pipeline bottleneck](experiments/E002a-feature-feasibility/README.md#full-population-throughput-check--2026-10-22); meet the [agreed throughput gate](experiments/E002a-feature-feasibility/README.md#throughput-gate--agreed-2026-10-22) before further pilot execution. The gate remains a documentation prerequisite, not an automated launcher check. **Current training reads prepared caches only:** RGB NPZ/SQLite are read-only and LiDAR uses the source's completed indexed cache. No encoder loading, native feature generation, point LRU or fallback on a miss. Geometry reads neither cache; geometry+RGB never opens a point cache or asks for point costs. Enabled-only65/194/323→256 fusion, normalization, settings and source-validation selection are unchanged.
+
+Use the isolated training checkout on aalto, with shared canonical outputs and explicit `PYTHONPATH`; the active dataset-builder checkout stays unchanged. Complete both source caches before the six-attempt launcher. A missing/incomplete/wrong-population cache fails before W&B initialization. The supplied source manifest and all small scene manifests are pinned and checked; binary chunks are verified on access. Packing costs come from precomputed counts, without opening feature payloads or running inference. Full attempts reject partial caches; smoke attempts may use partial roots only if every selected complete track is covered.
+
+After preparation, recalibrate the indexed execution path in the extractor environment (fresh output directories):
 
 ```bash
 probe_root="$PWD/outputs/experiments/E002a"
-uv run --no-project --python "$probe_root/extractor-env/bin/python" python scripts/train-e002a-pilot.py \
-  --device cuda \
-  --profile "$probe_root/my-calibration/profile.json" \
-  --rgb-preparation "$probe_root/rgb-cache-preparation-03/cache.json"
+export PYTHONPATH="$PWD/src"
+uv run --no-project --python "$probe_root/extractor-env/bin/python" python scripts/calibrate-e002a.py \
+  --device cuda --indexed-cache-root "$probe_root" --output "$probe_root/my-indexed-calibration"
+uv run --no-project --python "$probe_root/extractor-env/bin/python" python scripts/smoke-e002a.py \
+  --profile "$probe_root/my-indexed-calibration/profile.json" \
+  --rgb-preparation "$probe_root/rgb-cache-preparation-03/cache.json" \
+  --indexed-cache-root "$probe_root" --output "$probe_root/my-indexed-integration"
 ```
 
-This manually starts six **sequential**, seed0 attempts: ROAD-Waymo then LOKI, each `g`, `g-rgb`, `g-rgb-dditr`. Names are `e002a-<source>-<arm>-s0`; outputs live under a fresh `outputs/experiments/E002a/runs/pilot-<time>/`. It trains on full frozen source training, selects on full source validation, and never opens held-out tests.100 epochs maximum/patience15, effective64 tracks and update-based warmup are fixed. `--point-cache-gb` and cache roots remain configurable. One cache owner/attempt at a time; run after preparation has completed. Read progress in `sweep.json`, per-run `history.json`, `steps.jsonl`, `packing.jsonl` and W&B. Final paired validation changes (including LiDAR versus RGB) and PNG/SVG comparison are generated from saved predictions after all six finish; rerun with `scripts/summarize-e002a.py <pilot-directory>`.
+Calibration retains the six complete development tracks and labelled shape stresses, reads their new pooled points and existing3× RGB fixtures, and measures real CE/backward/AdamW plus spatial concurrency. It preserves the78% VRAM allocation ceiling; frozen-miss reserve is zero because no encoder runs during fitting. Profile hashes/backend/GPU must match; the LiDAR arm additionally requires the indexed point protocol. The smoke command makes first/repeated prepared reads (not guaranteed physically cold/warm disk) on both sources with actual W&B and checkpoint/plot/prediction reconstruction. These are operational checks, not comparison results. Run them after builders finish; full-population throughput acceptance is still separate.
 
-For one attempt, use the same profile/preparation arguments:
+Then the manual six-attempt interface is:
+
+```bash
+uv run --no-project --python "$probe_root/extractor-env/bin/python" python scripts/train-e002a-pilot.py \
+  --device cuda --profile "$probe_root/my-indexed-calibration/profile.json" \
+  --rgb-preparation "$probe_root/rgb-cache-preparation-03/cache.json" \
+  --indexed-cache-root "$probe_root"
+```
+
+Six sequential seed0 attempts: ROAD-Waymo then LOKI, each `g`, `g-rgb`, `g-rgb-dditr`; names `e002a-<source>-<arm>-s0`. Fresh outputs under `outputs/experiments/E002a/runs/pilot-<time>/`;100 epochs/patience15, effective64 tracks and warmup remain fixed. Both training and selection use frozen source development splits only. Read `sweep.json`, `history.json`, `steps.jsonl`, `packing.jsonl`, runtime read counters and W&B. Final paired validation changes/PNG/SVG comparisons are generated after all six; summaries reject mixed fusion or point-storage protocols. No retry/resume.
+
+For one LiDAR attempt, replace the launcher with:
 
 ```bash
 uv run --no-project --python "$probe_root/extractor-env/bin/python" python scripts/train-e002a.py \
   --source road-waymo --arm g-rgb-dditr --device cuda \
-  --profile "$probe_root/my-calibration/profile.json" \
+  --profile "$probe_root/my-indexed-calibration/profile.json" \
   --rgb-preparation "$probe_root/rgb-cache-preparation-03/cache.json" \
+  --indexed-point-cache "$probe_root/indexed-road-waymo" \
   --output "$probe_root/runs/my-fresh-attempt"
 ```
 
-Reproduce operational checks separately with fresh evidence outputs:
-
-```bash
-uv run --no-project --python "$probe_root/extractor-env/bin/python" python scripts/calibrate-e002a.py \
-  --device cuda --output "$probe_root/my-calibration"
-uv run --no-project --python "$probe_root/extractor-env/bin/python" python scripts/smoke-e002a.py \
-  --profile "$probe_root/my-calibration/profile.json" --output "$probe_root/my-integration-check"
-```
-
-Calibration uses six existing complete development fixtures and explicitly labelled repeated/tiled shape stresses, real CE/backward/clipping/AdamW, ordinary/recomputed execution and frame concurrency1/2/4. It does not select a behavior model. The integration command runs cold/warm bounded source-validation smoke attempts on both datasets, with actual W&B, checkpoints and plot/prediction reconstruction. These operational runs are not comparison results. [Acceptance and artifact paths](experiments/E002a-feature-feasibility/README.md#model-and-training-acceptance--2026-10-21).
+`--indexed-point-cache` defaults to `outputs-root/experiments/E002a/indexed-<source>`; the sweep's `--indexed-cache-root` is their parent. Retired training options `--point-cache-root`, `--point-cache-gb`, `--min-free-gb` are removed; storage capacity/headroom belong to preparation. Geometry (`--arm g`) needs neither RGB preparation, point cache nor encoder probe. The existing [cache inventory](experiments/E002a-feature-feasibility/README.md#cache-inventory-and-retirement--2026-10-22) distinguishes training dependencies from historical fixtures.
 
 The [DINO patch visual check](experiments/E002a-feature-feasibility/README.md#dino-patch-visual-check--2026-10-19) adds PCA/similarity panels and a corrected crop gallery from the same development sample: `scripts/check-e002a-rgb.py --help`. It reuses the completed probe and original checkpoint without a segmentation head or training.
 

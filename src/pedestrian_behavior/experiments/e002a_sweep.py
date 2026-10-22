@@ -15,9 +15,11 @@ def attempts():
             for d in ("road-waymo", "loki") for arm in ARMS]
 
 
-def attempt_command(row, output, device, options):
+def attempt_command(row, output, device, options, indexed_root=None):
     return [sys.executable, "scripts/train-e002a.py", "--source", row["source"], "--arm", row["arm"],
-            "--device", device, "--output", str(output / row["name"])] + options
+            "--device", device, "--output", str(output / row["name"])] + options + (
+                ["--indexed-point-cache", str(indexed_root / ("indexed-" + row["source"]))]
+                if indexed_root is not None and row["arm"] == "g-rgb-dditr" else [])
 
 
 def main():
@@ -28,12 +30,12 @@ def main():
     parser.add_argument("--rgb-preparation", type=Path, required=True)
     parser.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
     parser.add_argument("--rgb-cache-root", type=Path, default=Path("outputs/experiments/E002a/rgb-cache"))
-    parser.add_argument("--point-cache-root", type=Path, default=Path("outputs/experiments/E002a/point-cache"))
-    parser.add_argument("--point-cache-gb", type=float, default=450)
+    parser.add_argument("--indexed-cache-root", type=Path, default=Path("outputs/experiments/E002a"),
+                        help="Parent of indexed-road-waymo and indexed-loki")
     args = parser.parse_args()
-    options = ["--profile", str(args.profile), "--rgb-preparation", str(args.rgb_preparation), "--rgb-cache-root", str(args.rgb_cache_root),
-               "--point-cache-root", str(args.point_cache_root), "--point-cache-gb", str(args.point_cache_gb)]
-    run_sweep(args.output, attempts(), partial(attempt_command, options=options), jobs=1, seeds=(0,), device=args.device,
+    options = ["--profile", str(args.profile), "--rgb-preparation", str(args.rgb_preparation),
+               "--rgb-cache-root", str(args.rgb_cache_root)]
+    run_sweep(args.output, attempts(), partial(attempt_command, options=options, indexed_root=args.indexed_cache_root), jobs=1, seeds=(0,), device=args.device,
               settings={"epochs": SETTINGS["epochs"], "patience": SETTINGS["patience"], "held_out_tests": False,
                         "kind": "exploratory-source-validation", "fusion_protocol": FUSION_PROTOCOL, "profile": str(args.profile)})
     from .e002a_summary import summarize

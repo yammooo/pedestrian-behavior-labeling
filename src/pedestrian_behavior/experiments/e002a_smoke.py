@@ -1,4 +1,4 @@
-"""Four bounded integration attempts: cold/warm supply on each source, no tests."""
+"""Four bounded integration attempts: first/repeated prepared reads, source validation only."""
 
 import argparse
 import json
@@ -69,13 +69,13 @@ def run(args):
               "profile_sha256": checksum(args.profile), "attempts": [], "failures": []}
     try:
         for source in ("loki", "road-waymo"):
-            for state in ("cold", "warm"):
+            for state in ("first", "repeat"):
                 output = args.output / (source + "-" + state)
                 command = [sys.executable, "scripts/train-e002a.py", "--source", source, "--arm", "g-rgb-dditr",
                     "--outputs-root", str(args.outputs_root), "--probe", str(args.probe),
                     "--device", "cuda", "--smoke", "--smoke-selection", str(chosen), "--profile", str(args.profile),
-                    "--rgb-cache-root", str(args.output / "rgb"), "--point-cache-root", str(args.output / "points"),
-                    "--point-cache-gb", "450", "--output", str(output)]
+                    "--rgb-cache-root", str(args.rgb_cache_root), "--rgb-preparation", str(args.rgb_preparation),
+                    "--indexed-point-cache", str(args.indexed_cache_root / ("indexed-" + source)), "--output", str(output)]
                 with (args.output / (source + "-" + state + ".log")).open("w") as log:
                     subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, check=True)
                 record["attempts"].append(audit(output, source) | {"state": state, "command": command})
@@ -93,6 +93,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--profile", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--rgb-preparation", type=Path, required=True)
+    parser.add_argument("--rgb-cache-root", type=Path, default=Path("outputs/experiments/E002a/rgb-cache"))
+    parser.add_argument("--indexed-cache-root", type=Path, default=Path("outputs/experiments/E002a"))
     parser.add_argument("--outputs-root", type=Path, default=Path("outputs"))
     parser.add_argument("--probe", type=Path, default=Path("outputs/experiments/E002a/native-probe-07"))
     parser.add_argument("--fixtures", type=Path, default=Path("outputs/experiments/E002a/execution-probe-04"))

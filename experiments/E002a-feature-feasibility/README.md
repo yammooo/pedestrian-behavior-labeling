@@ -501,6 +501,25 @@ The [command](../../README.md#e002a-feature-caches) writes a fresh diagnostic re
 
 [Raw measurement/protected hashes](../../outputs/experiments/E002a/output-pooling-20261022/measurement.json) · [byte-ratio sizing arithmetic](../../outputs/experiments/E002a/output-pooling-20261022/sizing.json) · [standalone report](../../outputs/experiments/E002a/output-pooling-20261022/report.md). Acceptance: full CPU163 tests pass (nine CUDA skips); the four pooling/serialization checks also pass in the actual cu126 extractor environment without GPU work. Hand-calculated checks cover means, negative/grid boundaries, original-token preservation, independent inverse reconstruction, target mixing and FP32/FP16 serialization. No CUDA path or production feature code changed.
 
+### Target-specific two-resolution epoch estimate — 2026-10-22
+
+**Proposed design, not implemented:** cache shared20 cm coarse tokens plus original5 cm tokens for occupied coarse cells containing an original token inside any represented cuboid expanded0.5 m on each side. Each target's precomputed uint32 index selects original tokens from its own marked cells and coarse tokens elsewhere within20 m; no coarse/fine duplicate cells or repeated resolution search during training. Other pedestrians retain coarse resolution unless inside that target's own refined cells. Keeping both tiers increases storage over the earlier354/200 GB estimate; that exact layout has not been sized.
+
+**Analytical full training+source-validation forecast on aalto, not a measured epoch or gate acceptance.** Assumes a completed persistent source cache, no encoder misses, spatially ordered uncompressed indexed arrays with efficient selected-row reads/checks, FP16 or FP32 storage read into the unchanged FP32 model, full tracks and no pipeline-overlap credit. The exact two-tier loader/token counts are unmeasured; previous shared-adaptive crop fractions are proxies, not guarantees.
+
+| Dataset/scenario | FP16 feature storage | FP32 feature storage |
+|---|---:|---:|
+| ROAD optimistic |18 min|21 min|
+| ROAD planning |27 min|34 min|
+| ROAD conservative |54 min|75 min|
+| LOKI planning, weak point-count bracket |19–32 min|23–40 min|
+
+ROAD planning uses3.40 billion selected point instances: **490 GB FP16 /926 GB FP32 selected reads per epoch**, despite a much smaller shared resident cache. Overlapping pedestrians revisit rows. At an assumed effective1 GB/s, reading contributes8.2/15.4 min; CPU gathering/relative geometry/FP16 conversion3.6/3.2 min; training model+transfer13.0 min; validation model+transfer1.4 min; geometry/RGB/remaining collation/packing/checkpoint/logging allowance1 min. Transfer is included in model calibration, not added twice.
+
+Model arithmetic fits nonnegative point/frame/microbatch terms to three original-token ROAD development shapes from the enabled-branches-v2 resource calibration at5efb36c. It preserves per-frame overhead rather than scaling the entire epoch only by token reduction. CPU gather rates come from the previous warm pooling diagnostic. Validation/train model-cost ratio0.4 and effective read bandwidth1 GB/s are assumptions. Optimistic uses2 GB/s and lower token/model costs; conservative0.4 GB/s, more tokens and slower execution/validation. These are planning scenarios, not confidence intervals or formal worst-case bounds. LOKI's broader underlying point-count bracket and absent validation sample limit its estimate further. One-time encoding/preparation is excluded only once complete; no production cache or attempt was changed for this forecast.
+
+**Decision:** indexed FP16 storage makes the30-minute target plausible, but neither cache fit nor this forecast passes the conservative gate. Indexing alone cannot make whole-frame NPZ reads efficient. Next decisive check is representative complete-track partial-read loading plus actual pooled model forward/backward and validation, with integrity checks and sustained cold/limited-RAM I/O; avoid rebuilding the full cache before that check. [Exact formulas, source hashes and scenario budgets](../../outputs/experiments/E002a/epoch-estimate-20261022/estimate.json) · [standalone report](../../outputs/experiments/E002a/epoch-estimate-20261022/report.md).
+
 ### Throughput gate — agreed 2026-10-22
 
 **Before further full training, target strictly under30 minutes for a conservative worst-case complete training+source-validation epoch on aalto**, for both source populations and every pilot arm. Include loading/native decoding, cache verification/writes and eviction misses, transfer, forward/backward/optimizer, full validation and routine checkpoint/logging costs. Verify representative complete64-track updates, long/dense cases and cold as well as sustained LRU-pressure conditions; an all-hit toy example cannot pass this gate. This is an acceptance target, not an achieved result or universal wall-time guarantee. Build6050233 fails it.

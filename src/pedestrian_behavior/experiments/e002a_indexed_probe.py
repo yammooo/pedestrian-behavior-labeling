@@ -205,6 +205,28 @@ def benchmark_loading(args,record):
     print("Indexed loading complete",flush=True)
 
 
+def benchmark_population_loading(args,record):
+    requests = [(item,s) for item in record["population"] for s in item["metadata"]["selections"]]
+    order = np.random.default_rng(0).permutation(len(requests)).tolist()
+    for phase in ("warm-files-fresh-verification","warm-files-memoized","advisory-cold-fresh-verification"):
+        if phase != "warm-files-memoized":
+            readers = open_shards(args,record,"population")
+        if phase.startswith("advisory"):
+            all([r.evict_pages() for r in readers.values()])
+            readers = open_shards(args,record,"population")
+        snapshots = {name:dict(r.stats) for name,r in readers.items()}
+        for i in order:
+            item,selection=requests[i]
+            before=time.perf_counter()
+            points=readers[item["shard"]].crop(item["key"],selection["locator"])
+            record["population_loads"].append({"phase":phase,"dataset":item["dataset"],"group":item["group"],
+                "tokens":len(points),"seconds":time.perf_counter()-before})
+        record["load_traffic"]["population/"+phase] = {k:sum(r.stats[k]-snapshots[name][k] for name,r in readers.items()) for k in next(iter(readers.values())).stats}
+        if phase != "warm-files-fresh-verification":
+            for reader in readers.values():reader.close()
+    print("Full-cohort population loading complete",flush=True)
+
+
 def benchmark_model(args,record):
     if args.device=="cuda" and torch.cuda.mem_get_info()[0] < 10*2**30:
         raise RuntimeError("Prototype needs10GiB free VRAM; no active process is stopped")
@@ -260,13 +282,14 @@ def run(args):
     record={"status":"running","started_utc":datetime.now(timezone.utc).isoformat(),"command":sys.orig_argv,
         "revision":subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip(),"protocol":PROTOCOL,
         "torch":str(torch.__version__),"numpy":np.__version__,"device":args.device,
-        "population":[],"tracks":[],"shards":{},"loads":[],"load_traffic":{},"model":[],"protected":protected,
+        "population":[],"tracks":[],"shards":{},"loads":[],"population_loads":[],"load_traffic":{},"model":[],"protected":protected,
         "scope":"Bounded prototype only. Original36 frames for sizing, six complete source development tracks for loading/model timings. Tracks' saved unions contain selected fixture participants, not the full population. No encoder inference, production writes, comparison training or W&B. Advisory eviction only own immutable shard files; no global drop_caches.512 memoized verified chunks per scene."}
     begin=time.perf_counter()
     try:
         prepare_population(args,record,protected)
         prepare_tracks(args,record,protected)
         benchmark_loading(args,record)
+        benchmark_population_loading(args,record)
         benchmark_model(args,record)
         record["status"]="complete"
     except BaseException:

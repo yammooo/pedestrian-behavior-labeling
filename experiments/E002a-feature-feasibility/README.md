@@ -1,6 +1,6 @@
 # E002a — First multimodal behavior pilot
 
-**Agreed pilot specification, updated 2026-10-22.** First behavior pilot within [E002](../E002-multimodal-reference/README.md). Scope, branch/tensor interfaces, dropout, fitting, batching policy and450 GB point-cache budget are settled below. The [model, trainer and manual commands](#model-and-training-acceptance--2026-10-21) are implemented, with bounded GPU operational checks; full RGB preparation and all-entry readback are complete. Modality benefit and final research architecture remain hypotheses. The first full ROAD geometry attempt is active; the [population-scale throughput check](#full-population-throughput-check--2026-10-22) reveals an input-pipeline problem. No full attempt has completed. Completed extraction/resource/semantic probes are [preparatory evidence](#preparatory-work), not separate behavior experiments. Later E002 comparisons may use different architectures.
+**Agreed pilot specification, updated 2026-10-22.** First behavior pilot within [E002](../E002-multimodal-reference/README.md). Scope, branch/tensor interfaces, dropout, fitting, batching policy and450 GB point-cache budget are settled below. The [model, trainer and manual commands](#model-and-training-acceptance--2026-10-21) are implemented, with bounded GPU operational checks; full RGB preparation and all-entry readback are complete. Modality benefit and final research architecture remain hypotheses. At the2026-10-22 snapshot, build6050233's first full ROAD geometry attempt was active; the [population-scale throughput check](#full-population-throughput-check--2026-10-22) reveals an input-pipeline problem. No full attempt had completed at that snapshot. Completed extraction/resource/semantic probes are [preparatory evidence](#preparatory-work), not separate behavior experiments. Later E002 comparisons may use different architectures.
 
 The existing directory name is retained for stable commands, artifact references and links. This record owns the pilot specification, preparation, fitting settings and eventual behavior results.
 
@@ -194,6 +194,7 @@ Agreed fitting settings:
 | Optimizer | AdamW, peak LR0.0003 for every trainable module, betas(.9,.999), epsilon1e-8, weight decay1e-4 on all trainable parameters, including biases/LayerNorm/spatial seed |
 | Updates | Deterministic FP32; effective batch64 complete tracks via equal-track accumulation; retain final partial update; global gradient clip1 once after accumulation, before stepping |
 | Schedule/budget | Three epochs of update-based linear warmup, then constant LR0.0003; maximum100 epochs including warmup, patience15 |
+| Execution gate | [Conservative worst-case complete epoch under30 minutes](#throughput-gate--agreed-2026-10-22), including training and full source validation; not met by build6050233 |
 | Selection | Highest source-validation track-weighted macro-F1; exact ties lower CE, then earlier epoch; patience resets only for strict F1 improvement |
 | Augmentation | Natural missingness and ordinary network dropout; no modality/crop augmentation initially |
 
@@ -403,6 +404,8 @@ These are tiny operational attempts, not behavior comparisons or epoch forecasts
 
 Read-only inspection at03:53 UTC of the user-launched `pilot-20261021-183026-855079/e002a-road-waymo-g-s0`, code `6050233`. [Progress/cache/process snapshot](../../outputs/experiments/E002a/throughput-check-20261022/snapshot.json) · [actual W&B step timestamps](../../outputs/experiments/E002a/throughput-check-20261022/wandb-timing.json) · [run81h8shqe](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/81h8shqe).
 
+**Historical measurement scope:** the snapshot, diagnosis and timings below describe the named October21–22 builds, populations, hardware/backend and cache conditions. They are not timeless properties of E002a, D-DITR or future loaders. Preserve them as evidence; after an execution/cache change, record new measurements and their revision rather than carrying these rates forward as current facts.
+
 | Measure | Observed |
 |---|---:|
 | Elapsed / completed epochs |9 h23 min /0|
@@ -418,6 +421,32 @@ At the recent rate, the remaining36 training updates alone would take about8.1 h
 
 Recommended next increment: derive exact availability/cost metadata from native voxel coordinates without encoder inference, verify parity with existing crop counts/flags, and keep geometry/RGB fitting independent of point-feature payloads. Then measure representative full64-track cold/warm multimodal updates and native/cache stage costs before proceeding with the sweep. Preserve existing valid cache entries, every track/token, frozen data and scientific settings. This inspection changes no training code or running process; execution-path changes need measured parity/throughput acceptance. No architecture change or new encoder is justified by this bottleneck.
 
+### Build-scoped hit/miss costs
+
+Measured on2026-10-21 at **`7940c21`**, RTX4080 Laptop GPU / pinned cu126 extractor environment, using `g-rgb-dditr` smoke attempts with three complete training tracks plus one source-validation track per dataset. These are averages over that small sample, not population latency bounds. A request is one pedestrian/timestep lookup into a shared frame union, not a whole track or optimizer update. [Recorded counters](../../outputs/experiments/E002a/model-integration-final/artifact-audit.json) · [source provenance: LOKI cold](../../outputs/experiments/E002a/model-integration/loki-cold/provenance.json) / [warm](../../outputs/experiments/E002a/model-integration/loki-warm/provenance.json), [ROAD cold](../../outputs/experiments/E002a/model-integration/road-waymo-cold/provenance.json) / [warm](../../outputs/experiments/E002a/model-integration/road-waymo-warm/provenance.json).
+
+| Dataset | Warm hits measured | Mean hit read/check/load | Cold misses measured | Mean miss production | Mean write | Production + write |
+|---|---:|---:|---:|---:|---:|---:|
+| LOKI |148|43.0 ms|117|365.2 ms|61.3 ms|426.5 ms|
+| ROAD-Waymo |310|73.9 ms|219|667.2 ms|72.7 ms|739.9 ms|
+
+Hit timing includes file/OS-cache→RAM, SHA verification, NPZ loading/validation and LRU-index update; it excludes later crop construction and RAM→VRAM transfer. Files/OS cache were warm, with no page-cache flush: this is not isolated physical-disk latency. Miss production includes native frame decoding, encoder preprocessing/inference and union construction; additional scene indexing/planning outside that timer is excluded. ROAD's219 misses total146.1 s production, including58.9 s in the encoder wrapper, plus15.9 s writing. Its warm310 reads total22.9 s for8.84 GB. These counters do not partition the nine-hour full run. In build6050233's geometry arm, cached point features are used for counts/flags on the CPU and are not uploaded to the trainable spatial branch; this observation does not establish transfer cost or memory pressure for the LiDAR arm.
+
+**Illustrative supply-only extrapolations, not measured epochs:** frozen input masks imply322,302 LOKI /380,994 ROAD requests per complete training+validation epoch ([trace counts](../../outputs/experiments/E002a/cache-simulation-02/simulation.json), build6729110). Assuming the small-sample mean costs apply uniformly:
+
+| Dataset | All requests hit | Hypothetical10% misses | All-hit bytes read |
+|---|---:|---:|---:|
+| LOKI |3.85 h|7.28 h|5.14 TB|
+| ROAD-Waymo |7.82 h|14.87 h|10.86 TB|
+
+ROAD has302,264 training +78,730 validation lookups. At73.876 ms each, `380,994 ×0.073876 /3600 ≈7.82 h`; one shared frame union can be reread for several pedestrians. General formula: `requests × ((1−m) × hit_seconds + m × (production_seconds + write_seconds)) /3600`. Here `m=0.1` is an assumed miss fraction, not a measured full-population hit rate. Union sizes/locality may differ across the population; extra indexing, crop/transfer, model, validation and reporting work is omitted. The calculation warns that higher hit rate alone may be insufficient for this build, not that future implementations require these epoch times. [Exact inputs, source hashes and calculations](../../outputs/experiments/E002a/throughput-check-20261022/timing-budget.json).
+
+### Throughput gate — agreed 2026-10-22
+
+**Before further full training, target strictly under30 minutes for a conservative worst-case complete training+source-validation epoch on aalto**, for both source populations and every pilot arm. Include loading/native decoding, cache verification/writes and eviction misses, transfer, forward/backward/optimizer, full validation and routine checkpoint/logging costs. Verify representative complete64-track updates, long/dense cases and cold as well as sustained LRU-pressure conditions; an all-hit toy example cannot pass this gate. This is an acceptance target, not an achieved result or universal wall-time guarantee. Build6050233 fails it.
+
+One-time preparation may be budgeted separately if it is explicitly completed before fitting; report that cost and include every miss still possible during training in the epoch estimate. After cache/loader/backend/hardware changes, rerun timing and parity checks, record the tested revision/configuration and replace the current forecast with new evidence. Do not meet the target by silently dropping tracks/tokens or changing scientific settings. The gate is a documented execution prerequisite; no automatic runtime cutoff or launcher enforcement is implemented by this documentation update.
+
 ## Before implementation and execution
 
 Scientific specification and bounded correctness/memory acceptance are complete. The population-scale throughput follow-up above must be addressed before further execution:
@@ -427,8 +456,8 @@ Scientific specification and bounded correctness/memory acceptance are complete.
 | Population/preparation | Complete full3× RGB cache and frozen GT/class/missing-input readback above; existing populations/GT unchanged |
 | Model/trainer | Implemented; masks, equal-track accumulation, update warmup and source-validation selection accepted |
 | Feature supply | Persistent RGB complete; lazy point supply/configurable450 GB LRU and persistent input-only cost references accepted |
-| Resource calibration | Final model profile05 and both-dataset cold/warm/final-profile smoke accepted; full-epoch throughput unknown |
-| Evidence/handoff | Local/cloud audit, prediction reconstruction, failure propagation and manual commands accepted; full pilot unlaunched |
+| Resource calibration | Bounded profile05 correctness/memory checks accepted; conservative under30 min full-epoch gate not met by build6050233 |
+| Evidence/handoff | Local/cloud audit and manual commands accepted for bounded correctness; first full attempt exposed poor throughput in the2026-10-22 snapshot |
 
 Acceptance before the six exploratory attempts:
 

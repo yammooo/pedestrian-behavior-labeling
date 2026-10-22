@@ -1,6 +1,6 @@
 # E002 — Multimodal offline reference
 
-**Overview, updated 2026-10-22.** E002 groups the multimodal offline-labeling direction. Each concrete comparison owns its architecture, settings, preparation and results; the first is [E002a](../E002a-feature-feasibility/README.md). Its model/trainer are implemented and bounded GPU integration is checked; the first full geometry attempt is active, with poor population-scale input throughput.
+**Overview, updated 2026-10-22.** E002 groups the multimodal offline-labeling direction. Each concrete comparison owns its architecture, settings, preparation and results; the first is [E002a](../E002a-feature-feasibility/README.md). Its model/trainer are implemented and bounded GPU integration is checked; the2026-10-22 snapshot of build6050233 records the first full geometry attempt active with poor population-scale input throughput.
 
 ## Question and interpretation
 
@@ -20,6 +20,6 @@ E002a's architecture is specific to that pilot. Later comparisons may revise it 
 
 Retain the given-track, full-record offline contract, eligible missing-observation/3D-only pedestrians and explicit GT/input masks. Predeclare populations, splits, source-only fitting, model-selection access and budgets under the [shared evaluation safeguards](../README.md#strict-zero-shot-access). Disclose test-informed development, pretrained exposure and any target-informed choices; frozen encoders do not erase prior access.
 
-RGB preparation/readback and [operational acceptance](../E002a-feature-feasibility/README.md#model-and-training-acceptance--2026-10-21) are complete. The first full attempt is active. Resolve the [input-pipeline throughput issue](../E002a-feature-feasibility/README.md#full-population-throughput-check--2026-10-22) before further pilot execution. Semantic quality and feature visualizations support feasibility; they do not establish behavior usefulness. Feature caches and training are implemented; bounded smoke attempts are operational evidence only.
+RGB preparation/readback and [operational acceptance](../E002a-feature-feasibility/README.md#model-and-training-acceptance--2026-10-21) are complete. The2026-10-22 snapshot records the first full attempt active. Resolve the [input-pipeline throughput issue](../E002a-feature-feasibility/README.md#full-population-throughput-check--2026-10-22) and meet the [agreed epoch-time gate](../E002a-feature-feasibility/README.md#throughput-gate--agreed-2026-10-22) before further pilot execution. Semantic quality and feature visualizations support feasibility; they do not establish behavior usefulness. Feature caches and training are implemented; bounded smoke attempts are operational evidence only.
 
 Later modality ablations remain deferred: geometry+availability, +RGB, +LiDAR without RGB, +both. Five seeds × two sources × four variants would require 40 attempts / 80 test cells, separately authorized after pilot settings freeze. Their detailed architecture and protocol remain unset.

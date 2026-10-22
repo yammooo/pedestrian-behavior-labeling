@@ -441,6 +441,34 @@ Hit timing includes file/OS-cache→RAM, SHA verification, NPZ loading/validatio
 
 ROAD has302,264 training +78,730 validation lookups. At73.876 ms each, `380,994 ×0.073876 /3600 ≈7.82 h`; one shared frame union can be reread for several pedestrians. General formula: `requests × ((1−m) × hit_seconds + m × (production_seconds + write_seconds)) /3600`. Here `m=0.1` is an assumed miss fraction, not a measured full-population hit rate. Union sizes/locality may differ across the population; extra indexing, crop/transfer, model, validation and reporting work is omitted. The calculation warns that higher hit rate alone may be insufficient for this build, not that future implementations require these epoch times. [Exact inputs, source hashes and calculations](../../outputs/experiments/E002a/throughput-check-20261022/timing-budget.json).
 
+### Storage-layout estimates — 2026-10-22
+
+**Estimates for the October22 build6050233 feature contract, not implemented layouts or measured new-loader speeds.** Read only the active cache's small SQLite count/index records in short batches; no encoded feature payload reads, encoder calls, cache ownership or training changes. The07:31 UTC [count snapshot](../../outputs/experiments/E002a/storage-layout-estimate-20261022/count-snapshot.json) matches the current extraction namespace. ROAD training has220,140 measured crop requests over3,194/4,380 tracks (72.9% of tracks); its retained LRU sample contains23,331 training frame unions from226 groups. Observed mean crop size is26,028 points; mean retained union is19.29 MB. Validation sizing below uses the training mean because only one validation track is measured. The LRU sample is not random and may favor popular/dense frames.
+
+All sizes below cover the complete frozen source training+validation populations, not the450 GB LRU ceiling. Decimal TB; uncompressed arrays. Full metadata/temp/output/backup/headroom and native datasets are additional. ROAD's52,265 unique frames extrapolate to1.01 TB shared payload;9.92 billion pedestrian/point instances extrapolate to2.78 TB model-ready per-track data. Frame-local uint32 indices add39.7 GB (uint64:79.3 GB).
+
+| Proposed layout | ROAD FP32 | ROAD FP16 features | Both sources FP32 | Both sources FP16 features |
+|---|---:|---:|---:|---:|
+| Shared frame arrays + uint32 crop indices |1.05 TB|0.58 TB|1.51–2.09 TB|0.84–1.16 TB|
+| Contiguous model-ready per-track copies |2.78 TB|1.51 TB|4.31–5.65 TB|2.34–3.07 TB|
+
+The combined-source ranges are **low-confidence planning scenarios**, not confidence bounds or purchase-ready sizing. LOKI has only three training/one validation track with current20 m costs. Its bracket combines the older15 m random-group duplicated/union estimates with the sparse20 m crop counts and older full-scene estimate; more representative20 m evidence is needed. ROAD's unseen frames/validation may also differ from the observed mean.
+
+Byte assumptions: shared point row256 feature +12 XYZ +8 native-index =276 bytes; model-ready per-track row256 feature +12 relative XYZ +4 membership +8 native-index =280 bytes. In the indexed option, relative geometry is derived after gathering; fully precomputing it as well adds16 bytes/selected point, approximately0.16 TB ROAD (shared totals then1.21 TB FP32 /0.74 TB FP16 features). Small per-frame box/pose/offset tables are additional. Frame-local uint32 assumes fewer than2³² rows/frame and must be checked on conversion. No point sampling or token removal is assumed.
+
+**FP16 is a hypothetical storage change for the64 encoder channels only.** Coordinates, masks/geometry and identifiers retain their stated precision; shared/per-track rows become148/152 bytes. This saves about46% of payload, rather than exactly half of every cache field. The cache contains encoder features, not four-class behavior logits. FP16 storage could be read into FP32 training; AMP training is a separate change. Feature error, overflow and downstream effects have not been accepted. FP8/8-bit storage is not estimated or selected here.
+
+**Loading-only ROAD epoch scenarios:** assume each selected point instance is read once, and an implemented contiguous layout sustains the stated effective read/load rate. These exclude native misses/preparation, crop assembly/dequantization, transfer, model/validation compute and reporting. Current get/read/check/load averages near0.4 GB/s came from the older warm-file probe, not these hypothetical formats;1/2 GB/s are assumed achieved rates, not SSD specifications or benchmarks.
+
+| Per-track representation | At0.4 GB/s | At1 GB/s | At2 GB/s |
+|---|---:|---:|---:|
+| FP32,2.78 TB |116 min|46 min|23 min|
+| FP16 features,1.51 TB |63 min|25 min|13 min|
+
+Without RAM reuse, ideal indexed partial reads request a similar point-instance volume; sharing saves storage but does not automatically save epoch read traffic. Scattered indices can cause page/chunk amplification and approach whole-union traffic unless storage ordering/chunking supports the crop. Index lists alone do not fix the current NPZ path. Perfect cross-pedestrian reuse could reduce physical reads, but is not assumed under shuffled complete-track updates and bounded RAM.
+
+Storage optimization alone does not establish the30-minute gate: linearly scaling the final FP32 dense-track calibration rate to the estimated ROAD **training** point count gives about30 minutes of model execution before validation/loading. This is shape/path-dependent extrapolation, not a measured epoch or hard lower bound. Benchmark representative loading, transfer, train/readout and validation stages, including overlap, before claiming a complete epoch time. [Exact formulas, byte assumptions, source hashes and numerical scenarios](../../outputs/experiments/E002a/storage-layout-estimate-20261022/estimate.json).
+
 ### Throughput gate — agreed 2026-10-22
 
 **Before further full training, target strictly under30 minutes for a conservative worst-case complete training+source-validation epoch on aalto**, for both source populations and every pilot arm. Include loading/native decoding, cache verification/writes and eviction misses, transfer, forward/backward/optimizer, full validation and routine checkpoint/logging costs. Verify representative complete64-track updates, long/dense cases and cold as well as sustained LRU-pressure conditions; an all-hit toy example cannot pass this gate. This is an acceptance target, not an achieved result or universal wall-time guarantee. Build6050233 fails it.

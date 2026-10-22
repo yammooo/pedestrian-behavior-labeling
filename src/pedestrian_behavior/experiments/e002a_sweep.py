@@ -6,7 +6,7 @@ from functools import partial
 from pathlib import Path
 import sys
 
-from .e002a_run import ARMS, SETTINGS
+from .e002a_run import ARMS, FUSION_PROTOCOL, SETTINGS
 from .sweep import run_sweep
 
 
@@ -35,6 +35,6 @@ def main():
                "--point-cache-root", str(args.point_cache_root), "--point-cache-gb", str(args.point_cache_gb)]
     run_sweep(args.output, attempts(), partial(attempt_command, options=options), jobs=1, seeds=(0,), device=args.device,
               settings={"epochs": SETTINGS["epochs"], "patience": SETTINGS["patience"], "held_out_tests": False,
-                        "kind": "exploratory-source-validation", "profile": str(args.profile)})
+                        "kind": "exploratory-source-validation", "fusion_protocol": FUSION_PROTOCOL, "profile": str(args.profile)})
     from .e002a_summary import summarize
     summarize(args.output)

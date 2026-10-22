@@ -33,7 +33,7 @@ def train_accumulated_epoch(model, batches, optimizer, device, clip_norm, on_ste
             gt += int(batch["gt_valid"].sum())
             padding += int(batch["padding_mask"].sum())
             capacity += batch["padding_mask"].numel()
-            tokens += sum(len(x) for x in batch["points"])
+            tokens += sum(len(x) for x in batch.get("points", ()))
             physical += 1
             del logits, losses, batch
         if seen != count or count < 1:

@@ -16,13 +16,15 @@ The [frozen-feature semantic probe](#frozen-feature-linear-semantic-probe--2026-
 
 Prepare one source-training/validation pilot on each source:
 
-| Arm | Enabled descriptors |
-|---|---|
-| `g` | Geometry |
-| `g-rgb` | Geometry + RGB |
-| `g-rgb-dditr` | Geometry + RGB + D-DITR |
+| Arm | Fusion receives | Fusion projection |
+|---|---|---|
+| `g` | Geometry64 + `geometry_valid` |65→256|
+| `g-rgb` | Geometry64 + RGB128 + their two validity flags |194→256|
+| `g-rgb-dditr` | Geometry64 + RGB128 + D-DITR128 + their three validity flags |323→256|
 
-Every arm receives the same three branch-availability flags. Keep tracks, targets, geometry/RGB preprocessing, fusion/temporal widths and fitting protocol matched. **Utonia is deferred**, replacing the earlier four-arm proposal: first establish RGB/D-DITR behavior utility and a practical memory/storage strategy. Its feature specification and exposure/resource evidence below are retained for a separately agreed later comparison, not a fourth current arm. Frozen encoders are the initial pilot policy, not a final freezing decision. The Waymo-adapted semantic head is diagnostic only; neither its logits nor semantic GT enter the behavior inputs.
+**Enabled-branch protocol, agreed2026-10-22 (`enabled-branches-v2`):** instantiate and supply only enabled branches. No dummy descriptors or disabled-branch availability enter fusion. Keep tracks, targets, enabled-branch preprocessing, temporal width and fitting protocol matched; branch/fusion parameter counts vary. This tests adding each modality **including its availability**, rather than content conditional on shared availability. **Utonia is deferred**, replacing the earlier four-arm proposal: first establish RGB/D-DITR behavior utility and a practical memory/storage strategy. Its feature specification and exposure/resource evidence below are retained for a separately agreed later comparison, not a fourth current arm. Frozen encoders are the initial pilot policy, not a final freezing decision. The Waymo-adapted semantic head is diagnostic only; neither its logits nor semantic GT enter the behavior inputs.
+
+This explicitly supersedes the shared-three-flag/zero-descriptor protocol used by build6050233 and the21 October acceptance. Preserve those outputs as historical `shared-availability-v1`; do not combine protocols in a paired comparison. The active checkout/process is unchanged by this revision. Frozen feature identities/storage are unchanged, but model/execution hashes change: profile05 is historical and a new resource calibration is required before new attempts, alongside the unmet [throughput gate](#throughput-gate--agreed-2026-10-22).
 
 The earlier LR/query sweep is not the next increment. No further standalone segmentation optimization is planned before the behavior pilot.
 
@@ -53,7 +55,7 @@ The earlier LR/query sweep is not the next increment. No further standalone segm
 
 Use source timestamps/immediate-neighbor derivatives, no interpolation; zero missing numeric values after source normalization. ROAD uses native Waymo FRONT boxes without ROAD fallback; LOKI uses native boxes. Do not substitute E001c centers/dimensions.
 
-Agreed MLP: `Linear(20,64) → GELU → Linear(64,64) → GELU`, output `[B,T,64]`. Internal flags preserve partial missingness. Derive `geometry_valid = any(six flags)` and zero the final descriptor if all groups are missing. Append this derived flag at fusion alongside RGB/LiDAR availability; retain the six internal flags for partial missingness.
+Agreed MLP: `Linear(20,64) → GELU → Linear(64,64) → GELU`, output `[B,T,64]`. Internal flags preserve partial missingness. Derive `geometry_valid = any(six flags)` and zero the final descriptor if all groups are missing. Append this derived flag at fusion in every arm; retain the six internal flags for partial missingness.
 
 ## RGB branch
 
@@ -137,7 +139,9 @@ The initial pooling discussion motivated retaining coordinates until learned agg
 | RGB | `rgb_valid`: usable native image/box crop | Zero final128-channel descriptor |
 | LiDAR | `lidar_valid`: usable20 m crop with at least one retained spatial token | Skip attention; zero final128-channel descriptor |
 
-Append **`geometry_valid`, `rgb_valid` and `lidar_valid`** as three per-frame scalar feature channels. The geometry flag is the deterministic OR of the six existing geometry flags, not an additional observation. Their meanings/site policy must be encoder-independent and identical across arms. Disabling a branch zeros its descriptor but retains measured observation flags. No extra target/context availability bits enter the model; retain those counts as diagnostics. A crop with context but no inside-box points can still be valid LiDAR.
+Append enabled flags in branch order: `g` gets `[geometry_valid]`; `g-rgb` gets `[geometry_valid,rgb_valid]`; `g-rgb-dditr` gets `[geometry_valid,rgb_valid,lidar_valid]`. The geometry flag is the deterministic OR of the six existing geometry flags, not an additional observation. An enabled flag has the same meaning across arms. No extra target/context availability bits enter the model; retain point counts as diagnostics in the LiDAR arm. A crop with context but no inside-box points can still be valid LiDAR.
+
+`bbox_valid` describes numerical box geometry; `rgb_valid` additionally requires a usable image/crop and nonzero native box/image intersection. They often coincide but are not interchangeable. Geometry retains its own bbox masks even when RGB is disabled. No RGB or point cache is opened by `g`; `g-rgb` opens only RGB and never queries point-cost metadata or extracts points. A full geometry-only attempt requires no RGB preparation or encoder probe. RGB-enabled attempts retain the pinned shared probe verification and full RGB-preparation gate.
 
 Gate **after** all branch projections: learned seeds, residuals and biases otherwise produce nonzero outputs for missing input. Never invoke attention with every spatial key masked. Genuine missing observations are retained; corrupt/nonfinite inputs and missing required decoding metadata fail visibly.
 
@@ -146,18 +150,18 @@ Spatial padding masks cover nonexistent point tokens; temporal padding masks cov
 ## Fusion and temporal head
 
 ```text
-geometry [64] + RGB [128] + LiDAR [128] + availability [3]
-→ concat [323] → trainable Linear(323,256)
+enabled descriptors + their validity flags, in geometry/RGB/LiDAR order
+→ concat [65 / 194 / 323] → trainable Linear(arm_input_width,256)
 → fused tokens [B,T,256]; no additive positional encoding
 → two full-track bidirectional pre-norm Transformer layers, with temporal RoPE on Q/K
 → LayerNorm(256) → Linear(256,4) → logits [B,T,4]
 ```
 
-Agreed widths: geometry64, RGB128, LiDAR128, fusion input323 and temporal256. Temporal settings: two layers, four heads, FFN256→1024→256 with GELU, dropout0.1 and final LayerNorm; full noncausal attention within each track, never across tracks. Temporal Q/K/V and output projections retain biases. Apply the same residual/FFN/dropout structure as the spatial block, with self-attention over frame tokens and RoPE on Q/K. Mask padding and retain missing/unlabeled context. Keep inactive descriptor slots zero so fusion/temporal shapes match every arm. `g` is geometry plus shared availability controls with a new Transformer, not a pure geometry or historical BiLSTM score.
+Agreed widths: geometry64, RGB128, LiDAR128, enabled fusion inputs65/194/323 and temporal256. Temporal settings: two layers, four heads, FFN256→1024→256 with GELU, dropout0.1 and final LayerNorm; full noncausal attention within each track, never across tracks. Temporal Q/K/V and output projections retain biases. Apply the same residual/FFN/dropout structure as the spatial block, with self-attention over frame tokens and RoPE on Q/K. Mask padding and retain missing/unlabeled context. Only missing **enabled** descriptors are zeroed. `g` is geometry with a new Transformer; it is not the historical E001b BiLSTM score.
 
 **Temporal positional encoding, agreed 2026-10-21:** use [RoPE](https://arxiv.org/abs/2104.09864) on Q/K in each temporal self-attention layer, not on V; no added sinusoidal/learned position vectors. Keep full bidirectional attention. Rotate adjacent channel pairs over all64 channels/head with frequency base10,000 and position `(nominal_grid_time − track_start_time) /0.2`, equivalent to slot index at5 Hz. Preserve positions through missing modalities/GT; mask temporal padding. No track-length normalization or absolute recording timestamps. This replaces the earlier additive sinusoidal proposal; no behavior advantage is yet measured.
 
-Initially frozen: DINOv3 and the selected point encoder, in evaluation mode. Trainable: geometry MLP, RGB projection, point normalization/projection, spatial seed/attention/FFN, fusion, temporal layers and classifier. Trainable operations use deterministic FP32; frozen extraction precision is separately recorded. Only behavior supervision trains these modules; source semantic-head probe weights are not reused.
+Initially frozen: enabled DINOv3/point encoders, in evaluation mode. Trainable: geometry MLP, enabled RGB projection and/or point normalization/projection/spatial seed/attention/FFN, fusion, temporal layers and classifier. Trainable operations use deterministic FP32; frozen extraction precision is separately recorded. Only behavior supervision trains these modules; source semantic-head probe weights are not reused.
 
 ### Dropout, normalization and initialization
 
@@ -172,7 +176,7 @@ Use independent dropout0.1 applications at these four locations in the spatial b
 
 This matches the dropout locations in the [pinned PyTorch Transformer implementation](https://github.com/pytorch/pytorch/blob/v2.7.1/torch/nn/modules/transformer.py). No additional dropout in the geometry MLP, RGB/point projections, fusion or classifier; no modality dropout, token removal or stochastic depth. Validation/inference disables all dropout; frozen encoders remain in evaluation mode during training too. Spatial recomputation must reuse the original forward's RNG state/masks.
 
-All trainable LayerNorms use affine parameters and epsilon1e-5. Normalize point features before adding geometry; normalize projected point tokens once for shared spatial K/V, and the seed separately for Q. Use the existing resource graph's initialization: PyTorch default linear/LayerNorm initialization and spatial seed `Normal(0,0.02)`. Construct modules in the same order under seed0 before disabling unused branches, so shared initial weights match across arms. Disabled branches contribute no descriptor or gradients.
+All trainable LayerNorms use affine parameters and epsilon1e-5. Normalize point features before adding geometry; normalize projected point tokens once for shared spatial K/V, and the seed separately for Q. Use PyTorch default linear/LayerNorm initialization and spatial seed `Normal(0,0.02)`. Reset seed0 before each attempt and construct only enabled branches. Different branch/fusion shapes advance RNG differently; common temporal weights are not asserted identical across arms. Disabled branches have no parameters or gradients.
 
 ## Access and comparison safeguards
 
@@ -180,7 +184,7 @@ The deferred Utonia alternative is a **Waymo-exposed reference, not an upper bou
 
 D-DITR is LiDAR-only at inference but inherits DINOv2 image distillation and nuScenes semantic fine-tuning; [lineage](../../docs/literature/papers/ditr.md). Different DINO teachers do not imply aligned RGB/LiDAR features or complementarity. Waymo semantic-probe decisions are additional label-informed development. Freezing does not erase pretraining access; retain [shared evaluation safeguards](../README.md#strict-zero-shot-access).
 
-Later modality ablations remain deferred: geometry+availability, +RGB, +LiDAR without RGB, +both. With five seeds/two sources/four variants they would require40 attempts/80 test cells, separately authorized after pilot settings freeze. No held-out tests in the current pilot.
+Later modality ablations remain deferred: geometry, +RGB, +LiDAR without RGB, +both, each with its enabled validity. With five seeds/two sources/four variants they would require40 attempts/80 test cells, separately authorized after pilot settings freeze. No held-out tests in the current pilot.
 
 ## Deferred training pilot
 
@@ -208,7 +212,7 @@ Earlier LR candidates1e-4/1e-3 and one/four spatial seeds are historical develop
 
 Retain the existing W&B entity/project and tidy namespaces. Main native curves are `train/loss_step` versus hidden `optimizer_step`, `train/loss_epoch`, `val/loss` and `val/macro_f1` versus hidden `epoch`; add `train/learning_rate` versus `optimizer_step`. A step record represents the actual accumulated optimizer update, including the final partial update, not each physical microbatch. Keep detailed support/provenance in config/tables and resource/cache diagnostics in a separate collapsible section; no parameter/gradient histograms or automatic provenance charts.
 
-After reloading the selected checkpoint, save full source-validation predictions with identities/masks/condition membership, primary/per-class metrics, raw/track-weighted confusions and the applicable existing observation strata. Include actual missing-RGB/LiDAR support and paired track changes across arms; retain point counts as diagnostics. Save PNG/SVG exports and numerical evidence locally; log agreed metrics/tables/plots to W&B, never checkpoint/full-prediction artifacts. No held-out tests or event metrics are added. Record effective configuration, command/revision/diff, hashes/encoder provenance, seed, versions/hardware, optimizer steps, denominators, runtime, GPU/system memory and cache state/traffic/timing. Local evidence precedes external logging; W&B errors propagate without fallback/retry.
+After reloading the selected checkpoint, save full source-validation predictions with identities/masks/condition membership, primary/per-class metrics, raw/track-weighted confusions and the applicable existing observation strata. Native/E001b strata remain available in every arm. Add `rgb-observed` only for RGB-enabled arms and `lidar-observed`/point counts only for the LiDAR arm; disabled availability is uncomputed, not a false missing observation. Paired summaries check aligned targets/populations and matching measured flags wherever both arms enable that modality; reject mixed fusion protocols. Save PNG/SVG exports and numerical evidence locally; log agreed metrics/tables/plots to W&B, never checkpoint/full-prediction artifacts. No held-out tests or event metrics are added. Record effective configuration, command/revision/diff, hashes/encoder provenance, seed, versions/hardware, optimizer steps, denominators, runtime, GPU/system memory and cache state/traffic/timing. Local evidence precedes external logging; W&B errors propagate without fallback/retry.
 
 One seed diagnoses feasibility and possible modality effects, not reliable superiority. Inspect source-validation class/missing-input changes and compute costs before choosing central comparisons to repeat; negative results do not identify the backbone alone as the bottleneck.
 
@@ -359,6 +363,8 @@ At that storage acceptance, full-population RGB preparation was unexecuted; it i
 
 ## Model and training acceptance — 2026-10-21
 
+**Historical shared-availability-v1 acceptance.** The22 October [enabled-branch revision](#enabled-branch-fusion-revision--2026-10-22) supersedes its all-arm fusion/availability policy. Original numerical evidence and operational runs below are retained unchanged; they do not calibrate the revised code.
+
 Implemented `models/multimodal.py`, complete-track packing/accumulation, the E002a feature adapter and [single-run/sequential-pilot commands](../../README.md#e002a-source-validation-pilot). Exact E001b source-normalized geometry and all frozen populations remain unchanged. Shared E001 loss, selection, atomic checkpoints, inference, prediction archives, strata, plots and W&B are reused through optional hooks; old callers/defaults pass regression checks. Trainable attention uses PyTorch SDPA **math/FP32**: fused CUDA attention failed mask-stride alignment on irregular point counts in the first calibration. That failed attempt is retained; determinism is not relaxed.
 
 Packing starts with persistent shuffled64-track logical membership, then stable first-fit by length/cost within each update. Unknown costs stay single until measured; no across-update bucketing. `packing.jsonl` records pass, logical/physical indices, locators, lengths, point counts and unknown-cost membership, since different physical shapes may draw different dropout masks. Ordinary execution is selected by **padded** spatial-token workload; expensive shapes checkpoint only the trainable readout with CPU inputs. Offload remains verified but is not the automatic default. Full temporal attention always sees every slot. One frozen encoder may stay resident across misses; preflight reserves2 GiB for miss transients and rejects unsafe measured shapes without retry.
@@ -476,6 +482,14 @@ Storage optimization alone does not establish the30-minute gate: linearly scalin
 
 One-time preparation may be budgeted separately if it is explicitly completed before fitting; report that cost and include every miss still possible during training in the epoch estimate. After cache/loader/backend/hardware changes, rerun timing and parity checks, record the tested revision/configuration and replace the current forecast with new evidence. Do not meet the target by silently dropping tracks/tokens or changing scientific settings. The gate is a documented execution prerequisite; no automatic runtime cutoff or launcher enforcement is implemented by this documentation update.
 
+## Enabled-branch fusion revision — 2026-10-22
+
+Implemented `enabled-branches-v2`: only enabled descriptors/flags, parameters and feature-cache ownership. Fusion inputs are65/194/323; temporal width stays256. Trainable parameter counts are **1,603,460 /1,734,916 /1,975,044** for `g`/`g-rgb`/`g-rgb-dditr`. Geometry keeps its six partial-validity masks and derived aggregate flag. RGB validity remains distinct from numerical bbox validity. Normalization, populations, targets, fitting settings, frozen feature identities and storage formats are unchanged.
+
+The CPU suite passes159 tests (nine CUDA skips). Tests cover each fusion width/flag order, absent branch parameters, checkpoint reload, missing enabled descriptors/padding/future context, unequal accumulation, and ordinary/recomputed/offloaded gradients. Fixture integration covers all three arms with checkpoint/metric reconstruction, enabled-only observed strata, no disabled feature/cache/cost access and W&B-failure propagation through the existing fake logging boundary. Saved-prediction summaries accept separate old/new protocols and reject mixing them or mismatched common RGB availability. CUDA verification is pending; the original actual-W&B/native smoke evidence above remains historical.
+
+No training was launched, cache rebuilt or active GPU checkout changed for this revision. New resource calibration and the under30-minute full-epoch gate remain required; removing unused reads does not establish LiDAR-arm throughput or modality utility.
+
 ## Before implementation and execution
 
 Scientific specification and bounded correctness/memory acceptance are complete. The population-scale throughput follow-up above must be addressed before further execution:
@@ -485,12 +499,12 @@ Scientific specification and bounded correctness/memory acceptance are complete.
 | Population/preparation | Complete full3× RGB cache and frozen GT/class/missing-input readback above; existing populations/GT unchanged |
 | Model/trainer | Implemented; masks, equal-track accumulation, update warmup and source-validation selection accepted |
 | Feature supply | Persistent RGB complete; lazy point supply/configurable450 GB LRU and persistent input-only cost references accepted |
-| Resource calibration | Bounded profile05 correctness/memory checks accepted; conservative under30 min full-epoch gate not met by build6050233 |
+| Resource calibration | Profile05 belongs to historical shared-availability-v1; new model hashes require recalibration. Conservative under30 min full-epoch gate remains unmet |
 | Evidence/handoff | Local/cloud audit and manual commands accepted for bounded correctness; first full attempt exposed poor throughput in the2026-10-22 snapshot |
 
 Acceptance before the six exploratory attempts:
 
-1. Check exact shapes, coordinate/feature pairing, missing/disabled-branch zeros and shared availability flags. GT must not affect spatial selection or enter model inputs; padding masks exclude nonexistent tokens without removing missing/unlabeled context. Verify full-track future context and RoPE positions through gaps.
+1. Check65/194/323 fusion inputs, coordinate/feature pairing, missing-enabled-branch zeros, enabled-only flags/parameters and no disabled cache reads. GT must not affect spatial selection or enter model inputs; padding masks exclude nonexistent tokens without removing missing/unlabeled context. Verify full-track future context and RoPE positions through gaps.
 2. With dropout disabled, compare unequal microbatch/final-partial aggregation, gradients and optimizer updates against a logical-batch reference. With dropout0.1 and fixed physical shapes, compare ordinary/recomputed outputs, gradients and updates at rtol1e-4/atol1e-5; preserve RNG/masks. Do not require identical dropout across different packing shapes.
 3. Verify cache byte/LRU accounting, shared-frame reuse, capacity reduction, atomic writes, corruption/nonfinite failures, hit/miss feature equality and unchanged training RNG/backend settings. Preserve frozen source/encoder hashes.
 4. Verify exact warmup/update counts, padding/unlabeled loss exclusion, nonfinite/empty-GT failures, full validation, F1/CE/earlier-epoch tie-breaking, patience/budget stops and selected-checkpoint predictions.

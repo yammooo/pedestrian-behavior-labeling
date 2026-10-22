@@ -46,7 +46,7 @@ E001's protocol and data/association gates are accepted with recorded limitation
 | Comparison | Question / initial design |
 |---|---|
 | [E001](../experiments/E001-kinematic-transfer/README.md) — agreed baseline | Four kinematic feature sets × MLP/BiLSTM, within each dataset and in both transfer directions. |
-| [E002 — multimodal working reference](../experiments/E002-multimodal-reference/README.md) | Direction overview. [E002a](../experiments/E002a-feature-feasibility/README.md) owns the first geometry/RGB/D-DITR pilot (Utonia deferred), matched availability controls, full-track Transformer and preparatory evidence. Later comparisons need their own architecture definitions. |
+| [E002 — multimodal working reference](../experiments/E002-multimodal-reference/README.md) | Direction overview. [E002a](../experiments/E002a-feature-feasibility/README.md) owns the first geometry/RGB/D-DITR pilot (Utonia deferred), enabled-only descriptors/validity, full-track Transformer and preparatory evidence. Adding a modality includes its availability; later comparisons need their own architecture definitions. |
 | E003 — scene retrieval, conditional | One matched pooling/frame-query/full-track-query comparison if E002 indicates useful scene evidence and a consequential compression limit. Same observations/features and a capacity control; no automatic architectural expansion. |
 | E004 — complementary supervision, still tentative | Fixed inference representation/initialization: source behavior training, +one source with a generic objective, +the same observations with native semantic supervision. nuScenes remains a candidate, subject to usable semantics/observations and checkpoint-exposure controls. |
 

@@ -10,12 +10,19 @@ def collate_multimodal(samples):
     lengths = torch.tensor([len(s["targets"]) for s in samples], dtype=torch.int64)
     t = int(lengths.max())
     empty = torch.zeros(0, 68)
-    return {**{k: pad_sequence([s[k] for s in samples], batch_first=True, padding_value=value)
-               for k, value in (("geometry", 0.), ("rgb", 0.), ("flags", 0.), ("targets", -100), ("gt_valid", False))},
+    for key in ("rgb", "points"):
+        if any((key in s) != (key in samples[0]) for s in samples):
+            raise ValueError("Mixed modality schemas in physical microbatch")
+    result = {**{k: pad_sequence([s[k] for s in samples], batch_first=True, padding_value=value)
+               for k, value in (("geometry", 0.), ("flags", 0.), ("targets", -100), ("gt_valid", False))},
             "lengths": lengths, "padding_mask": torch.arange(t)[None, :] >= lengths[:, None],
-            "points": [f for s in samples for f in s["points"] + [empty] * (t - len(s["targets"]))],
             "locators": [s["locator"] for s in samples], "archives": [s["archive"] for s in samples],
             "prediction_metadata": [s.get("prediction_metadata", {}) for s in samples]}
+    if "rgb" in samples[0]:
+        result["rgb"] = pad_sequence([s["rgb"] for s in samples], batch_first=True)
+    if "points" in samples[0]:
+        result["points"] = [f for s in samples for f in s["points"] + [empty] * (t - len(s["targets"]))]
+    return result
 
 
 def pack_tracks(indices, lengths, costs, profile):
@@ -72,7 +79,7 @@ class LogicalBatches:
             if self.on_pack:
                 self.on_pack({"pass": self.iteration, "logical_indices": indices, "physical_indices": group,
                               "locators": batch["locators"], "lengths": batch["lengths"].tolist(),
-                              "point_counts": [len(f) for f in batch["points"]],
+                              "point_counts": [len(f) for f in batch.get("points", ())],
                               "unknown_cost_indices": [i for i in indices if costs[i] is None]})
             yield batch
             del batch, samples

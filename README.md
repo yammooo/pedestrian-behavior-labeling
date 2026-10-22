@@ -446,13 +446,13 @@ uv run --no-project --python "$probe_root/extractor-env/bin/python" python scrip
 
 ### E002a source-validation pilot
 
-The first full attempt exposed a [population-scale input-pipeline bottleneck](experiments/E002a-feature-feasibility/README.md#full-population-throughput-check--2026-10-22); meet the [agreed throughput gate](experiments/E002a-feature-feasibility/README.md#throughput-gate--agreed-2026-10-22) before further pilot execution. The gate is a documentation prerequisite, not an automated launcher check. Commands below remain the reproducibility interface. Run from `/home/user20/projects/pedestrian-behavior-labeling-review` on `aalto`, using the calibrated RTX4080 extractor environment. The completed preparation record and resource profile are explicit inputs; changing model/execution code or backend requires new calibration. Full attempts reject incomplete/mismatched RGB preparation and RGB misses. Point features fill the450 GB LRU lazily. Fresh attempt/sweep outputs only; no automatic restart/resume.
+The first full attempt exposed a [population-scale input-pipeline bottleneck](experiments/E002a-feature-feasibility/README.md#full-population-throughput-check--2026-10-22); meet the [agreed throughput gate](experiments/E002a-feature-feasibility/README.md#throughput-gate--agreed-2026-10-22) before further pilot execution. The gate is a documentation prerequisite, not an automated launcher check. Commands below remain the reproducibility interface. Run from `/home/user20/projects/pedestrian-behavior-labeling-review` on `aalto`, using the calibrated RTX4080 extractor environment. The completed preparation record and resource profile are explicit inputs; changing model/execution code or backend requires new calibration. The enabled-branch revision uses65/194/323→256 fusion and records `fusion_protocol=enabled-branches-v2`; profile05 belongs to the previous protocol and is rejected by changed model/execution hashes. Create a fresh calibration (commands below) before using these examples. Full RGB-enabled attempts reject incomplete/mismatched RGB preparation and RGB misses; geometry requires neither RGB preparation nor an encoder probe and opens no feature caches. Only the LiDAR arm fills/reads the450 GB point LRU. Geometry+RGB never queries point costs. Fresh attempt/sweep outputs only; no automatic restart/resume.
 
 ```bash
 probe_root="$PWD/outputs/experiments/E002a"
 uv run --no-project --python "$probe_root/extractor-env/bin/python" python scripts/train-e002a-pilot.py \
   --device cuda \
-  --profile "$probe_root/model-calibration-05/profile.json" \
+  --profile "$probe_root/my-calibration/profile.json" \
   --rgb-preparation "$probe_root/rgb-cache-preparation-03/cache.json"
 ```
 
@@ -463,7 +463,7 @@ For one attempt, use the same profile/preparation arguments:
 ```bash
 uv run --no-project --python "$probe_root/extractor-env/bin/python" python scripts/train-e002a.py \
   --source road-waymo --arm g-rgb-dditr --device cuda \
-  --profile "$probe_root/model-calibration-05/profile.json" \
+  --profile "$probe_root/my-calibration/profile.json" \
   --rgb-preparation "$probe_root/rgb-cache-preparation-03/cache.json" \
   --output "$probe_root/runs/my-fresh-attempt"
 ```

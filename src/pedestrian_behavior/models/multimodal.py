@@ -10,6 +10,10 @@ from torch.nn.attention import SDPBackend, sdpa_kernel
 from torch.utils.checkpoint import checkpoint
 
 
+ARM_FLAGS = {"g": ("geometry_valid",), "g-rgb": ("geometry_valid", "rgb_valid"),
+             "g-rgb-dditr": ("geometry_valid", "rgb_valid", "lidar_valid")}
+
+
 def rotary(x):
     positions = torch.arange(x.shape[-2], device=x.device, dtype=x.dtype)
     frequency = 10000 ** (-torch.arange(0, x.shape[-1], 2, device=x.device, dtype=x.dtype) / x.shape[-1])
@@ -97,35 +101,37 @@ class MultimodalClassifier(nn.Module):
         if arm not in ("g", "g-rgb", "g-rgb-dditr"):
             raise ValueError("Unknown multimodal arm")
         self.geometry = nn.Sequential(nn.Linear(20, 64), nn.GELU(), nn.Linear(64, 64), nn.GELU())
-        self.rgb = nn.Linear(768, 128)
-        self.spatial = SpatialReadout()
-        self.fusion = nn.Linear(323, 256)
+        self.rgb = nn.Linear(768, 128) if arm != "g" else None
+        self.spatial = SpatialReadout() if arm == "g-rgb-dditr" else None
+        self.fusion = nn.Linear(64 + 128 * (len(ARM_FLAGS[arm]) - 1) + len(ARM_FLAGS[arm]), 256)
         self.temporal = nn.ModuleList([TemporalBlock(), TemporalBlock()])
         self.final_norm = nn.LayerNorm(256)
         self.head = nn.Linear(256, 4)
         self.arm, self.profile = arm, dict(profile)
-        if arm == "g":
-            self.rgb.requires_grad_(False)
-        if arm != "g-rgb-dditr":
-            self.spatial.requires_grad_(False)
 
     def forward(self, batch, *, mode=None):
         device = self.head.weight.device
-        geometry, rgb, flags = (batch[k].to(device) for k in ("geometry", "rgb", "flags"))
+        geometry, flags = (batch[k].to(device) for k in ("geometry", "flags"))
         lengths = batch["lengths"]
         b, t, _ = geometry.shape
-        if geometry.shape != (b, t, 20) or rgb.shape != (b, t, 768) or flags.shape != (b, t, 3):
+        if geometry.shape != (b, t, 20) or flags.shape != (b, t, len(ARM_FLAGS[self.arm])):
             raise ValueError("Invalid multimodal shapes")
         valid = torch.arange(t, device=device)[None, :] < lengths.to(device)[:, None]
         if (lengths <= 0).any() or (lengths > t).any() or len(lengths) != b:
             raise ValueError("Invalid complete-track lengths")
-        if any(not torch.isfinite(x[valid]).all() for x in (geometry, rgb, flags)) or not ((flags[valid] == 0) | (flags[valid] == 1)).all():
+        if any(not torch.isfinite(x[valid]).all() for x in (geometry, flags)) or not ((flags[valid] == 0) | (flags[valid] == 1)).all():
             raise ValueError("Nonfinite features or invalid branch flags")
-        geometry, rgb, flags = (x.masked_fill(~valid[..., None], 0.) for x in (geometry, rgb, flags))
+        geometry, flags = (x.masked_fill(~valid[..., None], 0.) for x in (geometry, flags))
         g = self.geometry(geometry) * flags[..., :1]
-        r = self.rgb(rgb) * flags[..., 1:2] if self.arm != "g" else g.new_zeros(b, t, 128)
-        lidar = g.new_zeros(b * t, 128)
-        if self.arm == "g-rgb-dditr":
+        descriptors = [g]
+        if self.rgb is not None:
+            rgb = batch["rgb"].to(device)
+            if rgb.shape != (b, t, 768) or not torch.isfinite(rgb[valid]).all():
+                raise ValueError("Invalid/nonfinite RGB features")
+            rgb = rgb.masked_fill(~valid[..., None], 0.)
+            descriptors.append(self.rgb(rgb) * flags[..., 1:2])
+        if self.spatial is not None:
+            lidar = g.new_zeros(b * t, 128)
             frames = batch["points"]
             if len(frames) != b * t:
                 raise ValueError("Point slots do not match temporal padding")
@@ -151,7 +157,8 @@ class MultimodalClassifier(nn.Module):
                     with scope:
                         descriptor = self.spatial(inputs, sizes, self.spatial.seed)
                 lidar = lidar.index_copy(0, torch.tensor(indices, device=device), descriptor)
-        x = self.fusion(torch.cat((g, r, lidar.reshape(b, t, 128), flags), -1))
+            descriptors.append(lidar.reshape(b, t, 128))
+        x = self.fusion(torch.cat((*descriptors, flags), -1))
         for layer in self.temporal:
             x = layer(x, valid)
         return self.head(self.final_norm(x)).masked_fill(~valid[..., None], 0.)

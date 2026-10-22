@@ -21,7 +21,7 @@ from pedestrian_behavior.models.multimodal import MultimodalClassifier, frame_ch
 from pedestrian_behavior.training import seed_run
 from . import e001b_run
 from .e002a_execution_probe import loaded_track
-from .e002a_run import resource_code, SETTINGS
+from .e002a_run import FUSION_PROTOCOL, resource_code, SETTINGS
 from .run import write_json
 
 
@@ -53,6 +53,11 @@ def fixture_samples(fixtures):
 
 def measure(sample, arm, count, profile, mode, device):
     seed_run(0)
+    sample = sample | {"flags": sample["flags"][:, :{"g": 1, "g-rgb": 2, "g-rgb-dditr": 3}[arm]]}
+    if arm != "g-rgb-dditr":
+        sample = {k: v for k, v in sample.items() if k != "points"}
+    if arm == "g":
+        sample = {k: v for k, v in sample.items() if k != "rgb"}
     batch = collate_multimodal([sample] * count)
     model = MultimodalClassifier(arm, profile).to(device)
     optimizer = torch.optim.AdamW((p for p in model.parameters() if p.requires_grad), **SETTINGS["optimizer"])
@@ -93,7 +98,7 @@ def measure(sample, arm, count, profile, mode, device):
 def run(args):
     torch.set_num_threads(2)
     args.output.mkdir(parents=True, exist_ok=False)
-    record = {"status": "incomplete", "device": args.device, "code": resource_code(),
+    record = {"status": "incomplete", "device": args.device, "code": resource_code(), "fusion_protocol": FUSION_PROTOCOL,
               "torch": str(torch.__version__), "cuda": torch.version.cuda,
               "revision": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
               "command": sys.orig_argv, "workloads": [], "failures": [], "held_out_tests": False,

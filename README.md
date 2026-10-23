@@ -483,28 +483,38 @@ The first full attempt exposed a [population-scale input-pipeline bottleneck](ex
 
 Use `/home/user20/projects/pedestrian-behavior-labeling-indexed-train` on aalto, with shared canonical outputs and explicit `PYTHONPATH`; the active dataset-builder checkout stays unchanged. Complete both source caches before the six-attempt launcher. A missing/incomplete/wrong-population cache fails before W&B initialization. The supplied source manifest and all small scene manifests are pinned and checked; binary chunks are verified on access. Packing costs come from precomputed counts, without opening feature payloads or running inference. Full attempts reject partial caches; smoke attempts may use partial roots only if every selected complete track is covered.
 
-After preparation, recalibrate the indexed execution path in the extractor environment (fresh output directories):
+The accepted 23 October profile is stored separately from the checkouts. Use it with the matching execution code and extractor environment (fresh output directories):
 
 ```bash
 probe_root="$PWD/outputs/experiments/E002a"
+execution_root="/home/user20/projects/e002a-execution-optimizations-20261023"
+execution_profile="$execution_root/calibration-chunk4-final/profile.json"
 export PYTHONPATH="$PWD/src"
 export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
-uv run --no-project --python "$probe_root/extractor-env/bin/python" python scripts/calibrate-e002a.py \
-  --device cuda --indexed-cache-root "$probe_root" --output "$probe_root/my-indexed-calibration"
 uv run --no-project --python "$probe_root/extractor-env/bin/python" python scripts/smoke-e002a.py \
-  --profile "$probe_root/my-indexed-calibration/profile.json" \
+  --profile "$execution_profile" \
   --rgb-preparation "$probe_root/rgb-cache-preparation-03/cache.json" \
   --indexed-cache-root "$probe_root" --output "$probe_root/my-indexed-integration"
 ```
 
-Calibration retains the six complete development tracks and labelled shape stresses, reads their new pooled points and existing3× RGB fixtures, and measures real CE/backward/AdamW plus spatial concurrency. It preserves the78% VRAM allocation ceiling; frozen-miss reserve is zero because no encoder runs during fitting. After execution-code changes, `--reference-profile PATH` revalidates the previous packing limits without retuning them. Profile hashes/backend/GPU must match; the LiDAR arm additionally requires the indexed point protocol. The smoke command makes first/repeated prepared reads (not guaranteed physically cold/warm disk) on both sources with actual W&B and checkpoint/plot/prediction reconstruction. These are operational checks, not comparison results. Run them after builders finish; full-population throughput acceptance is still separate.
+Calibration retains the six complete development tracks and labelled shape stresses, reads their new pooled points and existing3× RGB fixtures, and measures real CE/backward/AdamW plus spatial concurrency. It preserves the78% VRAM allocation ceiling; frozen-miss reserve is zero because no encoder runs during fitting. The accepted profile uses up to four spatial frames per call, 1,810,000 ordinary padded tokens and 1,460,024 raw point tokens per physical microbatch; complete oversized tracks still use the existing fallback. [Execution measurements](experiments/E002a-feature-feasibility/README.md#execution-optimization-checks--2026-10-23) retain rejected larger budgets and asynchronous transfers. CPU point checks remain enabled using NumPy; GPU checks remain Torch operations. Feature caches need no rebuild.
+
+After execution-code changes, revalidate the limits, then use the new complete output profile:
+
+```bash
+uv run --no-project --python "$probe_root/extractor-env/bin/python" python scripts/calibrate-e002a.py \
+  --device cuda --indexed-cache-root "$probe_root" --reference-profile "$execution_profile" \
+  --output "$execution_root/my-revalidated-calibration"
+```
+
+`--reference-profile` accepts completed profiles or explicit proposed settings; proposed settings become usable only after successful calibration. Revalidation measures an ordinary-mode boundary at or above the requested limit. Training requires a complete profile with matching execution hashes/backend/GPU and indexed point protocol. The smoke command makes first/repeated prepared reads (not guaranteed physically cold/warm disk) on both sources with actual W&B and checkpoint/plot/prediction reconstruction. These are operational checks, not comparison results; full-population throughput acceptance is separate.
 
 Before the six attempts, measure complete64-track updates on shuffled, dense and long groups using the actual prepared pipeline:
 
 ```bash
 uv run --no-project --python "$probe_root/extractor-env/bin/python" python scripts/check-e002a-throughput.py \
   --source road-waymo --arm g-rgb-dditr --device cuda \
-  --profile "$probe_root/my-indexed-calibration/profile.json" \
+  --profile "$execution_profile" \
   --rgb-preparation "$probe_root/rgb-cache-preparation-03/cache.json" \
   --output "$probe_root/my-road-throughput"
 ```
@@ -513,13 +523,13 @@ For a quick split, add `--breakdown`: only the same shuffled training group is r
 
 For one measured complete training+source-validation epoch, add `--full-epoch` instead of `--breakdown`. This runs the full frozen populations once with fresh verification/advisory-cold source pages, fixed seed/packing/settings, local per-update timings and source-validation metrics; weights are discarded. It records input wait, background preparation, data/model remainder, peak memory and assembly/cleanup time. W&B and checkpoint/plot export overhead are excluded, so this timing alone does not establish the complete operational or worst-case30-minute gate.
 
-LiDAR frame preparation uses **four ordered CPU workers** by default. Override with `--point-workers N` on the single-run, pilot, calibration or smoke commands. Keep the BLAS/OpenMP limits above to avoid nested numerical threading; model-side PyTorch uses two CPU threads. `--worker-sweep` replaces the ordinary throughput cases with the same seeded64-track GPU update at1/2/4/8/16/32 workers (fresh-verification/advisory-cold and repeated reads). It preserves complete tracks/tensor order, records exact loss/token/packing parity and does not launch comparison training. The [worker measurements](experiments/E002a-feature-feasibility/README.md#parallel-frame-preparation--2026-10-23) select the default; existing feature caches need no rebuild. Resource profiles from before this loader-code revision must be regenerated.
+LiDAR frame preparation uses **four ordered CPU workers** by default. Override with `--point-workers N` on the single-run, pilot, calibration or smoke commands. Keep the BLAS/OpenMP limits above to avoid nested numerical threading; model-side PyTorch uses two CPU threads. `--worker-sweep` replaces the ordinary throughput cases with the same seeded64-track GPU update at1/2/4/8/16/32 workers (fresh-verification/advisory-cold and repeated reads). It preserves complete tracks/tensor order, records exact loss/token/packing parity and does not launch comparison training. The [worker measurements](experiments/E002a-feature-feasibility/README.md#parallel-frame-preparation--2026-10-23) select the default. `scripts/measure-e002a-spatial-chunks.py --help` exposes the bounded chunk/validation/physical-budget diagnostic; it records temporary overrides without changing a saved profile. Resource profiles from before the execution-code changes must be regenerated.
 
 Then the manual six-attempt interface is:
 
 ```bash
 uv run --no-project --python "$probe_root/extractor-env/bin/python" python scripts/train-e002a-pilot.py \
-  --device cuda --profile "$probe_root/my-indexed-calibration/profile.json" \
+  --device cuda --profile "$execution_profile" \
   --rgb-preparation "$probe_root/rgb-cache-preparation-03/cache.json" \
   --indexed-cache-root "$probe_root"
 ```
@@ -531,7 +541,7 @@ For one LiDAR attempt, replace the launcher with:
 ```bash
 uv run --no-project --python "$probe_root/extractor-env/bin/python" python scripts/train-e002a.py \
   --source road-waymo --arm g-rgb-dditr --device cuda \
-  --profile "$probe_root/my-indexed-calibration/profile.json" \
+  --profile "$execution_profile" \
   --rgb-preparation "$probe_root/rgb-cache-preparation-03/cache.json" \
   --indexed-point-cache "$probe_root/indexed-road-waymo" \
   --output "$probe_root/runs/my-fresh-attempt"

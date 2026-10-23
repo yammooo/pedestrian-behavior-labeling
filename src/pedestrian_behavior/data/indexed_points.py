@@ -21,6 +21,20 @@ DTYPES = {"features": ("<f2", 64), "coordinates": ("<f4", 3), "native_reference"
 CHUNK_ROWS = 8192
 
 
+def file_stamp(path):
+    s = path.stat()
+    return s.st_size, s.st_mtime_ns, s.st_ctime_ns, s.st_ino, s.st_dev
+
+
+def row_chunks(rows):
+    chunks = rows // CHUNK_ROWS
+    if len(chunks) < 2:
+        return chunks
+    if (chunks[1:] < chunks[:-1]).any():
+        return np.unique(chunks)
+    return chunks[np.r_[True, chunks[1:] != chunks[:-1]]]
+
+
 def build_frame(arrays):
     """20cm means; retain original rows in whole cells refined by any target's .5m halo."""
     validate_points(arrays)
@@ -137,15 +151,21 @@ class ShardWriter:
 class IndexedShard:
     """Read selected rows, verify touched chunks, and bound verification memoization."""
 
-    def __init__(self, root, manifest_sha256, max_verified_chunks=512):
+    def __init__(self, root, manifest_sha256, max_verified_chunks=512, *, _record=None, _state=None):
         self.root = Path(root)
-        if max_verified_chunks <= 0 or checksum(self.root / "manifest.json") != manifest_sha256:
+        manifest = self.root / "manifest.json"
+        if _record is not None and _state is None:
+            raise ValueError("Cached metadata requires pinned verification state")
+        if _state is not None and file_stamp(manifest) != _state["manifest"]:
+            raise ValueError("Immutable shard manifest changed")
+        if max_verified_chunks <= 0 or (_record is None and checksum(manifest) != manifest_sha256):
             raise ValueError("Invalid verification budget or manifest hash")
-        self.record = json.loads((self.root / "manifest.json").read_text())
+        self.record = _record if _record is not None else json.loads(manifest.read_text())
         if self.record["protocol"] != PROTOCOL or set(self.record["arrays"]) != set(DTYPES) or self.record["chunk_rows"] != CHUNK_ROWS:
             raise ValueError("Unsupported indexed shard")
         self.maps, self.stamps, self.verified = {}, {}, OrderedDict()
         self.limit = max_verified_chunks
+        self.state = _state
         self.stats = {"selected_bytes": 0, "verified_bytes": 0, "checked_chunks": 0, "requests": 0}
         for name, (dtype, width) in DTYPES.items():
             spec = self.record["arrays"][name]
@@ -154,40 +174,51 @@ class IndexedShard:
                 raise ValueError("Invalid indexed array shape")
             if len(spec["chunks"]) != (spec["rows"] + CHUNK_ROWS - 1) // CHUNK_ROWS:
                 raise ValueError("Invalid chunk index")
-            stat = path.stat()
-            if stat.st_size != spec["bytes"]:
+            stamp = file_stamp(path)
+            if stamp[0] != spec["bytes"]:
                 raise ValueError("Truncated indexed array")
-            self.stamps[name] = stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns, stat.st_ino
+            if _state is not None and stamp != _state["arrays"][name]:
+                raise ValueError("Immutable shard changed before reopening")
+            self.stamps[name] = stamp
             shape = (spec["rows"], width) if width > 1 else (spec["rows"],)
             self.maps[name] = np.memmap(path, mode="r", dtype=dtype, shape=shape) if spec["rows"] else np.empty(shape, dtype=dtype)
 
-    def take(self, name, rows):
+    def take(self, name, rows, *, _chunks=None):
         rows = np.asarray(rows, dtype=np.int64)
         spec = self.record["arrays"][name]
         if rows.ndim != 1 or (rows < 0).any() or (rows >= spec["rows"]).any():
             raise ValueError("Indexed row outside shard")
         path = self.root / (name + ".bin")
-        stat = path.stat()
-        if (stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns, stat.st_ino) != self.stamps[name]:
+        if file_stamp(path) != self.stamps[name]:
             raise ValueError("Immutable shard changed after opening")
         row_bytes = np.dtype(spec["dtype"]).itemsize * spec["width"]
-        with path.open("rb") as stream:
-            for chunk in np.unique(rows // CHUNK_ROWS):
-                key = name, int(chunk)
-                if key in self.verified:
-                    self.verified.move_to_end(key)
+        chunks = row_chunks(rows) if _chunks is None else _chunks
+        flags = self.state["verified"].get(name) if self.state is not None else None
+        if self.state is not None and flags is None:
+            flags = self.state["verified"][name] = np.zeros(len(spec["chunks"]), bool)
+        for chunk in chunks:
+            key = name, int(chunk)
+            if flags is not None:
+                if flags[chunk]:
                     continue
-                stream.seek(int(chunk) * CHUNK_ROWS * row_bytes)
-                raw = stream.read(CHUNK_ROWS * row_bytes)
-                if hashlib.sha256(raw).hexdigest() != spec["chunks"][int(chunk)]:
-                    raise ValueError("Indexed chunk checksum mismatch")
-                self.stats["verified_bytes"] += len(raw)
-                self.stats["checked_chunks"] += 1
+            elif key in self.verified:
+                self.verified.move_to_end(key)
+                continue
+            start = int(chunk) * CHUNK_ROWS
+            raw = memoryview(self.maps[name][start:start + CHUNK_ROWS]).cast("B")
+            if hashlib.sha256(raw).hexdigest() != spec["chunks"][int(chunk)]:
+                raise ValueError("Indexed chunk checksum mismatch")
+            self.stats["verified_bytes"] += len(raw)
+            self.stats["checked_chunks"] += 1
+            if flags is not None:
+                flags[chunk] = True
+            else:
                 self.verified[key] = None
                 if len(self.verified) > self.limit:
                     self.verified.popitem(last=False)
         self.stats["selected_bytes"] += len(rows) * row_bytes
-        return np.array(self.maps[name][rows], copy=True)
+        # Integer-array indexing already returns an owned copy, independent of mmap lifetime.
+        return self.maps[name][rows]
 
     def crop(self, frame, locator):
         meta = self.record["frames"][str(frame)]
@@ -200,15 +231,19 @@ class IndexedShard:
         if (rows >= meta["count"]).any() or (np.diff(rows) <= 0).any():
             raise ValueError("Invalid target row selection")
         rows += meta["start"]
-        features = self.take("features", rows).astype(np.float32)
-        coordinates = self.take("coordinates", rows)
+        chunks = row_chunks(rows)
+        result = np.empty((len(rows), 68), np.float32)
+        result[:, :64] = self.take("features", rows, _chunks=chunks)
+        coordinates = self.take("coordinates", rows, _chunks=chunks)
         box = np.array(selection["box"])
         relative = relative_xyz(coordinates, box[:3], np.array(meta["world_from_native"]), np.array(selection["anchor"]))
         inside = box_membership(coordinates, box[:3], box[3:6], box[6])
-        if not np.isfinite(features).all() or not np.isfinite(relative).all():
+        result[:, 64:67] = relative / 20
+        result[:, 67] = inside
+        if not np.isfinite(result).all():
             raise ValueError("Nonfinite indexed crop")
         self.stats["requests"] += 1
-        return np.c_[features, relative / 20, inside].astype(np.float32)
+        return result
 
     def close(self):
         for array in self.maps.values():

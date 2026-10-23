@@ -1,5 +1,8 @@
 """Complete-track logical updates and shape-based physical packing."""
 
+from concurrent.futures import ThreadPoolExecutor
+import time
+
 import torch
 from torch.nn.utils.rnn import pad_sequence
 
@@ -52,11 +55,13 @@ def pack_tracks(indices, lengths, costs, profile):
 class LogicalBatches:
     """One persistent generator; no feature payloads materialized for the whole update."""
 
-    def __init__(self, dataset, profile, training=False, seed=0, max_updates=None, on_pack=None):
+    def __init__(self, dataset, profile, training=False, seed=0, max_updates=None, on_pack=None, *, prefetch=False):
         self.dataset, self.profile = dataset, profile
         self.training, self.max_updates = training, max_updates
         self.generator = torch.Generator().manual_seed(seed)
         self.on_pack, self.iteration = on_pack, 0
+        self.prefetch = prefetch
+        self.stats = {"prepared_seconds": 0., "wait_seconds": 0., "prepared_microbatches": 0}
 
     def __len__(self):
         n = (len(self.dataset) + 63) // 64
@@ -71,9 +76,34 @@ class LogicalBatches:
             yield order[start:start + 64]
 
     def microbatches(self, indices):
+        iterator = self._microbatches(indices)
+        if not self.prefetch:
+            yield from iterator
+            return
+        # Exactly one future beside the consumed batch; no whole-update materialization.
+        with ThreadPoolExecutor(max_workers=1, thread_name_prefix="prepared-input") as pool:
+            pending = pool.submit(next, iterator, None)
+            try:
+                while True:
+                    begin = time.perf_counter()
+                    batch = pending.result()
+                    self.stats["wait_seconds"] += time.perf_counter() - begin
+                    if batch is None:
+                        return
+                    pending = pool.submit(next, iterator, None)
+                    yield batch
+                    del batch
+            finally:
+                pending.cancel()
+                # Join before closing the generator or its cache resources.
+                pool.shutdown(wait=True, cancel_futures=True)
+                iterator.close()
+
+    def _microbatches(self, indices):
         lengths = {i: self.dataset.entries[i]["slots"] for i in indices}
         costs = {i: self.dataset.cost(i) for i in indices}
         for group in pack_tracks(indices, lengths, costs, self.profile):
+            begin = time.perf_counter()
             samples = [self.dataset[i] for i in group]
             batch = collate_multimodal(samples)
             if self.on_pack:
@@ -81,6 +111,8 @@ class LogicalBatches:
                               "locators": batch["locators"], "lengths": batch["lengths"].tolist(),
                               "point_counts": [len(f) for f in batch.get("points", ())],
                               "unknown_cost_indices": [i for i in indices if costs[i] is None]})
+            self.stats["prepared_seconds"] += time.perf_counter() - begin
+            self.stats["prepared_microbatches"] += 1
             yield batch
             del batch, samples
 

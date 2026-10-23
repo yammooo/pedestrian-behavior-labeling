@@ -249,7 +249,8 @@ def assembly(args):
             def packing(row):
                 with (args.output / "packing.jsonl").open("a") as stream:
                     stream.write(json.dumps(row | {"phase": "training" if training else "validation"}, allow_nan=False) + "\n")
-            logical = LogicalBatches(d, profile, training, seed, max_updates=2 if args.smoke and training else None, on_pack=packing)
+            logical = LogicalBatches(d, profile, training, seed, max_updates=2 if args.smoke and training else None,
+                                     on_pack=packing, prefetch=args.arm == "g-rgb-dditr")
             return logical if training else PredictionBatches(logical)
 
         def conditions(metadata, arrays, track, dataset):
@@ -264,6 +265,9 @@ def assembly(args):
                     "frozen_features": identity, "profile": profile, "profile_sha256": checksum(args.profile),
                     "indexed_point_cache": points.identity if points is not None else None,
                     "point_storage_protocol": POINT_PROTOCOL if points is not None else None,
+                    "point_loading": {"prefetch_physical_microbatches": 1, "open_scenes": points.limit,
+                        "metadata_limit_bytes": points.metadata_limit,
+                        "verification": "source-process-file-stamps-chunk-flags"} if points is not None else None,
                     "feature_supply": "prepared-read-only-no-inference",
                     "rgb_cache_root": str(args.rgb_cache_root.resolve()) if rgb is not None else None, "warmup_updates": warmup,
                     "held_out_tests": False, "exploratory": True},

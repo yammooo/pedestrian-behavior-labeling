@@ -1,6 +1,7 @@
 """Prepared inputs: read-only hits, complete populations/slots, costs and corruption."""
 
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 import json
 from pathlib import Path
 import tempfile
@@ -54,6 +55,65 @@ def open_points(root, catalog, **kwargs):
 
 
 class PreparedInputsTest(unittest.TestCase):
+    def test_verification_survives_eviction_but_not_mutation_or_explicit_reset(self):
+        with tempfile.TemporaryDirectory() as folder:
+            catalog = Catalog()
+            catalog.tracks["b"]["group"] = "other"
+            for key in ("1", "2"):
+                catalog.frames["scene", key].remove("b")
+                catalog.frames["other", key] = ["b"]
+            root = prepared_fixture(Path(folder)/"points", catalog)
+            points = open_points(root, catalog, max_open_scenes=1, max_metadata_bytes=0)
+            expected = list(points.iter_track("a"))
+            list(points.iter_track("b"))
+            checked = points.snapshot()["checked_chunks"]
+            actual = list(points.iter_track("a"))
+            self.assertEqual(points.snapshot()["checked_chunks"], checked)
+            self.assertEqual(points.metadata_bytes, 0)
+            for a, b in zip(expected, actual): np.testing.assert_array_equal(a, b)
+            points.reset_verification()
+            list(points.iter_track("a"))
+            self.assertGreater(points.snapshot()["checked_chunks"], checked)
+            points.close()
+            # Same bytes under a new inode cannot inherit earlier verified flags.
+            path = root/points.record["scenes"]["scene"]["path"]/"features.bin"
+            replacement = path.with_suffix(".tmp")
+            replacement.write_bytes(path.read_bytes()); replacement.replace(path)
+            with self.assertRaisesRegex(ValueError, "changed"):
+                list(points.iter_track("a"))
+            points.close()
+
+    def test_decoded_metadata_budget_and_manifest_mutation_after_eviction(self):
+        with tempfile.TemporaryDirectory() as folder:
+            catalog = Catalog()
+            root = prepared_fixture(Path(folder)/"points", catalog)
+            points = open_points(root, catalog, max_metadata_bytes=2**20)
+            list(points.iter_track("a")); points.close()
+            loads = points.stats["metadata_loads"]
+            list(points.iter_track("a"))
+            self.assertEqual(points.stats["metadata_loads"], loads)
+            self.assertLessEqual(points.metadata_bytes, points.metadata_limit)
+            points.close()
+            path = root/points.record["scenes"]["scene"]["path"]/"manifest.json"
+            path.write_text(path.read_text()+" ")
+            with self.assertRaisesRegex(ValueError, "manifest changed"):
+                list(points.iter_track("a"))
+            points.close()
+
+    def test_rgb_serializes_cross_thread_reads_without_inference(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)/"rgb"
+            with FeatureCache(root, min_free_bytes=0) as writer:
+                writer.get({"track": "a"}, lambda: {"values": np.ones((2, 3), np.float32)})
+            cache = PreparedRGB(root)
+            produce = Mock(side_effect=AssertionError("inference"))
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                actual = list(pool.map(lambda _: cache.get({"track": "a"}, produce), range(4)))
+            self.assertEqual(cache.snapshot()["hits"], 4)
+            for row in actual: np.testing.assert_array_equal(row["values"], np.ones((2, 3)))
+            produce.assert_not_called()
+            cache.close()
+
     def test_scene_reader_budget_closes_and_reopens_without_losing_counts(self):
         with tempfile.TemporaryDirectory() as folder:
             catalog = Catalog()

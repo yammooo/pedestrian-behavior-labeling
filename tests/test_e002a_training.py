@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+import threading
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -105,6 +106,77 @@ class MultimodalTest(unittest.TestCase):
         previous_determinism = torch.are_deterministic_algorithms_enabled()
         self.addCleanup(torch.use_deterministic_algorithms, previous_determinism)
         seed_run(0)
+
+    def _prefetch_equivalence(self, device):
+        data = Samples([sample(3+i%2, str(i)) for i in range(5)])
+        profile = PROFILE | {"max_tracks": 2}
+        seed_run(4)
+        initial = MultimodalClassifier("g-rgb-dditr", profile).state_dict()
+        results = []
+        for enabled in (False, True):
+            rows, outputs = [], []
+            loader = LogicalBatches(data, profile, training=True, seed=0, prefetch=enabled,
+                on_pack=lambda row: rows.append(row["physical_indices"]))
+            model = MultimodalClassifier("g-rgb-dditr", profile).to(device)
+            model.load_state_dict(initial)
+            hook = model.register_forward_hook(lambda m, args, out: outputs.append(out.detach().cpu()))
+            optimizer = torch.optim.AdamW(model.parameters(), lr=.0003, weight_decay=.0001)
+            seed_run(9)
+            result = train_accumulated_epoch(model, loader, optimizer, torch.device(device), 1., peak_lr=.0003, warmup_steps=1)
+            hook.remove()
+            results.append((rows, outputs, result["training_ce"],
+                {k: p.grad.detach().cpu().clone() for k,p in model.named_parameters()},
+                {k: p.detach().cpu().clone() for k,p in model.state_dict().items()}))
+        self.assertEqual(results[0][0], results[1][0])
+        self.assertEqual(results[0][2], results[1][2])
+        for a,b in zip(results[0][1], results[1][1]): torch.testing.assert_close(a,b,rtol=0,atol=0)
+        for i in (3,4):
+            for key in results[0][i]:
+                torch.testing.assert_close(results[0][i][key],results[1][i][key],rtol=0,atol=0)
+
+    def test_prefetch_preserves_dropout_predictions_gradients_updates_and_order(self):
+        self._prefetch_equivalence("cpu")
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA unavailable")
+    def test_cuda_prefetch_preserves_dropout_predictions_gradients_updates_and_order(self):
+        self._prefetch_equivalence("cuda")
+
+    def test_prefetch_is_one_batch_ahead_joins_and_propagates_producer_failure(self):
+        data = Samples([sample(3, str(i)) for i in range(4)])
+        started, release = threading.Event(), threading.Event()
+        reads = []
+        class Blocking(Samples):
+            def __getitem__(self, i):
+                reads.append(i)
+                if i==1:
+                    started.set()
+                    if not release.wait(5): raise RuntimeError("test producer timeout")
+                return super().__getitem__(i)
+        loader = LogicalBatches(Blocking(data.values), PROFILE | {"max_tracks": 1}, prefetch=True)
+        iterator = loader.microbatches([0,1,2,3])
+        self.assertEqual(next(iterator)["locators"], ["0"])
+        self.assertTrue(started.wait(5))
+        self.assertEqual(reads, [0,1])
+        release.set(); iterator.close()
+        self.assertFalse(any(t.name.startswith("prepared-input") for t in threading.enumerate()))
+        class Broken(Samples):
+            def __getitem__(self, i):
+                if i==1: raise ValueError("producer failed")
+                return super().__getitem__(i)
+        loader = LogicalBatches(Broken(data.values), PROFILE | {"max_tracks": 1}, prefetch=True)
+        with self.assertRaisesRegex(ValueError,"producer failed"):
+            list(loader.microbatches([0,1,2]))
+        self.assertFalse(any(t.name.startswith("prepared-input") for t in threading.enumerate()))
+
+    def test_model_failure_closes_prefetch_before_attempt_resources(self):
+        data = Samples([sample(3, str(i)) for i in range(3)])
+        model = MultimodalClassifier("g-rgb-dditr", PROFILE)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=.0003)
+        model.forward = lambda batch: (_ for _ in ()).throw(ValueError("model failed"))
+        loader = LogicalBatches(data, PROFILE | {"max_tracks":1}, prefetch=True)
+        with self.assertRaisesRegex(ValueError,"model failed"):
+            train_accumulated_epoch(model, loader, optimizer, torch.device("cpu"), 1., peak_lr=.0003, warmup_steps=1)
+        self.assertFalse(any(t.name.startswith("prepared-input") for t in threading.enumerate()))
 
     def test_enabled_only_fusion_shapes_missingness_checkpoint_and_no_gt_inputs(self):
         from pedestrian_behavior.experiments.e002a_run import model_spec

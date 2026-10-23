@@ -5,6 +5,7 @@ import hashlib
 from pathlib import Path
 import sqlite3
 import time
+from threading import Lock
 
 import numpy as np
 
@@ -14,7 +15,9 @@ from .feature_cache import canonical, identity_digest, validate_arrays
 class PreparedRGB:
     def __init__(self, root):
         self.root = Path(root).resolve()
-        self.db = sqlite3.connect((self.root / "index.sqlite3").as_uri() + "?mode=ro", uri=True)
+        # One serialized read-only connection; producer must join before final close.
+        self.lock = Lock()
+        self.db = sqlite3.connect((self.root / "index.sqlite3").as_uri() + "?mode=ro", uri=True, check_same_thread=False)
         if self.db.execute("SELECT * FROM format").fetchall() != [(1,)]:
             self.db.close()
             raise ValueError("Unsupported prepared RGB index")
@@ -22,6 +25,10 @@ class PreparedRGB:
         self.initial = self.snapshot()
 
     def get(self, identity, produce, validate=validate_arrays):
+        with self.lock:
+            return self._get(identity, validate)
+
+    def _get(self, identity, validate):
         begin = time.perf_counter()
         serialized, key = canonical(identity), identity_digest(identity)
         row = self.db.execute("SELECT identity, bytes, sha256 FROM entries WHERE key=?", (key,)).fetchone()
@@ -48,4 +55,5 @@ class PreparedRGB:
         return self.stats | {"root": str(self.root), "read_only": True}
 
     def close(self):
-        self.db.close()
+        with self.lock:
+            self.db.close()

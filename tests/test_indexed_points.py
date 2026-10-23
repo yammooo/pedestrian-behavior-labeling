@@ -6,7 +6,8 @@ import unittest
 
 import numpy as np
 
-from pedestrian_behavior.data.indexed_points import build_frame, IndexedShard, ShardWriter, CHUNK_ROWS
+from pedestrian_behavior.data.indexed_points import build_frame, IndexedShard, ShardWriter, CHUNK_ROWS, row_chunks
+from pedestrian_behavior.inspection.feature_probe import relative_xyz, box_membership
 
 
 def fixture():
@@ -23,6 +24,36 @@ def selected(payload, metadata, target):
 
 
 class IndexedPointsTest(unittest.TestCase):
+    def test_optimized_crop_is_bit_exact_to_original_flow_and_owns_memory(self):
+        arrays = fixture()
+        rng = np.random.default_rng(91)
+        arrays["features"] = rng.normal(size=arrays["features"].shape).astype(np.float32)
+        angle = .73
+        rotation = np.array([[np.cos(angle), -np.sin(angle), 0], [np.sin(angle), np.cos(angle), 0], [0, 0, 1]])
+        arrays["world_from_native"][:3, :3] = rotation
+        arrays["anchors"][:, :3, :3] = rotation.T
+        arrays["boxes"][:, 6] = -.42
+        with tempfile.TemporaryDirectory() as folder:
+            writer = ShardWriter(Path(folder)/"scene", {})
+            writer.add("0", arrays); sha = writer.finish()
+            payload, meta = build_frame(arrays)
+            reader = IndexedShard(writer.root, sha)
+            for i, locator in enumerate(arrays["locators"]):
+                rows = selected(payload, meta, i)
+                box, anchor = arrays["boxes"][i], arrays["anchors"][i]
+                expected = np.c_[payload["features"][rows].astype(np.float32),
+                    relative_xyz(payload["coordinates"][rows], box[:3], arrays["world_from_native"], anchor)/20,
+                    box_membership(payload["coordinates"][rows], box[:3], box[3:6], box[6])].astype(np.float32)
+                actual = reader.crop("0", str(locator))
+                np.testing.assert_array_equal(actual, expected)
+            taken = reader.take("features", np.array([2, 0, 2]))
+            reader.close()
+            np.testing.assert_array_equal(taken, payload["features"][[2, 0, 2]])
+            self.assertTrue(actual.flags.owndata)
+        for rows in ([], [8192, 0, 8192], [0, 1, 8192, 8193]):
+            r = np.array(rows, np.int64)
+            np.testing.assert_array_equal(row_chunks(r), np.unique(r//CHUNK_ROWS))
+
     def test_two_nearby_targets_choose_own_fine_and_other_coarse(self):
         arrays = fixture()
         payload, metadata = build_frame(arrays)

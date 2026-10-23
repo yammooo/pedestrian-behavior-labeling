@@ -1,5 +1,7 @@
 """Equal-track loss and reproducible confusion metrics; no experiment policy."""
 
+from contextlib import ExitStack
+
 import numpy as np
 import torch
 from torch.nn import functional as F
@@ -91,13 +93,18 @@ def prediction_metrics(tracks, classes, memberships=None, supported_only=False):
 def predict(model, batches, device, forward_batch=None):
     model.eval()
     tracks = []
-    for batch in batches:
-        logits = model(batch["inputs"].to(device), batch["lengths"]) if forward_batch is None else forward_batch(model, batch, device)
-        track_cross_entropy(logits, batch["targets"].to(device), batch["gt_valid"].to(device), batch["padding_mask"].to(device))
-        for i, length in enumerate(batch["lengths"].tolist()):
-            tracks.append(batch.get("prediction_metadata", [{} for _ in batch["locators"]])[i] | {"logits": logits[i, :length].cpu().numpy().astype(np.float32),
-                           "targets": batch["targets"][i, :length].numpy(), "gt_valid": batch["gt_valid"][i, :length].numpy(),
-                           "locator": batch["locators"][i], "archive": batch["archives"][i]})
+    with ExitStack() as stack:
+        iterator = iter(batches)
+        close = getattr(iterator, "close", None)
+        if close is not None:
+            stack.callback(close)
+        for batch in iterator:
+            logits = model(batch["inputs"].to(device), batch["lengths"]) if forward_batch is None else forward_batch(model, batch, device)
+            track_cross_entropy(logits, batch["targets"].to(device), batch["gt_valid"].to(device), batch["padding_mask"].to(device))
+            for i, length in enumerate(batch["lengths"].tolist()):
+                tracks.append(batch.get("prediction_metadata", [{} for _ in batch["locators"]])[i] | {"logits": logits[i, :length].cpu().numpy().astype(np.float32),
+                               "targets": batch["targets"][i, :length].numpy(), "gt_valid": batch["gt_valid"][i, :length].numpy(),
+                               "locator": batch["locators"][i], "archive": batch["archives"][i]})
     if not tracks:
         raise ValueError("Empty evaluation split")
     return tracks

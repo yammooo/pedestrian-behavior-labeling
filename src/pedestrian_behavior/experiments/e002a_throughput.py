@@ -47,15 +47,20 @@ class OneUpdate:
 
     def microbatches(self, indices):
         iterator = iter(self.logical.microbatches(indices))
-        while True:
-            begin = time.perf_counter()
-            try:
-                batch = next(iterator)
-            except StopIteration:
+        try:
+            while True:
+                begin = time.perf_counter()
+                try:
+                    batch = next(iterator)
+                except StopIteration:
+                    self.loading_seconds += time.perf_counter() - begin
+                    return
                 self.loading_seconds += time.perf_counter() - begin
-                return
-            self.loading_seconds += time.perf_counter() - begin
-            yield batch
+                yield batch
+        finally:
+            close = getattr(iterator, "close", None)
+            if close is not None:
+                close()
 
 
 @contextmanager
@@ -82,7 +87,7 @@ def advisory_cold(dataset, indices):
     supply = dataset.supply
     points = supply.points if supply is not None else None
     if points is not None:
-        points.close()
+        points.reset_verification()
         groups = {dataset.entries[i]["group"] for i in indices}
         if hasattr(os, "posix_fadvise"):
             for group in groups:
@@ -127,6 +132,8 @@ def run(args):
             record.setdefault("selections", {})[operation] = {k: [dataset.entries[i]["locator"] for i in v]
                                                            for k,v in chosen.items()}
             logical = prepared["batches"](dataset, training=True, seed=0)
+            if args.serial:
+                logical.prefetch = False
             for name, indices in chosen.items():
                 for phase in ("advisory-cold", "repeat-files"):
                     seed_run(0)
@@ -165,6 +172,7 @@ def run(args):
                            "tracks": tracks, "tokens": tokens, "physical_microbatches": physical,
                            "peak_cuda_allocated_bytes": torch.cuda.max_memory_allocated(),
                            "runtime_before": before, "runtime_after": prepared["runtime_snapshot"]()}
+                    row["loader"] = dict(logical.stats) | {"prefetch": logical.prefetch}
                     if operation == "training":
                         row["input_preparation_seconds"] = timed_update.loading_seconds
                         row["model_transfer_step_seconds"] = row["seconds"] - timed_update.loading_seconds
@@ -198,6 +206,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     add_arguments(parser)
     parser.add_argument("--breakdown", action="store_true", help="Only the same shuffled training update twice, with load/model timers")
+    parser.add_argument("--serial", action="store_true", help="Diagnostic only: disable prepared-microbatch overlap")
     args = parser.parse_args()
     if args.device != "cuda":
         raise ValueError("GPU throughput readiness requires CUDA")

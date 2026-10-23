@@ -22,7 +22,7 @@ from pedestrian_behavior.models.multimodal import MultimodalClassifier, frame_ch
 from pedestrian_behavior.training import seed_run
 from . import e001b_run
 from .e002a_execution_probe import loaded_track
-from .e002a_run import FUSION_PROTOCOL, resource_code, SETTINGS, POINT_PROTOCOL
+from .e002a_run import FUSION_PROTOCOL, resource_code, SETTINGS, POINT_PROTOCOL, validate_profile
 from .e002a_features import FeatureCatalog, load_configuration
 from pedestrian_behavior.data.prepared_points import PreparedPoints
 from pedestrian_behavior.inspection.pretrained import DITR_REVISION, DITR_SHA256, DITR_CONFIG_SHA256
@@ -115,6 +115,13 @@ def run(args):
               "fixture_sha256": checksum(args.fixtures / "execution.json"), "settings": SETTINGS}
     telemetry = log = None
     sources = {}
+    reference = None
+    if args.reference_profile is not None:
+        old = json.loads(args.reference_profile.read_text())
+        if old.get("status") != "complete" or old.get("point_storage_protocol") != POINT_PROTOCOL:
+            raise ValueError("Completed indexed reference calibration required")
+        reference = validate_profile(old["profile"])
+        record["reference_profile_sha256"] = checksum(args.reference_profile)
     stack = ExitStack()
     try:
         seed_run(0)
@@ -197,7 +204,7 @@ def run(args):
         # Normalize by track so both sources contribute equally to this execution-only choice.
         ratios = {c: np.mean([w["seconds"] / next(x["seconds"] for x in chunks if x["name"] == w["name"] and x["frame_chunk"] == 2)
                               for w in chunks if w["frame_chunk"] == c]) for c in (1, 2, 4)}
-        profile["frame_chunk"] = min(ratios, key=ratios.get)
+        profile["frame_chunk"] = reference["frame_chunk"] if reference is not None else min(ratios, key=ratios.get)
         if profile["frame_chunk"] != 2:
             name, sample = next((n, s) for n, s in samples if n == "loki-typical")
             row = measure(sample, "g-rgb-dditr", 2, profile, "ordinary", args.device) | {"name": name, "status": "complete", "phase": "selected-frame-concurrency"}
@@ -211,6 +218,10 @@ def run(args):
         # Match tested shapes; reserve is already imposed by the allocated-memory ceiling.
         profile.update(ordinary_tokens=max(w["padded_tokens"] for w in fitting),
                        microbatch_tokens=max(w["tokens"] for w in fitting))
+        if reference is not None:
+            if any(reference[k] > profile[k] for k in reference):
+                raise ValueError("Reference packing limits exceed newly tested calibration shapes")
+            profile = reference
         record.update(status="complete", profile=profile)
         return record
     except BaseException:
@@ -229,4 +240,5 @@ def main():
     parser.add_argument("--probe", type=Path, default=Path("outputs/experiments/E002a/native-probe-07"))
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--device", choices=("cpu", "cuda"), required=True)
+    parser.add_argument("--reference-profile", type=Path, help="Revalidate existing packing limits without retuning them")
     run(parser.parse_args())

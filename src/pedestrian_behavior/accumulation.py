@@ -1,5 +1,6 @@
 """Equal-track accumulation and update-based warmup; no experiment settings."""
 
+from contextlib import closing
 import time
 
 import torch
@@ -22,20 +23,21 @@ def train_accumulated_epoch(model, batches, optimizer, device, clip_norm, on_ste
         optimizer.zero_grad(set_to_none=True)
         for group in optimizer.param_groups:
             group["lr"] = warmup_lr(peak_lr, step_offset + steps + 1, warmup_steps)
-        for batch in batches.microbatches(indices):
-            logits = model(batch)
-            losses = track_cross_entropy(logits, batch["targets"].to(device), batch["gt_valid"].to(device), batch["padding_mask"].to(device))
-            (losses.sum() / count).backward()
-            value = float(losses.detach().double().sum())
-            update_loss += value
-            seen += len(losses)
-            slots += int(batch["lengths"].sum())
-            gt += int(batch["gt_valid"].sum())
-            padding += int(batch["padding_mask"].sum())
-            capacity += batch["padding_mask"].numel()
-            tokens += sum(len(x) for x in batch.get("points", ()))
-            physical += 1
-            del logits, losses, batch
+        with closing(batches.microbatches(indices)) as microbatches:
+            for batch in microbatches:
+                logits = model(batch)
+                losses = track_cross_entropy(logits, batch["targets"].to(device), batch["gt_valid"].to(device), batch["padding_mask"].to(device))
+                (losses.sum() / count).backward()
+                value = float(losses.detach().double().sum())
+                update_loss += value
+                seen += len(losses)
+                slots += int(batch["lengths"].sum())
+                gt += int(batch["gt_valid"].sum())
+                padding += int(batch["padding_mask"].sum())
+                capacity += batch["padding_mask"].numel()
+                tokens += sum(len(x) for x in batch.get("points", ()))
+                physical += 1
+                del logits, losses, batch
         if seen != count or count < 1:
             raise ValueError("Physical packing changed logical update membership")
         torch.nn.utils.clip_grad_norm_(model.parameters(), clip_norm, error_if_nonfinite=True)

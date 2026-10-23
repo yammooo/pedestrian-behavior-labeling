@@ -28,7 +28,7 @@ def chunk_stats(batch, profile):
             "mode": "ordinary" if sum(padded) <= profile["ordinary_tokens"] else "recompute"}
 
 
-def preflight(prepared, dataset, indices, profile):
+def preflight(prepared, dataset, indices, profile, *, include_locators=False):
     logical = prepared["batches"](dataset, training=True, seed=0)
     rows = []
     for batch in logical.microbatches(indices):
@@ -36,6 +36,8 @@ def preflight(prepared, dataset, indices, profile):
         if item["max_chunk_padded_tokens"] > profile["frame_tokens"]:
             raise ValueError("Chunk exceeds the unchanged padded-token ceiling")
         item["tokens"] = sum(map(len, batch["points"]))
+        if include_locators:
+            item["locators"] = batch["locators"]
         rows.append(item)
     return rows
 
@@ -82,6 +84,10 @@ def run(args):
         raise ValueError("Sweep requires full-source ROAD/LOKI LiDAR arm on CUDA")
     if not 1 <= args.repeats <= 5:
         raise ValueError("Use one to five bounded measured repeats")
+    if not args.frame_chunks or any(size < 1 for size in args.frame_chunks):
+        raise ValueError("Frame chunk candidates must be positive")
+    if args.ordinary_token_threshold is not None and args.ordinary_token_threshold < 1:
+        raise ValueError("Ordinary-token override must be positive")
     args.output.mkdir(parents=True, exist_ok=False)
     torch.set_num_threads(2)
     record = {"status": "incomplete", "source": args.source, "arm": args.arm, "device": args.device,
@@ -96,21 +102,67 @@ def run(args):
         prepared = assembly(args)
         dataset = prepared["dataset"](args.source, "training")
         indices = cases(dataset)["shuffled"]
-        if len(indices) != 64:
+        if len(indices) != 64 and not args.largest_microbatch_only:
             raise ValueError("Expected the representative shuffled64-track update")
         base_profile = dict(prepared["config"]["profile"])
-        frame_chunks = [2, 4, 8, 16, 2**31 - 1]
-        variants = [(2, "torch"), (2, "numpy")] + [(size, "numpy") for size in frame_chunks[1:]]
+        frame_chunks = args.frame_chunks
+        variants = ([(2, "torch"), (2, "numpy")] if 2 in frame_chunks else []) + [
+            (size, "numpy") for size in frame_chunks if size != 2]
+        record["finite_check_comparison"] = ["torch", "numpy"] if 2 in frame_chunks else ["numpy"]
+        selected_indices = indices
+        if args.largest_microbatch_only:
+            selection_profile = base_profile | {"frame_chunk": max(frame_chunks)}
+            groups = preflight(prepared, dataset, indices, selection_profile, include_locators=True)
+            largest = max(groups, key=lambda row: row["padded_tokens"])
+            by_locator = {entry["locator"]: i for i, entry in enumerate(dataset.entries)}
+            selected_indices = [by_locator[locator] for locator in largest["locators"]]
+            record["largest_microbatch_selection"] = {
+                "selection_chunk": max(frame_chunks), "locators": largest["locators"],
+                "tokens": largest["tokens"], "padded_tokens": largest["padded_tokens"],
+                "tracks": len(selected_indices),
+            }
+            if args.ordinary_token_threshold is not None:
+                calibration = json.loads(args.profile.read_text())
+                reference_workload = max(
+                    (row for row in calibration["workloads"]
+                     if row.get("arm") == "g-rgb-dditr" and row.get("mode") == "ordinary"
+                     and row.get("frame_chunk") == base_profile["frame_chunk"]
+                     and row.get("peak_allocated") is not None),
+                    key=lambda row: row["padded_tokens"],
+                )
+                scale = max(largest["tokens"] / reference_workload["tokens"],
+                            largest["padded_tokens"] / reference_workload["padded_tokens"])
+                estimate = int(reference_workload["peak_allocated"] * scale * 1.25)
+                ceiling = calibration["allocated_ceiling"]
+                record["ordinary_probe_memory_estimate"] = {
+                    "reference_workload": reference_workload["name"],
+                    "reference_peak_allocated_bytes": reference_workload["peak_allocated"],
+                    "reference_tokens": reference_workload["tokens"],
+                    "reference_padded_tokens": reference_workload["padded_tokens"],
+                    "scale": scale, "safety_factor": 1.25,
+                    "estimated_peak_allocated_bytes": estimate,
+                    "calibrated_78pct_ceiling_bytes": ceiling,
+                }
+                if estimate >= ceiling * 0.70:
+                    raise ValueError("Conservative ordinary-mode estimate exceeds 70% of the calibrated ceiling")
         record.update(scope="one warmed pass plus matched shuffled64 updates; weights discarded; no W&B/validation/tests",
                       model_config=prepared["config"],
                       selections=[dataset.entries[i]["locator"] for i in indices],
                       frame_token_ceiling=base_profile["frame_tokens"],
                       ordinary_token_threshold=base_profile["ordinary_tokens"])
+        if args.largest_microbatch_only:
+            record["scope"] = "one warmed pass plus matched largest physical microbatch only; weights discarded"
+        if args.ordinary_token_threshold is not None:
+            record["ordinary_token_threshold_override"] = args.ordinary_token_threshold
         reference = None
         for size, finite_check in variants:
             profile = base_profile | {"frame_chunk": size}
+            if args.ordinary_token_threshold is not None:
+                profile["ordinary_tokens"] = args.ordinary_token_threshold
             candidate = "all-under-token-ceiling" if size > 1000 else size
-            plan = preflight(prepared, dataset, indices, profile)
+            plan = preflight(prepared, dataset, selected_indices, profile)
+            if args.largest_microbatch_only and len(plan) != 1:
+                raise ValueError("Selected tracks did not reproduce one physical microbatch")
             totals = {"physical_microbatches": len(plan),
                       "point_tokens": sum(row["tokens"] for row in plan),
                       "total_spatial_chunks": sum(row["chunks"] for row in plan),
@@ -120,14 +172,16 @@ def run(args):
                       "per_microbatch": plan}
             if totals["max_chunk_padded_tokens"] > base_profile["frame_tokens"]:
                 raise ValueError("Preflight exceeded the unchanged point-token ceiling")
+            if args.largest_microbatch_only and args.ordinary_token_threshold is not None and totals["predicted_modes"]["recompute"]:
+                raise ValueError("Ordinary-token override does not cover the selected microbatch")
             record.setdefault("variants", []).append({"frame_chunk": candidate, "finite_check": finite_check,
                                                         "preflight": totals})
-            warm = one_update(prepared, dataset, indices, profile, finite_check, "warmup")
+            warm = one_update(prepared, dataset, selected_indices, profile, finite_check, "warmup")
             record["variants"][-1]["warmup"] = warm
             write_json(args.output / "throughput.json", record)
             rows = []
             for repeat in range(args.repeats):
-                row = one_update(prepared, dataset, indices, profile, finite_check, f"warm-{repeat+1}")
+                row = one_update(prepared, dataset, selected_indices, profile, finite_check, f"warm-{repeat+1}")
                 row["frame_chunk_variant"] = candidate
                 rows.append(row)
                 record["rows"].append(row)
@@ -167,6 +221,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     add_arguments(parser)
     parser.add_argument("--repeats", type=int, default=3)
+    parser.add_argument("--frame-chunks", type=int, nargs="+", default=[2, 4, 8, 16, 2**31 - 1])
+    parser.add_argument("--ordinary-token-threshold", type=int,
+                        help="Temporary measured threshold override; never updates a saved profile")
+    parser.add_argument("--largest-microbatch-only", action="store_true",
+                        help="Restrict the probe to the matched physical batch with greatest padded spatial cost")
     run(parser.parse_args())
 
 

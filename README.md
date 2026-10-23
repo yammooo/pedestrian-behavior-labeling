@@ -488,6 +488,7 @@ After preparation, recalibrate the indexed execution path in the extractor envir
 ```bash
 probe_root="$PWD/outputs/experiments/E002a"
 export PYTHONPATH="$PWD/src"
+export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
 uv run --no-project --python "$probe_root/extractor-env/bin/python" python scripts/calibrate-e002a.py \
   --device cuda --indexed-cache-root "$probe_root" --output "$probe_root/my-indexed-calibration"
 uv run --no-project --python "$probe_root/extractor-env/bin/python" python scripts/smoke-e002a.py \
@@ -511,6 +512,8 @@ uv run --no-project --python "$probe_root/extractor-env/bin/python" python scrip
 For a quick split, add `--breakdown`: only the same shuffled training group is run twice. LiDAR loading now overlaps one prepared CPU microbatch with model work; input iteration measures **consumer wait**, while nested point/RGB timers and `loader.prepared_seconds` measure background preparation and can overlap the remainder. Add `--serial` for non-overlapping stage attribution using the optimized reader. The remainder includes H2D, forward/backward, loss and optimizer/host bookkeeping; it is not pure GPU kernel time. Repeat per source/arm with fresh outputs. This is bounded operational timing with discarded weights, no W&B or held-out scoring. Each input-only case gets advisory-cold files with freshly reset chunk verification, then repeated files with retained process-local verification; `throughput.json` retains timings, packing/read counts and a conservative sampled stress-envelope extrapolation with explicit60 s overhead. It is not a measured full epoch or guaranteed cold/worst-case bound. [Readiness evidence](experiments/E002a-feature-feasibility/README.md#completed-caches-and-gpu-readiness--2026-10-23).
 
 For one measured complete training+source-validation epoch, add `--full-epoch` instead of `--breakdown`. This runs the full frozen populations once with fresh verification/advisory-cold source pages, fixed seed/packing/settings, local per-update timings and source-validation metrics; weights are discarded. It records input wait, background preparation, data/model remainder, peak memory and assembly/cleanup time. W&B and checkpoint/plot export overhead are excluded, so this timing alone does not establish the complete operational or worst-case30-minute gate.
+
+LiDAR frame preparation uses **four ordered CPU workers** by default. Override with `--point-workers N` on the single-run, pilot, calibration or smoke commands. Keep the BLAS/OpenMP limits above to avoid nested numerical threading; model-side PyTorch uses two CPU threads. `--worker-sweep` replaces the ordinary throughput cases with the same seeded64-track GPU update at1/2/4/8/16/32 workers (fresh-verification/advisory-cold and repeated reads). It preserves complete tracks/tensor order, records exact loss/token/packing parity and does not launch comparison training. The [worker measurements](experiments/E002a-feature-feasibility/README.md#parallel-frame-preparation--2026-10-23) select the default; existing feature caches need no rebuild. Resource profiles from before this loader-code revision must be regenerated.
 
 Then the manual six-attempt interface is:
 

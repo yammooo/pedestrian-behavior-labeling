@@ -107,9 +107,9 @@ class MultimodalTest(unittest.TestCase):
         self.addCleanup(torch.use_deterministic_algorithms, previous_determinism)
         seed_run(0)
 
-    def _prefetch_equivalence(self, device):
+    def _prefetch_equivalence(self, device, *, recompute=False):
         data = Samples([sample(3+i%2, str(i)) for i in range(5)])
-        profile = PROFILE | {"max_tracks": 2}
+        profile = PROFILE | {"max_tracks": 2, "ordinary_tokens": 1 if recompute else PROFILE["ordinary_tokens"]}
         seed_run(4)
         initial = MultimodalClassifier("g-rgb-dditr", profile).state_dict()
         results = []
@@ -136,10 +136,12 @@ class MultimodalTest(unittest.TestCase):
 
     def test_prefetch_preserves_dropout_predictions_gradients_updates_and_order(self):
         self._prefetch_equivalence("cpu")
+        self._prefetch_equivalence("cpu", recompute=True)
 
     @unittest.skipUnless(torch.cuda.is_available(), "CUDA unavailable")
     def test_cuda_prefetch_preserves_dropout_predictions_gradients_updates_and_order(self):
         self._prefetch_equivalence("cuda")
+        self._prefetch_equivalence("cuda", recompute=True)
 
     def test_prefetch_is_one_batch_ahead_joins_and_propagates_producer_failure(self):
         data = Samples([sample(3, str(i)) for i in range(4)])

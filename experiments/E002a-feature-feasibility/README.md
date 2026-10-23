@@ -579,6 +579,22 @@ The representative training group selects4.44 GB of feature/geometry/index bytes
 
 The remaining timing cases were deliberately stopped after this evidence, preserving `KeyboardInterrupt`/failed operational status in [partial timing evidence](../../outputs/experiments/E002a/indexed-throughput-20261023-road-waymo-g-rgb-dditr/throughput.json); no computation/corruption failure is implied. Later arms/sources were not timed. [Readiness summary](../../outputs/experiments/E002a/indexed-readiness-20261023/readiness.json), [calibration](../../outputs/experiments/E002a/indexed-calibration-20261023/profile.json) and [actual W&B smoke audit](../../outputs/experiments/E002a/indexed-integration-20261023/integration.json) retain numerical evidence. CPU184 tests pass (nine CUDA skips); all182 pre-utility cu118 CUDA tests pass, plus two new throughput arithmetic/selection checks on CPU and the real GPU timing execution. Full comparison attempts remain unstarted. Next: isolate input loading/verification versus model work and improve throughput before claiming the runtime gate; the completed feature caches need no rebuild for loader/execution optimization.
 
+### Load/model timing breakdown — 2026-10-23
+
+At `f53f538`, the exact same seeded shuffled64-track ROAD training group is measured twice with lightweight timers around input iteration, point read/verification/gather, total point-crop preparation and RGB reads. Same calibrated packing,30.83 million tokens/22 physical microbatches, unchanged model/loss/optimizer and immutable feature caches. Weights are discarded; no W&B/test scoring. The outer input timer includes dataset assembly of each microbatch/collation; the remaining time includes H2D, forward/backward/loss/clipping/AdamW and host bookkeeping, **not just GPU kernel time**. GPU completion is synchronized at the update boundary; the unchanged training loop already synchronizes loss values before advancing the loader.
+
+| Seconds per64-track update | Advisory-cold files | Repeated files |
+|---|---:|---:|
+| Input preparation |21.54|20.34|
+| Model, transfer and optimizer remainder |8.62|8.69|
+| Total |30.16|29.04|
+| Within input: point reads + verification + row gathering |15.05|13.46|
+| Within input: further point crop geometry/conversion/assembly |4.09|4.45|
+| Within input: RGB reads |0.26|0.15|
+| Within input: remaining metadata/geometry-dataset/collation work |2.14|2.28|
+
+Input preparation accounts for70–71% of this update and point preparation dominates it. The point read/check/gather timer does not separate raw disk reads from checksum computation or NumPy row copying; do not label its whole duration as hashing or SSD time. The repeated pass remains slow. Next optimization should target point-input supply and potential loading/compute overlap, with the same cache content and integrity semantics; no cache rebuild is needed. This measurement changes no scientific settings and demonstrates neither optimized speed nor a full-epoch gate pass. [Numerical record](../../outputs/experiments/E002a/indexed-breakdown-20261023/throughput.json) · [protected-input check](../../outputs/experiments/E002a/indexed-breakdown-20261023/protected.json). The `--breakdown` command runs only these two updates; its selection/timer wrapper checks pass.
+
 ### Cache inventory and retirement — 2026-10-22
 
 User-authorized deletion of the **old** `E002a/point-cache/`:23,305 entries/449.97 GB encoded payload,450.26 GB allocated directory. Ownership lock was free and no training/preparation/prototype process was active. Removed the directory while holding its lock; retained its229 MB SQLite index as historical unpooled cost evidence under `E002a/cache-inventory-20261022/retired-point-index.sqlite3`. This snapshot is not a usable cache or a source of new pooled-token costs. Free space increased to518 GB. No other cache, dataset, model run/checkpoint or native input was deleted. [Removal evidence](../../outputs/experiments/E002a/cache-inventory-20261022/retirement.json) · [full allocated-size inventory](../../outputs/experiments/E002a/cache-inventory-20261022/inventory.json).

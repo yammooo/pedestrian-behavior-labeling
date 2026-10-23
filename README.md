@@ -508,7 +508,7 @@ uv run --no-project --python "$probe_root/extractor-env/bin/python" python scrip
   --output "$probe_root/my-road-throughput"
 ```
 
-Repeat per source/arm with fresh outputs. This is bounded operational timing with discarded weights, no W&B or held-out scoring. Each input-only case gets advisory-cold/repeated reads; `throughput.json` retains timings, packing/read counts and a conservative sampled stress-envelope extrapolation with explicit60 s overhead. It is not a measured full epoch or guaranteed cold/worst-case bound. [Readiness evidence](experiments/E002a-feature-feasibility/README.md#completed-caches-and-gpu-readiness--2026-10-23).
+For a quick load-versus-model split, add `--breakdown`: only the same shuffled training group is run twice, with nested point-read/verification/gather and crop-preparation timers. The model remainder includes H2D, forward/backward, loss and optimizer/host bookkeeping; it is not pure GPU kernel time. Repeat per source/arm with fresh outputs. This is bounded operational timing with discarded weights, no W&B or held-out scoring. Each input-only case gets advisory-cold/repeated reads; `throughput.json` retains timings, packing/read counts and a conservative sampled stress-envelope extrapolation with explicit60 s overhead. It is not a measured full epoch or guaranteed cold/worst-case bound. [Readiness evidence](experiments/E002a-feature-feasibility/README.md#completed-caches-and-gpu-readiness--2026-10-23).
 
 Then the manual six-attempt interface is:
 

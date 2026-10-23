@@ -12,7 +12,10 @@ import numpy as np
 import torch
 
 from pedestrian_behavior.accumulation import train_accumulated_epoch
-from pedestrian_behavior.data.indexed_points import DTYPES
+from pedestrian_behavior.data.indexed_points import DTYPES, IndexedShard
+from pedestrian_behavior.data.prepared_rgb import PreparedRGB
+from contextlib import ExitStack, contextmanager
+from unittest.mock import patch
 from pedestrian_behavior.evaluation import track_cross_entropy
 from pedestrian_behavior.training import seed_run
 from .e002a_run import add_arguments, assembly, SETTINGS
@@ -37,12 +40,41 @@ def cases(dataset):
 class OneUpdate:
     def __init__(self, logical, indices):
         self.logical, self.indices = logical, indices
+        self.loading_seconds = 0.
 
     def __iter__(self):
         yield self.indices
 
     def microbatches(self, indices):
-        return self.logical.microbatches(indices)
+        iterator = iter(self.logical.microbatches(indices))
+        while True:
+            begin = time.perf_counter()
+            try:
+                batch = next(iterator)
+            except StopIteration:
+                self.loading_seconds += time.perf_counter() - begin
+                return
+            self.loading_seconds += time.perf_counter() - begin
+            yield batch
+
+
+@contextmanager
+def breakdown_timers(enabled):
+    totals = {}
+    with ExitStack() as stack:
+        if enabled:
+            for cls, name, label in ((IndexedShard, "take", "point_read_verify_gather_seconds"),
+                                     (IndexedShard, "crop", "point_crop_total_seconds"),
+                                     (PreparedRGB, "get", "rgb_read_seconds")):
+                original = getattr(cls, name)
+                def timed(*args, _original=original, _label=label, **kwargs):
+                    begin = time.perf_counter()
+                    try:
+                        return _original(*args, **kwargs)
+                    finally:
+                        totals[_label] = totals.get(_label, 0.) + time.perf_counter()-begin
+                stack.enter_context(patch.object(cls, name, timed))
+        yield totals
 
 
 def advisory_cold(dataset, indices):
@@ -87,7 +119,11 @@ def run(args):
         record["config"] = prepared["config"]
         populations = {p: prepared["dataset"](args.source, p) for p in ("training", "validation")}
         for operation, dataset in populations.items():
+            if args.breakdown and operation != "training":
+                continue
             chosen = cases(dataset)
+            if args.breakdown:
+                chosen = {"shuffled": chosen["shuffled"]}
             record.setdefault("selections", {})[operation] = {k: [dataset.entries[i]["locator"] for i in v]
                                                            for k,v in chosen.items()}
             logical = prepared["batches"](dataset, training=True, seed=0)
@@ -103,9 +139,11 @@ def run(args):
                     torch.cuda.synchronize()
                     begin = time.perf_counter()
                     if operation == "training":
-                        result = train_accumulated_epoch(model, OneUpdate(logical, indices), optimizer,
-                            torch.device(args.device), 1., peak_lr=.0003,
-                            warmup_steps=prepared["config"]["warmup_updates"])
+                        timed_update = OneUpdate(logical, indices)
+                        with breakdown_timers(args.breakdown) as detail:
+                            result = train_accumulated_epoch(model, timed_update, optimizer,
+                                torch.device(args.device), 1., peak_lr=.0003,
+                                warmup_steps=prepared["config"]["warmup_updates"])
                         tracks, tokens = result["processed_tracks"], result["point_tokens"]
                         physical = result["physical_microbatches"]
                     else:
@@ -127,13 +165,19 @@ def run(args):
                            "tracks": tracks, "tokens": tokens, "physical_microbatches": physical,
                            "peak_cuda_allocated_bytes": torch.cuda.max_memory_allocated(),
                            "runtime_before": before, "runtime_after": prepared["runtime_snapshot"]()}
+                    if operation == "training":
+                        row["input_preparation_seconds"] = timed_update.loading_seconds
+                        row["model_transfer_step_seconds"] = row["seconds"] - timed_update.loading_seconds
+                        row["input_detail"] = dict(detail)
                     record["rows"].append(row)
                     write_json(args.output/"throughput.json", record)
                     print(args.source, args.arm, operation, name, phase, tracks, round(row["seconds"],2), flush=True)
                     del model, optimizer
                     model = optimizer = None
                     gc.collect(); torch.cuda.empty_cache()
-        record["forecast"] = forecast(record["rows"],len(populations["training"]),len(populations["validation"]))
+        if not args.breakdown:
+            record["forecast"] = forecast(record["rows"],len(populations["training"]),len(populations["validation"]))
+        record["breakdown_only"] = args.breakdown
         record["status"] = "complete"
         return record
     except BaseException:
@@ -153,6 +197,7 @@ def run(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     add_arguments(parser)
+    parser.add_argument("--breakdown", action="store_true", help="Only the same shuffled training update twice, with load/model timers")
     args = parser.parse_args()
     if args.device != "cuda":
         raise ValueError("GPU throughput readiness requires CUDA")

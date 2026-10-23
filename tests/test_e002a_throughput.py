@@ -26,3 +26,7 @@ class ThroughputTest(unittest.TestCase):
         self.assertEqual(r["stress_envelope_seconds"],585)
         self.assertTrue(r["under_30_minutes"])
         self.assertEqual(list(OneUpdate(None,[1,4])),[[1,4]])
+        logical = SimpleNamespace(microbatches=lambda indices: iter([indices[:1], indices[1:]]))
+        timed = OneUpdate(logical, [1,4])
+        self.assertEqual(list(timed.microbatches([1,4])), [[1],[4]])
+        self.assertGreaterEqual(timed.loading_seconds, 0.)

@@ -46,6 +46,8 @@ def preflight(prepared, dataset, indices, profile, *, include_locators=False):
 
 def one_update(prepared, dataset, indices, profile, finite_check, phase, trace_path=None):
     seed_run(0)
+    torch.cuda.synchronize()
+    torch.cuda.empty_cache()
     model = prepared["build_model"]().to("cuda")
     model.profile.update(profile)
     optimizer = torch.optim.AdamW(model.parameters(), **SETTINGS["optimizer"])
@@ -173,7 +175,6 @@ def run(args):
                 scale = max(largest["tokens"] / reference_workload["tokens"],
                             largest["padded_tokens"] / reference_workload["padded_tokens"])
                 estimate = int(reference_workload["peak_allocated"] * scale * 1.25)
-                reserved_estimate = int(reference_workload["peak_reserved"] * scale * 1.25)
                 ceiling = calibration["allocated_ceiling"]
                 record["ordinary_probe_memory_estimate"] = {
                     "reference_workload": reference_workload["name"],
@@ -183,10 +184,10 @@ def run(args):
                     "reference_padded_tokens": reference_workload["padded_tokens"],
                     "scale": scale, "safety_factor": 1.25,
                     "estimated_peak_allocated_bytes": estimate,
-                    "estimated_peak_reserved_bytes": reserved_estimate,
                     "calibrated_78pct_ceiling_bytes": ceiling,
+                    "reserved_note": "Reference reserved includes allocator cache; only allocated estimate gates this probe.",
                 }
-                if max(estimate, reserved_estimate) >= ceiling:
+                if estimate >= ceiling:
                     raise ValueError("Conservative ordinary-mode estimate reaches the calibrated ceiling")
         record.update(scope="one warmed pass plus matched shuffled64 updates; weights discarded; no W&B/validation/tests",
                       model_config=prepared["config"],

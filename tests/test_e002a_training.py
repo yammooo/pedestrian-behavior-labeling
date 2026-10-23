@@ -65,10 +65,11 @@ class Samples:
         pass
 
 
-def memory_equivalence(device, concurrency=2):
+def memory_equivalence(device, concurrency=2, async_transfer=False):
     seed_run(8)
     batch = collate_multimodal([sample(3), sample(2, "second")])
-    model = MultimodalClassifier("g-rgb-dditr", PROFILE | {"frame_chunk": concurrency}).to(device)
+    model = MultimodalClassifier("g-rgb-dditr", PROFILE | {"frame_chunk": concurrency,
+                                                            "async_spatial_transfer": async_transfer}).to(device)
     initial = deepcopy(model.state_dict())
     reference, errors = None, {}
     for mode in ("ordinary", "recompute", "offload"):
@@ -96,6 +97,36 @@ def memory_equivalence(device, concurrency=2):
                     maximum = max(maximum, float((value - expected[k]).abs().max()))
         errors[mode] = maximum
     return errors
+
+
+def async_transfer_equivalence():
+    batch = collate_multimodal([sample(3, "first"), sample(2, "second")])
+    seed_run(8)
+    initial = MultimodalClassifier("g-rgb-dditr", PROFILE).state_dict()
+    results = []
+    for enabled in (False, True):
+        model = MultimodalClassifier("g-rgb-dditr", PROFILE | {"async_spatial_transfer": enabled}).cuda()
+        model.load_state_dict(initial)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=.0003, weight_decay=.0001)
+        seed_run(27)
+        logits = model(batch)
+        loss = track_cross_entropy(logits, batch["targets"].cuda(), batch["gt_valid"].cuda(),
+                                   batch["padding_mask"].cuda()).mean()
+        loss.backward()
+        optimizer.step()
+        results.append((logits.detach().cpu(),
+                        {k: p.grad.detach().cpu().clone() for k, p in model.named_parameters()},
+                        {k: p.detach().cpu().clone() for k, p in model.state_dict().items()}))
+        del model, optimizer
+        torch.cuda.empty_cache()
+    maximum = 0.
+    torch.testing.assert_close(results[1][0], results[0][0], rtol=1e-4, atol=1e-5)
+    maximum = max(maximum, float((results[1][0] - results[0][0]).abs().max()))
+    for actual, expected in zip(results[1][1:], results[0][1:]):
+        for key in actual:
+            torch.testing.assert_close(actual[key], expected[key], rtol=1e-4, atol=1e-5, msg=key)
+            maximum = max(maximum, float((actual[key] - expected[key]).abs().max()))
+    return maximum
 
 
 class MultimodalTest(unittest.TestCase):
@@ -251,8 +282,28 @@ class MultimodalTest(unittest.TestCase):
 
     @unittest.skipUnless(torch.cuda.is_available(), "CUDA unavailable")
     def test_cuda_memory_paths_preserve_dropout_outputs_gradients_and_update(self):
-        for concurrency in (1, 2, 4):
-            self.assertLess(max(memory_equivalence("cuda", concurrency).values()), 1e-4)
+        for async_transfer in (False, True):
+            for concurrency in (1, 2, 4):
+                self.assertLess(max(memory_equivalence("cuda", concurrency, async_transfer).values()), 1e-4)
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA unavailable")
+    def test_cuda_pinned_spatial_staging_matches_logits_gradients_and_update(self):
+        self.assertLess(async_transfer_equivalence(), 1e-4)
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA unavailable")
+    def test_cuda_pinned_spatial_staging_cleans_up_and_falls_back(self):
+        profile = PROFILE | {"async_spatial_transfer": True}
+        model = MultimodalClassifier("g-rgb-dditr", profile).eval().cuda()
+        empty = collate_multimodal([sample(3, "empty", points=False)])
+        self.assertTrue(torch.isfinite(model(empty)).all())
+        batch = collate_multimodal([sample(3, "failure")])
+        with patch.object(model.spatial, "forward", side_effect=RuntimeError("spatial failure")):
+            with self.assertRaisesRegex(RuntimeError, "spatial failure"):
+                model(batch)
+        torch.cuda.synchronize()
+        self.assertTrue(torch.isfinite(model(batch)).all())
+        batch["points"] = [value.cuda() for value in batch["points"]]
+        self.assertTrue(torch.isfinite(model(batch)).all())
 
     def test_accumulation_unequal_physical_and_final_partial_updates(self):
         data = Samples([sample(3, str(i), arm="g") for i in range(7)])

@@ -150,18 +150,43 @@ class MultimodalClassifier(nn.Module):
             mode = mode or ("ordinary" if tokens <= self.profile["ordinary_tokens"] else "recompute")
             if mode not in ("ordinary", "recompute", "offload"):
                 raise ValueError("Unknown spatial execution mode")
-            for chunk in chunks:
-                indices, values = zip(*chunk)
-                inputs = torch.cat(values)
-                sizes = tuple(len(x) for x in values)
-                if mode == "recompute" and self.training and torch.is_grad_enabled():
-                    # CPU inputs bound retained VRAM; CUDA seed preserves CUDA dropout RNG.
-                    descriptor = checkpoint(self.spatial, inputs, sizes, self.spatial.seed, use_reentrant=False)
-                else:
-                    scope = torch.autograd.graph.save_on_cpu(pin_memory=device.type == "cuda") if mode == "offload" else nullcontext()
-                    with scope:
+            async_transfer = (self.profile.get("async_spatial_transfer") is True and device.type == "cuda"
+                              and mode == "ordinary" and all(x.device.type == "cpu" and not x.requires_grad for x in frames))
+            if async_transfer and chunks:
+                transfer_stream = torch.cuda.Stream(device=device)
+                compute_stream = torch.cuda.current_stream(device)
+                host_sources = []
+                try:
+                    for chunk in chunks:
+                        indices, values = zip(*chunk)
+                        sizes = tuple(len(x) for x in values)
+                        source = torch.cat(values).pin_memory()
+                        with torch.cuda.stream(transfer_stream):
+                            inputs = source.to(device, non_blocking=True)
+                            ready = torch.cuda.Event()
+                            ready.record(transfer_stream)
+                        host_sources.append((source, ready))
+                        host_sources[:] = [(value, event) for value, event in host_sources if not event.query()]
+                        compute_stream.wait_event(ready)
+                        inputs.record_stream(compute_stream)
                         descriptor = self.spatial(inputs, sizes, self.spatial.seed)
-                lidar = lidar.index_copy(0, torch.tensor(indices, device=device), descriptor)
+                        lidar = lidar.index_copy(0, torch.tensor(indices, device=device), descriptor)
+                finally:
+                    transfer_stream.synchronize()
+                    host_sources.clear()
+            else:
+                for chunk in chunks:
+                    indices, values = zip(*chunk)
+                    inputs = torch.cat(values)
+                    sizes = tuple(len(x) for x in values)
+                    if mode == "recompute" and self.training and torch.is_grad_enabled():
+                        # CPU inputs bound retained VRAM; CUDA seed preserves CUDA dropout RNG.
+                        descriptor = checkpoint(self.spatial, inputs, sizes, self.spatial.seed, use_reentrant=False)
+                    else:
+                        scope = torch.autograd.graph.save_on_cpu(pin_memory=device.type == "cuda") if mode == "offload" else nullcontext()
+                        with scope:
+                            descriptor = self.spatial(inputs, sizes, self.spatial.seed)
+                    lidar = lidar.index_copy(0, torch.tensor(indices, device=device), descriptor)
             descriptors.append(lidar.reshape(b, t, 128))
         x = self.fusion(torch.cat((*descriptors, flags), -1))
         for layer in self.temporal:

@@ -42,7 +42,7 @@ def preflight(prepared, dataset, indices, profile, *, include_locators=False):
     return rows
 
 
-def one_update(prepared, dataset, indices, profile, finite_check, phase):
+def one_update(prepared, dataset, indices, profile, finite_check, phase, trace_path=None):
     seed_run(0)
     model = prepared["build_model"]().to("cuda")
     model.profile.update(profile)
@@ -57,8 +57,16 @@ def one_update(prepared, dataset, indices, profile, finite_check, phase):
              patch.object(multimodal, "_all_finite_point_tokens", lambda value: torch.isfinite(value).all()))
     try:
         with check:
-            result = train_accumulated_epoch(model, batches, optimizer, torch.device("cuda"), 1.,
-                peak_lr=.0003, warmup_steps=prepared["config"]["warmup_updates"])
+            if trace_path is None:
+                result = train_accumulated_epoch(model, batches, optimizer, torch.device("cuda"), 1.,
+                    peak_lr=.0003, warmup_steps=prepared["config"]["warmup_updates"])
+            else:
+                with torch.profiler.profile(activities=[torch.profiler.ProfilerActivity.CPU,
+                                                        torch.profiler.ProfilerActivity.CUDA],
+                                            record_shapes=False, with_stack=False, profile_memory=False) as profiler:
+                    result = train_accumulated_epoch(model, batches, optimizer, torch.device("cuda"), 1.,
+                        peak_lr=.0003, warmup_steps=prepared["config"]["warmup_updates"])
+                profiler.export_chrome_trace(str(trace_path))
         torch.cuda.synchronize()
         row = {"phase": phase, "finite_check": finite_check, "frame_chunk": profile["frame_chunk"],
                "seconds": time.perf_counter() - begin, "input_wait_seconds": batches.loading_seconds,
@@ -88,12 +96,16 @@ def run(args):
         raise ValueError("Frame chunk candidates must be positive")
     if args.ordinary_token_threshold is not None and args.ordinary_token_threshold < 1:
         raise ValueError("Ordinary-token override must be positive")
+    if args.trace_one_update and (not args.largest_microbatch_only or not args.async_spatial_transfer
+                                  or args.repeats != 1):
+        raise ValueError("Trace requires one async largest-microbatch measurement")
     args.output.mkdir(parents=True, exist_ok=False)
     torch.set_num_threads(2)
     record = {"status": "incomplete", "source": args.source, "arm": args.arm, "device": args.device,
               "revision": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
               "workers": args.point_workers, "repeats": args.repeats, "seed": 0,
               "finite_check_comparison": ["torch", "numpy"], "rows": [], "failures": [],
+              "async_spatial_transfer": args.async_spatial_transfer,
               "cpu_thread_limits": {k: os.environ.get(k) for k in
                                     ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS")}}
     prepared = None
@@ -159,6 +171,8 @@ def run(args):
             profile = base_profile | {"frame_chunk": size}
             if args.ordinary_token_threshold is not None:
                 profile["ordinary_tokens"] = args.ordinary_token_threshold
+            if args.async_spatial_transfer:
+                profile["async_spatial_transfer"] = True
             candidate = "all-under-token-ceiling" if size > 1000 else size
             plan = preflight(prepared, dataset, selected_indices, profile)
             if args.largest_microbatch_only and len(plan) != 1:
@@ -181,7 +195,10 @@ def run(args):
             write_json(args.output / "throughput.json", record)
             rows = []
             for repeat in range(args.repeats):
-                row = one_update(prepared, dataset, selected_indices, profile, finite_check, f"warm-{repeat+1}")
+                trace_path = (args.output / "async-single-batch-trace.json"
+                              if args.trace_one_update and repeat == 0 else None)
+                row = one_update(prepared, dataset, selected_indices, profile, finite_check,
+                                 f"warm-{repeat+1}", trace_path=trace_path)
                 row["frame_chunk_variant"] = candidate
                 rows.append(row)
                 record["rows"].append(row)
@@ -226,6 +243,10 @@ def main():
                         help="Temporary measured threshold override; never updates a saved profile")
     parser.add_argument("--largest-microbatch-only", action="store_true",
                         help="Restrict the probe to the matched physical batch with greatest padded spatial cost")
+    parser.add_argument("--async-spatial-transfer", action="store_true",
+                        help="Prototype pinned host staging and an explicit copy stream in ordinary CUDA mode")
+    parser.add_argument("--trace-one-update", action="store_true",
+                        help="Export a bounded CPU/CUDA trace for the one async largest-microbatch update")
     run(parser.parse_args())
 
 

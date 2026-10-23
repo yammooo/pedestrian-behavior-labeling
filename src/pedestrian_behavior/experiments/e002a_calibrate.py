@@ -212,6 +212,38 @@ def run(args):
             if row["peak_allocated"] is not None and row["peak_allocated"] > record["allocated_ceiling"]:
                 raise ValueError("Selected concurrency exceeded headroom")
             record["workloads"].append(row)
+        if reference is not None:
+            target = reference["ordinary_tokens"]
+            boundary_shapes = []
+            for name, sample in samples:
+                slots = len(sample["targets"])
+                max_count = min(reference["max_tracks"], reference["temporal_cells"] // (slots * slots))
+                for count in range(1, max_count + 1):
+                    padded = sum(len(chunk) * max(len(frame) for _, frame in chunk)
+                                 for chunk in frame_chunks(sample["points"] * count, profile["frame_chunk"], profile["frame_tokens"]))
+                    if padded >= target:
+                        estimate = padded * 4000 + 2**30
+                        boundary_shapes.append((padded, estimate, name, sample, count))
+                        break
+            safe_shapes = [shape for shape in boundary_shapes if shape[1] <= record["allocated_ceiling"]]
+            if safe_shapes:
+                padded, estimate, name, sample, count = min(safe_shapes, key=lambda shape: shape[0])
+                row = measure(sample, "g-rgb-dditr", count, profile, "ordinary", args.device)
+                row.update(name=name, status="complete", phase="ordinary-token-boundary",
+                           target_tokens=target, estimated_peak_allocated=estimate)
+                if row["padded_tokens"] < target:
+                    raise ValueError("Measured ordinary boundary fell below requested limit")
+                if row["peak_allocated"] is not None and row["peak_allocated"] > record["allocated_ceiling"]:
+                    raise ValueError("Ordinary-token boundary exceeded headroom")
+                record["workloads"].append(row)
+                record["ordinary_boundary"] = {"status": "complete", "target_tokens": target,
+                    "name": name, "tracks": count, "padded_tokens": row["padded_tokens"],
+                    "estimated_peak_allocated": estimate, "peak_allocated": row["peak_allocated"]}
+            else:
+                record["ordinary_boundary"] = {"status": "not-run-safe-fixture-shape",
+                    "target_tokens": target,
+                    "candidate_shapes": [{"name": shape[2], "tracks": shape[4], "padded_tokens": shape[0],
+                                          "estimated_peak_allocated": shape[1]} for shape in boundary_shapes]}
         fitting = [w for w in record["workloads"] if w.get("status") == "complete" and w.get("mode") == "ordinary"
                    and w.get("arm") == "g-rgb-dditr" and w["frame_chunk"] == profile["frame_chunk"]]
         if not fitting:

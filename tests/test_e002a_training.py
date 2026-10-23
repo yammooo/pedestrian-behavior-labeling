@@ -98,6 +98,24 @@ def memory_equivalence(device, concurrency=2):
     return errors
 
 
+def spatial_chunk_equivalence(device="cpu"):
+    batch = collate_multimodal([sample(5, "first"), sample(3, "second")])
+    seed_run(8)
+    initial = MultimodalClassifier("g-rgb-dditr", PROFILE).state_dict()
+    results = []
+    for concurrency in (2, 4):
+        model = MultimodalClassifier("g-rgb-dditr", PROFILE | {"frame_chunk": concurrency}).eval().to(device)
+        model.load_state_dict(initial)
+        logits = model(batch, mode="ordinary")
+        loss = track_cross_entropy(logits, batch["targets"].to(device), batch["gt_valid"].to(device),
+                                   batch["padding_mask"].to(device)).mean()
+        loss.backward()
+        results.append((logits.detach().cpu(), {k: p.grad.detach().cpu().clone() for k, p in model.named_parameters()}))
+    torch.testing.assert_close(results[1][0], results[0][0], rtol=1e-4, atol=1e-5)
+    for key in results[0][1]:
+        torch.testing.assert_close(results[1][1][key], results[0][1][key], rtol=1e-4, atol=1e-5, msg=key)
+
+
 class MultimodalTest(unittest.TestCase):
     def setUp(self):
         previous = torch.get_num_threads()
@@ -250,9 +268,16 @@ class MultimodalTest(unittest.TestCase):
             self.assertTrue(all(p.grad is not None and torch.isfinite(p.grad).all() for p in model.parameters()))
 
     @unittest.skipUnless(torch.cuda.is_available(), "CUDA unavailable")
+    def test_cuda_chunk2_and_chunk4_match_eval_logits_and_gradients(self):
+        spatial_chunk_equivalence("cuda")
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA unavailable")
     def test_cuda_memory_paths_preserve_dropout_outputs_gradients_and_update(self):
         for concurrency in (1, 2, 4):
             self.assertLess(max(memory_equivalence("cuda", concurrency).values()), 1e-4)
+
+    def test_chunk2_and_chunk4_match_eval_logits_and_gradients(self):
+        spatial_chunk_equivalence()
 
     def test_accumulation_unequal_physical_and_final_partial_updates(self):
         data = Samples([sample(3, str(i), arm="g") for i in range(7)])

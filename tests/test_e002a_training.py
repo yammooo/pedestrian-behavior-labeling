@@ -22,7 +22,7 @@ from pedestrian_behavior.evaluation import track_cross_entropy
 from pedestrian_behavior.experiments.e002a_run import validate_profile
 from pedestrian_behavior.experiments.e002a_camera_cache import CameraReuse
 from pedestrian_behavior.experiments.e002a_sweep import attempts, attempt_command
-from pedestrian_behavior.models.multimodal import MultimodalClassifier, frame_chunks, rotary
+from pedestrian_behavior.models.multimodal import MultimodalClassifier, _all_finite_point_tokens, frame_chunks, rotary
 from pedestrian_behavior.training import seed_run
 
 
@@ -308,6 +308,11 @@ class MultimodalTest(unittest.TestCase):
         batch["points"][0][0, 0] = float("nan")
         with self.assertRaisesRegex(ValueError, "spatial"):
             model(batch)
+
+    def test_cpu_finite_check_accepts_lazy_negative_view(self):
+        value = torch._neg_view(torch.ones(3, 68))
+        self.assertTrue(value.is_neg())
+        self.assertTrue(_all_finite_point_tokens(value))
 
     @unittest.skipUnless(torch.cuda.is_available(), "CUDA unavailable")
     def test_nonfinite_cuda_point_tokens_still_fail(self):

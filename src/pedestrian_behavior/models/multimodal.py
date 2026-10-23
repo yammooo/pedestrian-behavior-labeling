@@ -16,7 +16,7 @@ ARM_FLAGS = {"g": ("geometry_valid",), "g-rgb": ("geometry_valid", "rgb_valid"),
 
 
 def _all_finite_point_tokens(value):
-    return np.isfinite(value.detach().numpy()).all() if value.device.type == "cpu" else torch.isfinite(value).all()
+    return np.isfinite(value.detach().resolve_neg().numpy()).all() if value.device.type == "cpu" else torch.isfinite(value).all()
 
 
 def rotary(x):

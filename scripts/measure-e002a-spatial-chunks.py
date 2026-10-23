@@ -30,6 +30,7 @@ def chunk_stats(batch, profile):
 
 def preflight(prepared, dataset, indices, profile, *, include_locators=False):
     logical = prepared["batches"](dataset, training=True, seed=0)
+    logical.profile = dict(profile)
     rows = []
     for batch in logical.microbatches(indices):
         item = chunk_stats(batch, profile)
@@ -48,6 +49,7 @@ def one_update(prepared, dataset, indices, profile, finite_check, phase, trace_p
     model.profile.update(profile)
     optimizer = torch.optim.AdamW(model.parameters(), **SETTINGS["optimizer"])
     logical = prepared["batches"](dataset, training=True, seed=0)
+    logical.profile = dict(profile)
     batches = TimedBatches(logical, indices)
     torch.cuda.synchronize()
     torch.cuda.reset_peak_memory_stats()
@@ -96,6 +98,8 @@ def run(args):
         raise ValueError("Frame chunk candidates must be positive")
     if args.ordinary_token_threshold is not None and args.ordinary_token_threshold < 1:
         raise ValueError("Ordinary-token override must be positive")
+    if args.microbatch_token_budget is not None and args.microbatch_token_budget < 1:
+        raise ValueError("Microbatch token budget must be positive")
     if args.trace_one_update and (not args.largest_microbatch_only or not args.async_spatial_transfer
                                   or args.repeats != 1):
         raise ValueError("Trace requires one async largest-microbatch measurement")
@@ -117,6 +121,8 @@ def run(args):
         if len(indices) != 64 and not args.largest_microbatch_only:
             raise ValueError("Expected the representative shuffled64-track update")
         base_profile = dict(prepared["config"]["profile"])
+        if args.microbatch_token_budget is not None:
+            base_profile["microbatch_tokens"] = args.microbatch_token_budget
         frame_chunks = args.frame_chunks
         variants = ([(2, "torch"), (2, "numpy")] if 2 in frame_chunks else []) + [
             (size, "numpy") for size in frame_chunks if size != 2]
@@ -166,6 +172,8 @@ def run(args):
             record["scope"] = "one warmed pass plus matched largest physical microbatch only; weights discarded"
         if args.ordinary_token_threshold is not None:
             record["ordinary_token_threshold_override"] = args.ordinary_token_threshold
+        if args.microbatch_token_budget is not None:
+            record["microbatch_token_budget_override"] = args.microbatch_token_budget
         reference = None
         for size, finite_check in variants:
             profile = base_profile | {"frame_chunk": size}
@@ -190,6 +198,10 @@ def run(args):
                 raise ValueError("Ordinary-token override does not cover the selected microbatch")
             record.setdefault("variants", []).append({"frame_chunk": candidate, "finite_check": finite_check,
                                                         "preflight": totals})
+            if args.preflight_only:
+                record.update(status="preflight-complete", runtime_after=prepared["runtime_snapshot"]())
+                write_json(args.output / "throughput.json", record)
+                return
             warm = one_update(prepared, dataset, selected_indices, profile, finite_check, "warmup")
             record["variants"][-1]["warmup"] = warm
             write_json(args.output / "throughput.json", record)
@@ -241,12 +253,16 @@ def main():
     parser.add_argument("--frame-chunks", type=int, nargs="+", default=[2, 4, 8, 16, 2**31 - 1])
     parser.add_argument("--ordinary-token-threshold", type=int,
                         help="Temporary measured threshold override; never updates a saved profile")
+    parser.add_argument("--microbatch-token-budget", type=int,
+                        help="Temporary complete-track physical packing budget; never updates a saved profile")
     parser.add_argument("--largest-microbatch-only", action="store_true",
                         help="Restrict the probe to the matched physical batch with greatest padded spatial cost")
     parser.add_argument("--async-spatial-transfer", action="store_true",
                         help="Prototype pinned host staging and an explicit copy stream in ordinary CUDA mode")
     parser.add_argument("--trace-one-update", action="store_true",
                         help="Export a bounded CPU/CUDA trace for the one async largest-microbatch update")
+    parser.add_argument("--preflight-only", action="store_true",
+                        help="Write physical packing and padded-token estimates without a CUDA update")
     run(parser.parse_args())
 
 

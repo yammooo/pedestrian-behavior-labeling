@@ -118,8 +118,8 @@ def run(args):
     reference = None
     if args.reference_profile is not None:
         old = json.loads(args.reference_profile.read_text())
-        if old.get("status") not in ("complete", "proposed") or old.get("point_storage_protocol") != POINT_PROTOCOL:
-            raise ValueError("Completed calibration or explicit proposed indexed profile required")
+        if old.get("status") != "proposed" or old.get("point_storage_protocol") != POINT_PROTOCOL:
+            raise ValueError("Explicit proposed indexed profile required for revalidation")
         reference = validate_profile(old["profile"])
         record["reference_profile_sha256"] = checksum(args.reference_profile)
         record["reference_profile_status"] = old["status"]

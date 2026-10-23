@@ -3,6 +3,8 @@
 from pathlib import Path
 import tempfile
 import unittest
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 
 import numpy as np
 
@@ -24,6 +26,24 @@ def selected(payload, metadata, target):
 
 
 class IndexedPointsTest(unittest.TestCase):
+    def test_concurrent_crops_verify_shared_chunks_once_and_preserve_values(self):
+        with tempfile.TemporaryDirectory() as folder:
+            writer=ShardWriter(Path(folder)/"scene",{})
+            writer.add("0",fixture());sha=writer.finish()
+            reader=IndexedShard(writer.root,sha)
+            expected=reader.crop("0","a");reader.close()
+            reader=IndexedShard(writer.root,sha)
+            barrier=Barrier(32)
+            def read(_):
+                barrier.wait(timeout=10)
+                return reader.crop("0","a")
+            with ThreadPoolExecutor(max_workers=32) as pool:
+                actual=list(pool.map(read,range(32)))
+            for value in actual: np.testing.assert_array_equal(value,expected)
+            self.assertEqual(reader.stats["checked_chunks"],3)
+            self.assertEqual(reader.stats["requests"],32)
+            reader.close()
+
     def test_optimized_crop_is_bit_exact_to_original_flow_and_owns_memory(self):
         arrays = fixture()
         rng = np.random.default_rng(91)

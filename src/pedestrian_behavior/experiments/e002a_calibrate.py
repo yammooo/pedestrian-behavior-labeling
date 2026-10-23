@@ -142,7 +142,8 @@ def run(args):
                 catalog = FeatureCatalog(Path("outputs"), dataset, config, transform)
                 points = PreparedPoints(args.indexed_cache_root / ("indexed-" + dataset), dataset,
                     catalog.identity, catalog.tracks,
-                    {"revision": DITR_REVISION, "checkpoint": DITR_SHA256, "configuration": DITR_CONFIG_SHA256})
+                    {"revision": DITR_REVISION, "checkpoint": DITR_SHA256, "configuration": DITR_CONFIG_SHA256},
+                    frame_workers=args.point_workers)
                 stack.callback(points.close)
                 sources[dataset] = points
         record["point_storage_protocol"] = POINT_PROTOCOL if sources else "legacy-unpooled"
@@ -241,4 +242,5 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--device", choices=("cpu", "cuda"), required=True)
     parser.add_argument("--reference-profile", type=Path, help="Revalidate existing packing limits without retuning them")
+    parser.add_argument("--point-workers", type=int, default=1)
     run(parser.parse_args())

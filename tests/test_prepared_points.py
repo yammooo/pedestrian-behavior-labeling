@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+import threading
+import time
 from unittest.mock import Mock, patch
 
 import numpy as np
@@ -55,6 +57,54 @@ def open_points(root, catalog, **kwargs):
 
 
 class PreparedInputsTest(unittest.TestCase):
+    def test_frame_worker_counts_preserve_order_values_and_verification(self):
+        with tempfile.TemporaryDirectory() as folder:
+            catalog=Catalog();root=prepared_fixture(Path(folder)/"points",catalog)
+            points=open_points(root,catalog)
+            reference=list(points.iter_track("a"));checked=points.snapshot()["checked_chunks"]
+            for workers in (2,4,8,16,32):
+                points.set_frame_workers(workers)
+                actual=list(points.iter_track("a"))
+                for a,b in zip(actual,reference):np.testing.assert_array_equal(a,b)
+                self.assertEqual(points.snapshot()["checked_chunks"],checked)
+            points.close()
+            self.assertFalse(any(t.name.startswith("point-frame") for t in threading.enumerate()))
+
+    def test_frame_workers_restore_order_and_drain_before_reader_eviction(self):
+        with tempfile.TemporaryDirectory() as folder:
+            catalog=Catalog();root=prepared_fixture(Path(folder)/"points",catalog)
+            points=open_points(root,catalog,frame_workers=4)
+            original=points._frame
+            def tagged(reader,locator,slot,ref):
+                if slot==0:time.sleep(.02)
+                value=original(reader,locator,slot,ref)
+                if len(value):value[0,0]=slot
+                return value
+            with patch.object(points,"_frame",side_effect=tagged):
+                actual=list(points.iter_track("a"))
+            self.assertEqual([int(v[0,0]) if len(v) else None for v in actual],[0,1,None])
+            started,release,closed=threading.Event(),threading.Event(),threading.Event()
+            def blocked(reader,locator,slot,ref):
+                if slot==1:
+                    started.set()
+                    if not release.wait(5):raise RuntimeError("test timeout")
+                return original(reader,locator,slot,ref)
+            with patch.object(points,"_frame",side_effect=blocked):
+                iterator=points.iter_track("a");next(iterator)
+                self.assertTrue(started.wait(5))
+                def close():iterator.close();closed.set()
+                thread=threading.Thread(target=close);thread.start()
+                self.assertFalse(closed.wait(.02))
+                release.set();thread.join(timeout=5)
+                self.assertTrue(closed.is_set())
+            def broken(reader,locator,slot,ref):
+                if slot==1:raise ValueError("frame failed")
+                return original(reader,locator,slot,ref)
+            with patch.object(points,"_frame",side_effect=broken), self.assertRaisesRegex(ValueError,"frame failed"):
+                list(points.iter_track("a"))
+            points.close()
+            self.assertFalse(any(t.name.startswith("point-frame") for t in threading.enumerate()))
+
     def test_verification_survives_eviction_but_not_mutation_or_explicit_reset(self):
         with tempfile.TemporaryDirectory() as folder:
             catalog = Catalog()

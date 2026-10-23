@@ -1,6 +1,8 @@
 """Read-only source-level indexed points, complete-slot validation and packing costs."""
 
 from collections import OrderedDict, defaultdict
+from collections import deque
+from concurrent.futures import ThreadPoolExecutor, wait
 import hashlib
 import json
 from pathlib import Path
@@ -30,7 +32,7 @@ def metadata_size(record):
 
 class PreparedPoints:
     def __init__(self, root, dataset, population, tracks, encoder, *, allow_partial=False, max_open_scenes=8,
-                 max_metadata_bytes=512 * 2**20):
+                 max_metadata_bytes=512 * 2**20, frame_workers=1):
         self.root = Path(root).resolve()
         path = self.root / "manifest.json"
         raw = path.read_bytes()  # An in-progress builder has no root manifest.
@@ -44,13 +46,14 @@ class PreparedPoints:
         if r.get("scope") != "full-frozen-source-train-validation" and not (
                 allow_partial and r.get("scope") == "bounded-native-check"):
             raise ValueError("Full frozen source indexed cache required")
-        if max_open_scenes < 1 or max_metadata_bytes < 0:
+        if max_open_scenes < 1 or max_metadata_bytes < 0 or frame_workers < 1:
             raise ValueError("Positive open-scene budget required")
         self.stamp = self._stamp(path)
         self.protected = {str(path): self.sha256}
         self.limit, self.opened = max_open_scenes, OrderedDict()
         self.states, self.metadata = {}, OrderedDict()
         self.metadata_bytes, self.metadata_limit = 0, max_metadata_bytes
+        self.frame_workers, self.pool = frame_workers, None
         self.counts, self.references = {}, {}
         self.stats = {"track_reads": 0, "requests": 0, "scene_opens": 0, "selected_bytes": 0,
                       "verified_bytes": 0, "checked_chunks": 0, "metadata_loads": 0, "metadata_hits": 0}
@@ -180,14 +183,46 @@ class PreparedPoints:
     def iter_track(self, locator):
         t = self.require_track(locator)
         self.stats["track_reads"] += 1
-        for slot, ref in enumerate(t["point_frames"]):
-            if ref is None:
-                yield np.zeros((0, 68), np.float32)
-            else:
-                crop = self._reader(t["group"]).crop(ref, locator)
-                if len(crop) != self.counts[locator][slot]:
-                    raise ValueError("Prepared point count changed")
-                yield crop
+        reader = self._reader(t["group"]) if any(ref is not None for ref in t["point_frames"]) else None
+        slots = iter(enumerate(t["point_frames"]))
+        if self.frame_workers == 1:
+            for slot, ref in slots:
+                yield self._frame(reader, locator, slot, ref)
+            return
+        if self.pool is None:
+            self.pool = ThreadPoolExecutor(max_workers=self.frame_workers, thread_name_prefix="point-frame")
+        pending = deque()
+        def submit():
+            item = next(slots, None)
+            if item is not None:
+                pending.append(self.pool.submit(self._frame, reader, locator, *item))
+        try:
+            for _ in range(min(self.frame_workers, t["slots"])):
+                submit()
+            while pending:
+                future = pending.popleft()
+                value = future.result()
+                submit()
+                yield value
+        finally:
+            for future in pending:
+                future.cancel()
+            wait(pending)
+            # All frame jobs finish before the caller can evict this track's reader.
+
+    def _frame(self, reader, locator, slot, ref):
+        if self._stamp(self.root / "manifest.json") != self.stamp:
+            raise ValueError("Immutable prepared source manifest changed")
+        value = np.zeros((0, 68), np.float32) if ref is None else reader.crop(ref, locator)
+        if len(value) != self.counts[locator][slot]:
+            raise ValueError("Prepared point count changed")
+        return value
+
+    def set_frame_workers(self, count):
+        if type(count) is not int or count < 1:
+            raise ValueError("Positive frame-worker count required")
+        self.close()
+        self.frame_workers = count
 
     def _retire(self, reader):
         for key in ("requests", "selected_bytes", "verified_bytes", "checked_chunks"):
@@ -201,6 +236,7 @@ class PreparedPoints:
                 result[key] += reader.stats[key]
         return result | {"root": str(self.root), "read_only": True, "open_scenes": len(self.opened),
                          "metadata_bytes": self.metadata_bytes, "metadata_limit_bytes": self.metadata_limit,
+                         "frame_workers": self.frame_workers,
                          "verification_bytes": sum(v.nbytes for s in self.states.values() for v in s["verified"].values())}
 
     def reset_verification(self):
@@ -210,6 +246,9 @@ class PreparedPoints:
             state["verified"].clear()
 
     def close(self):
+        if self.pool is not None:
+            self.pool.shutdown(wait=True, cancel_futures=True)
+            self.pool = None
         for reader in self.opened.values():
             self._retire(reader)
         self.opened.clear()

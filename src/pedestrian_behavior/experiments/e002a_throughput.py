@@ -184,6 +184,50 @@ def full_epoch(args, prepared, populations, record):
     return record
 
 
+def worker_sweep(args, prepared, populations, record):
+    """Same complete64-track GPU update across CPU worker counts; discard weights."""
+    dataset = populations["training"]
+    if dataset.supply is None or dataset.supply.points is None:
+        raise ValueError("Frame-worker sweep requires prepared points")
+    points = dataset.supply.points
+    indices = cases(dataset)["shuffled"]
+    record.update(scope="same shuffled64 training update at1/2/4/8/16/32 frame workers; discard weights; no W&B/test scoring",
+                  selections=[dataset.entries[i]["locator"] for i in indices],
+                  cpu_environment={k: os.environ.get(k) for k in ("OMP_NUM_THREADS","MKL_NUM_THREADS","OPENBLAS_NUM_THREADS")})
+    for workers in (1, 2, 4, 8, 16, 32):
+        points.set_frame_workers(workers)
+        logical = prepared["batches"](dataset, training=True, seed=0)
+        for phase in ("advisory-cold", "repeat-files"):
+            seed_run(0)
+            model = prepared["build_model"]().to(args.device)
+            optimizer = torch.optim.AdamW(model.parameters(), **SETTINGS["optimizer"])
+            if phase == "advisory-cold":
+                advisory_cold(dataset, indices)
+            before = prepared["runtime_snapshot"]()
+            torch.cuda.reset_peak_memory_stats(); torch.cuda.synchronize()
+            timed = TimedBatches(logical, indices)
+            begin = time.perf_counter()
+            result = train_accumulated_epoch(model, timed, optimizer, torch.device(args.device), 1.,
+                peak_lr=.0003, warmup_steps=prepared["config"]["warmup_updates"])
+            torch.cuda.synchronize()
+            row = {"workers":workers,"phase":phase,"seconds":time.perf_counter()-begin,
+                "input_wait_seconds":timed.loading_seconds,"training_ce":result["training_ce"],
+                "tokens":result["point_tokens"],"physical_microbatches":result["physical_microbatches"],
+                "peak_cuda_allocated_bytes":torch.cuda.max_memory_allocated(),
+                "runtime_before":before,"runtime_after":prepared["runtime_snapshot"]()}
+            record["rows"].append(row)
+            write_json(args.output/"throughput.json",record)
+            print("workers",workers,phase,round(row["seconds"],3),"wait",round(timed.loading_seconds,3),flush=True)
+            del model, optimizer
+            gc.collect(); torch.cuda.empty_cache()
+    reference = record["rows"][0]
+    for row in record["rows"]:
+        if any(row[k] != reference[k] for k in ("tokens","physical_microbatches","training_ce")):
+            raise ValueError("Frame workers changed inputs, packing or seeded training loss")
+    record["status"] = "complete"
+    return record
+
+
 def run(args):
     if args.smoke:
         raise ValueError("Throughput uses full source catalogs, not smoke selection")
@@ -202,6 +246,8 @@ def run(args):
         record["assembly_seconds"] = time.perf_counter()-started
         if args.full_epoch:
             return full_epoch(args, prepared, populations, record)
+        if args.worker_sweep:
+            return worker_sweep(args, prepared, populations, record)
         for operation, dataset in populations.items():
             if args.breakdown and operation != "training":
                 continue
@@ -294,6 +340,7 @@ def main():
     parser.add_argument("--serial", action="store_true", help="Diagnostic only: disable prepared-microbatch overlap")
     parser.add_argument("--retained-cold", action="store_true", help="Also advise page eviction while retaining verified chunk flags")
     parser.add_argument("--full-epoch", action="store_true", help="One complete training/source-validation epoch; discard weights")
+    parser.add_argument("--worker-sweep", action="store_true", help="Same64 tracks at1/2/4/8/16/32 CPU frame workers")
     args = parser.parse_args()
     if args.device != "cuda":
         raise ValueError("GPU throughput readiness requires CUDA")

@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+from threading import Lock
 
 import numpy as np
 
@@ -166,6 +167,8 @@ class IndexedShard:
         self.maps, self.stamps, self.verified = {}, {}, OrderedDict()
         self.limit = max_verified_chunks
         self.state = _state
+        self.lock = Lock()
+        self.chunk_locks = [Lock() for _ in range(64)]
         self.stats = {"selected_bytes": 0, "verified_bytes": 0, "checked_chunks": 0, "requests": 0}
         for name, (dtype, width) in DTYPES.items():
             spec = self.record["arrays"][name]
@@ -193,36 +196,42 @@ class IndexedShard:
             raise ValueError("Immutable shard changed after opening")
         row_bytes = np.dtype(spec["dtype"]).itemsize * spec["width"]
         chunks = row_chunks(rows) if _chunks is None else _chunks
-        flags = self.state["verified"].get(name) if self.state is not None else None
-        if self.state is not None and flags is None:
-            flags = self.state["verified"][name] = np.zeros(len(spec["chunks"]), bool)
+        with self.lock:
+            flags = self.state["verified"].get(name) if self.state is not None else None
+            if self.state is not None and flags is None:
+                flags = self.state["verified"][name] = np.zeros(len(spec["chunks"]), bool)
         for chunk in chunks:
-            key = name, int(chunk)
-            if flags is not None:
-                if flags[chunk]:
-                    continue
-            elif key in self.verified:
-                self.verified.move_to_end(key)
-                continue
-            start = int(chunk) * CHUNK_ROWS
-            raw = memoryview(self.maps[name][start:start + CHUNK_ROWS]).cast("B")
-            try:
-                matches = hashlib.sha256(raw).hexdigest() == spec["chunks"][int(chunk)]
-                size = len(raw)
-            finally:
-                # A failed producer retains its traceback; never retain an exported mmap buffer.
-                raw.release()
-            if not matches:
-                raise ValueError("Indexed chunk checksum mismatch")
-            self.stats["verified_bytes"] += size
-            self.stats["checked_chunks"] += 1
-            if flags is not None:
-                flags[chunk] = True
-            else:
-                self.verified[key] = None
-                if len(self.verified) > self.limit:
-                    self.verified.popitem(last=False)
-        self.stats["selected_bytes"] += len(rows) * row_bytes
+            # Same-chunk verification is exclusive; unrelated chunks can hash concurrently.
+            with self.chunk_locks[int(chunk) % len(self.chunk_locks)]:
+                key = name, int(chunk)
+                with self.lock:
+                    if flags is not None:
+                        if flags[chunk]:
+                            continue
+                    elif key in self.verified:
+                        self.verified.move_to_end(key)
+                        continue
+                start = int(chunk) * CHUNK_ROWS
+                raw = memoryview(self.maps[name][start:start + CHUNK_ROWS]).cast("B")
+                try:
+                    matches = hashlib.sha256(raw).hexdigest() == spec["chunks"][int(chunk)]
+                    size = len(raw)
+                finally:
+                    # A failed producer retains its traceback; release exported mmap buffers.
+                    raw.release()
+                if not matches:
+                    raise ValueError("Indexed chunk checksum mismatch")
+                with self.lock:
+                    self.stats["verified_bytes"] += size
+                    self.stats["checked_chunks"] += 1
+                    if flags is not None:
+                        flags[chunk] = True
+                    else:
+                        self.verified[key] = None
+                        if len(self.verified) > self.limit:
+                            self.verified.popitem(last=False)
+        with self.lock:
+            self.stats["selected_bytes"] += len(rows) * row_bytes
         # Integer-array indexing already returns an owned copy, independent of mmap lifetime.
         return self.maps[name][rows]
 
@@ -248,7 +257,8 @@ class IndexedShard:
         result[:, 67] = inside
         if not np.isfinite(result).all():
             raise ValueError("Nonfinite indexed crop")
-        self.stats["requests"] += 1
+        with self.lock:
+            self.stats["requests"] += 1
         return result
 
     def close(self):

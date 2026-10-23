@@ -162,7 +162,7 @@ def assembly(args):
             if args.arm == "g-rgb-dditr":
                 points = PreparedPoints(point_root, args.source, catalog.identity, catalog.tracks,
                     {"revision": DITR_REVISION, "checkpoint": DITR_SHA256, "configuration": DITR_CONFIG_SHA256},
-                    allow_partial=args.smoke)
+                    allow_partial=args.smoke, frame_workers=getattr(args, "point_workers", 1))
                 stack.callback(points.close)
                 if profile_record.get("point_storage_protocol") != POINT_PROTOCOL:
                     raise ValueError("Resource calibration for indexed point storage required")
@@ -266,6 +266,7 @@ def assembly(args):
                     "indexed_point_cache": points.identity if points is not None else None,
                     "point_storage_protocol": POINT_PROTOCOL if points is not None else None,
                     "point_loading": {"prefetch_physical_microbatches": 1, "open_scenes": points.limit,
+                        "frame_workers": points.frame_workers,
                         "metadata_limit_bytes": points.metadata_limit,
                         "verification": "source-process-file-stamps-chunk-flags"} if points is not None else None,
                     "feature_supply": "prepared-read-only-no-inference",
@@ -301,6 +302,7 @@ def add_arguments(parser):
     parser.add_argument("--rgb-preparation", type=Path, help="Required for full RGB-enabled attempts: matching RGB preparation JSON")
     parser.add_argument("--indexed-point-cache", type=Path,
                         help="Completed source cache; default outputs-root/experiments/E002a/indexed-<source>")
+    parser.add_argument("--point-workers", type=int, default=1, help="Bounded ordered CPU frame-preparation workers")
     parser.add_argument("--smoke", action="store_true")
     parser.add_argument("--smoke-selection", type=Path, help="Explicit bounded track selection; required for smoke")
 

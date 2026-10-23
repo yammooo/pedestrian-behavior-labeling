@@ -1,11 +1,29 @@
 """Input-only stress selection and explicit throughput forecast arithmetic."""
 from types import SimpleNamespace
+from pathlib import Path
+import tempfile
 import unittest
+from unittest.mock import Mock, patch
 
-from pedestrian_behavior.experiments.e002a_throughput import cases, forecast, OneUpdate
+from pedestrian_behavior.experiments.e002a_throughput import cases, forecast, OneUpdate, advisory_cold
+from pedestrian_behavior.data.indexed_points import DTYPES
 
 
 class ThroughputTest(unittest.TestCase):
+    def test_page_eviction_can_retain_verification_without_resetting_flags(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            for name in DTYPES: (root/(name+".bin")).write_bytes(b"x")
+            points = Mock(root=root, record={"scenes":{"g":{"path":"."}}})
+            dataset = SimpleNamespace(supply=SimpleNamespace(points=points), entries=[{"group":"g"}])
+            with patch("os.posix_fadvise", create=True) as advise:
+                advisory_cold(dataset, [0], reset_verification=False)
+                points.close.assert_called_once()
+                points.reset_verification.assert_not_called()
+                self.assertEqual(advise.call_count, len(DTYPES))
+                advisory_cold(dataset, [0])
+                points.reset_verification.assert_called_once()
+
     def test_cases_preserve_unique_complete_tracks_and_use_input_costs_only(self):
         data = SimpleNamespace(entries=[{"slots": i+1} for i in range(70)], cost=lambda i: 70-i)
         class Dataset:

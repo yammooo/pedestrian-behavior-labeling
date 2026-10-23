@@ -82,12 +82,15 @@ def breakdown_timers(enabled):
         yield totals
 
 
-def advisory_cold(dataset, indices):
+def advisory_cold(dataset, indices, *, reset_verification=True):
     """Evict only requested point-shard pages; no global OS cache controls."""
     supply = dataset.supply
     points = supply.points if supply is not None else None
     if points is not None:
-        points.reset_verification()
+        if reset_verification:
+            points.reset_verification()
+        else:
+            points.close()
         groups = {dataset.entries[i]["group"] for i in indices}
         if hasattr(os, "posix_fadvise"):
             for group in groups:
@@ -135,7 +138,10 @@ def run(args):
             if args.serial:
                 logical.prefetch = False
             for name, indices in chosen.items():
-                for phase in ("advisory-cold", "repeat-files"):
+                phases = ["advisory-cold", "repeat-files"]
+                if args.retained_cold:
+                    phases.append("retained-verification-advisory-cold")
+                for phase in phases:
                     seed_run(0)
                     model = prepared["build_model"]().to(args.device)
                     optimizer = torch.optim.AdamW(model.parameters(), **SETTINGS["optimizer"])
@@ -143,6 +149,8 @@ def run(args):
                     before = prepared["runtime_snapshot"]()
                     if phase == "advisory-cold":
                         advisory_cold(dataset, indices)
+                    elif phase == "retained-verification-advisory-cold":
+                        advisory_cold(dataset, indices, reset_verification=False)
                     torch.cuda.synchronize()
                     begin = time.perf_counter()
                     if operation == "training":
@@ -207,6 +215,7 @@ def main():
     add_arguments(parser)
     parser.add_argument("--breakdown", action="store_true", help="Only the same shuffled training update twice, with load/model timers")
     parser.add_argument("--serial", action="store_true", help="Diagnostic only: disable prepared-microbatch overlap")
+    parser.add_argument("--retained-cold", action="store_true", help="Also advise page eviction while retaining verified chunk flags")
     args = parser.parse_args()
     if args.device != "cuda":
         raise ValueError("GPU throughput readiness requires CUDA")

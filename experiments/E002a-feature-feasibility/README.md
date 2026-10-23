@@ -711,7 +711,7 @@ A single clearly labelled four-worker ROAD W&B smoke passes selected-checkpoint 
 
 The earlier18m46s full ROAD epoch uses one frame worker and remains historical evidence. A complete epoch with four workers is **not measured here**; the quick sweep does not establish a new epoch time, GPU-utilization average or worst-case operational gate. No full comparison attempt is launched.
 
-### CPU/CUDA optimizer update profile — 2026-10-23
+### CPU-CUDA optimizer update profile — 2026-10-23
 
 A bounded CPU/CUDA trace covered one seed0 shuffled ROAD `g-rgb-dditr`64-track update on the isolated aalto checkout, with four frame workers and the current prepared caches. The model/loader/resource-calibration code matched the tested `184d920` sources; a temporary profiling wrapper ran at `b781139`. The profiled update completed **22 physical microbatches** in an **11.296 s instrumented outer scope**. This is not an uninstrumented timing. The matching warm-pass timing was not saved when bounded postprocessing was stopped at about16.9 GB RSS. The trace contains4,026,242 events.
 
@@ -741,6 +741,19 @@ Pinned asynchronous H2D staging was rejected and removed. A bounded trace found 
 The final indexed profile is complete at `/home/user20/projects/e002a-execution-optimizations-20261023/calibration-chunk4-final/profile.json`, based on the explicit proposal `/home/user20/projects/e002a-execution-optimizations-20261023/candidate-chunk4-ordinary1810000-proposed.json`; the proposal records its basis SHA and setting overrides, and only the newly measured output is marked `complete`. The original complete calibration was not changed. Calibration evidence is stored outside both code checkouts to keep the primary Aalto code checkout untouched; canonical prepared caches were read-only inputs. An optional post-calibration timing command stopped before model assembly because the existing `validate_roots` guard requires evidence under `outputs-root/experiments/E002a`; no extra update ran. The table above reports the existing three-repeat warm measurements and does not claim a fresh confirmation.
 
 Local compact evidence is in the [execution-optimization summary](../../outputs/experiments/E002a/execution-optimizations-20261023/summary.json), with a hash-matched [profile copy](../../outputs/experiments/E002a/execution-optimizations-20261023/profile.json) and [calibration CUDA-test log](../../outputs/experiments/E002a/execution-optimizations-20261023/calibration-equivalence-tests.log). Aalto timing aliases are under `/home/user20/projects/pedestrian-behavior-labeling/outputs/experiments/E002a/execution-optimizations-20261023/`: `sweep-road-step1-retry/throughput.json`, `sweep-loki-step1/throughput.json`, `ordinary-road-step1/throughput.json`, `ordinary-loki-step1/throughput.json`, `ordinary-road-2m-chunk2-4/throughput.json`, `ordinary-road-2p5m-chunk4/throughput.json`, and `preflight-road-3m-chunk4/throughput.json`. The CUDA calibration and its recorded boundary are at the external path above. Full local CPU and Aalto CUDA suites each pass202 tests (12 local CUDA skips, none on Aalto); no comparison training or held-out evaluation ran.
+
+### ROAD RGB overfitting snapshot — 2026-10-23
+
+Read-only audit of saved histories/configurations while the RGB attempt was active at epoch26; this is a provisional source-validation observation. The user reports geometry-only training completed. The verified ROAD geometry run is [v5e4nxvh](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/v5e4nxvh); the active geometry+RGB run is [c3fh137p](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/c3fh137p).
+
+| Arm | Best-F1 epoch | Training CE at that epoch | Validation CE | Track-weighted validation macro-F1 |
+|---|---:|---:|---:|---:|
+| Geometry |14|0.5651|0.7787|0.5861|
+| Geometry + RGB, through epoch26 |23|0.1182|1.4744|0.5595|
+
+RGB validation CE was lowest at epoch3 (0.8849); at epoch26 training/validation CE was0.1136/1.5969 and F1 was0.5198. Geometry also deteriorated late: its final epoch29 had CE0.3739/1.0517 and F1 0.5121. The RGB loss gap is much larger, but its best F1 is only2.65 percentage points below geometry so far. Selection/patience follow macro-F1 rather than minimum CE; RGB had three non-improving epochs against patience15 at this snapshot. Training CE reflects changing weights with dropout, while validation uses evaluation mode; it is not a matched train-evaluation loss.
+
+Configs match on seed0, enabled-branches-v2, source normalization, split identities/support (4,380 training tracks/358 groups;1,110 validation tracks/78 groups), optimizer/LR/warmup, dropout and temporal architecture. Revisions differ (`5efb36c` geometry, `e5dee9f` RGB); inspected model changes affect only LiDAR input validation, and both non-LiDAR arms retain69 physical batches per epoch. DINO is frozen; fixed3× crop CLS features feed a learned projection/fusion/temporal model without RGB augmentation or branch/modality dropout. Appearance/background memorization is a plausible explanation, not a verified shortcut mechanism. Class-specific errors, descriptor balance and current crop alignment were not audited here. No code/settings/process changed, and no final RGB predictions were available at the snapshot.
 
 ### Cache inventory and retirement — 2026-10-22
 
@@ -808,7 +821,7 @@ Acceptance before the six exploratory attempts:
 
 The earlier worst-case OOM and~1.15 TiB estimate remain historical warnings against assuming full preparation fits. Numeric ceilings and bounded20 m I/O are recorded in the integrated calibration above; full-population epoch cost remains unknown. Utonia remains deferred. Never silently cap tokens, truncate tracks, change precision or relax deterministic training. Preserve failures; fresh attempt outputs, no automatic retry/resume. Local checkpoint/prediction backup outside this laptop remains **TBD** and separate from the cache budget.
 
-**Results:** no completed full pilot comparison attempts. Bounded behavior-training smoke attempts are operational evidence only; see acceptance above. Native/resource/semantic preparatory evidence is preserved below. Architectural novelty and modality utility remain hypotheses, not consequences of integrating these components.
+**Results:** geometry-only training is completed per the user; the [verified ROAD geometry result and active RGB snapshot](#road-rgb-overfitting-snapshot--2026-10-23) are recorded above. RGB and full-modality pilot conclusions remain provisional. Bounded behavior-training smokes are operational evidence only. Architectural novelty and modality utility remain hypotheses, not consequences of integrating these components.
 
 ## Preparatory work
 

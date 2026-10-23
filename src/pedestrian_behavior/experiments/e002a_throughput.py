@@ -2,6 +2,7 @@
 
 import argparse
 import gc
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -16,7 +17,7 @@ from pedestrian_behavior.data.indexed_points import DTYPES, IndexedShard
 from pedestrian_behavior.data.prepared_rgb import PreparedRGB
 from contextlib import ExitStack, contextmanager
 from unittest.mock import patch
-from pedestrian_behavior.evaluation import track_cross_entropy
+from pedestrian_behavior.evaluation import track_cross_entropy, predict, prediction_metrics
 from pedestrian_behavior.training import seed_run
 from .e002a_run import add_arguments, assembly, SETTINGS
 from .run import write_json
@@ -37,13 +38,20 @@ def cases(dataset):
             "long": sorted(range(n), key=lambda i: (-lengths[i], -costs[i], i))[:size]}
 
 
-class OneUpdate:
-    def __init__(self, logical, indices):
+class TimedBatches:
+    def __init__(self, logical, indices=None):
         self.logical, self.indices = logical, indices
         self.loading_seconds = 0.
 
     def __iter__(self):
-        yield self.indices
+        if self.indices is None:
+            yield from self.logical
+        else:
+            yield self.indices
+
+    def predictions(self):
+        for indices in self:
+            yield from self.microbatches(indices)
 
     def microbatches(self, indices):
         iterator = iter(self.logical.microbatches(indices))
@@ -112,6 +120,70 @@ def forecast(rows, training_tracks, validation_tracks, overhead_seconds=60.):
                               "not a measured full epoch, guaranteed worst case or physical-cold I/O guarantee"}
 
 
+def full_epoch(args, prepared, populations, record):
+    """One complete source epoch; keep only timing/numerical evidence, not weights."""
+    device = torch.device(args.device)
+    train_data = populations["training"]
+    advisory_cold(train_data, range(len(train_data)))
+    validation_data = populations["validation"]
+    # Shared verification remains fresh; advise eviction for validation-only scenes too.
+    advisory_cold(validation_data, range(len(validation_data)), reset_verification=False)
+    model = prepared["build_model"]().to(device)
+    optimizer = torch.optim.AdamW(model.parameters(), **SETTINGS["optimizer"])
+    training = TimedBatches(prepared["batches"](train_data, training=True, seed=0))
+    validation_batches = prepared["batches"](validation_data, training=False, seed=0)
+    validation = TimedBatches(getattr(validation_batches, "logical", validation_batches))
+    if args.serial:
+        training.logical.prefetch = validation.logical.prefetch = False
+    record.update(scope="one complete source training/validation timing; weights discarded; no W&B/test scoring",
+                  full_epoch=True, runtime_before=prepared["runtime_snapshot"]())
+    if device.type == "cuda":
+        torch.cuda.reset_peak_memory_stats(); torch.cuda.synchronize()
+    begin = last = time.perf_counter()
+    def progress(step, loss):
+        nonlocal last
+        if device.type == "cuda":
+            torch.cuda.synchronize()
+        now = time.perf_counter()
+        row = {"optimizer_step": step, "training_ce": loss, "update_seconds": now-last,
+               "training_elapsed_seconds": now-begin}
+        with (args.output/"steps.jsonl").open("a") as stream:
+            stream.write(json.dumps(row, allow_nan=False)+"\n")
+        if step % 5 == 0 or step == len(training.logical):
+            print("training", step, "/", len(training.logical), round(now-begin, 1), "seconds", flush=True)
+        last = time.perf_counter()
+    with breakdown_timers(True) as detail:
+        result = train_accumulated_epoch(model, training, optimizer, device, 1., on_step=progress,
+            peak_lr=.0003, warmup_steps=prepared["config"]["warmup_updates"])
+        training_seconds = time.perf_counter()-begin
+        if result["processed_tracks"] != len(train_data) or result["optimizer_steps"] != len(training.logical):
+            raise ValueError("Epoch timing omitted training tracks/updates")
+        record["training"] = result | {"wall_seconds": training_seconds, "input_wait_seconds": training.loading_seconds,
+            "loader": dict(training.logical.stats), "input_detail": dict(detail)}
+        write_json(args.output/"throughput.json", record)
+    print("validation started", len(validation_data), "tracks", flush=True)
+    begin_validation = time.perf_counter()
+    with breakdown_timers(True) as detail:
+        tracks = predict(model, validation.predictions(), device, prepared.get("forward_batch"))
+        for track in tracks:
+            identity = json.loads(track["locator"])
+            track["group"] = identity.get("clip", identity.get("scenario"))
+        metrics = prediction_metrics(tracks, 4)
+    if len(tracks) != len(validation_data):
+        raise ValueError("Epoch timing omitted validation tracks")
+    if device.type == "cuda":
+        torch.cuda.synchronize()
+    record.update(validation={"tracks": len(tracks), "wall_seconds": time.perf_counter()-begin_validation,
+                  "input_wait_seconds": validation.loading_seconds, "loader": dict(validation.logical.stats),
+                  "input_detail": dict(detail), "metrics": metrics}, epoch_seconds=time.perf_counter()-begin,
+                  peak_cuda_allocated_bytes=torch.cuda.max_memory_allocated() if device.type == "cuda" else None,
+                  runtime_after=prepared["runtime_snapshot"](), status="complete",
+                  interpretation="Measured one fresh-verification/advisory-cold source epoch; excludes W&B, "
+                                 "checkpoint/plot exports and does not establish a worst-case runtime guarantee")
+    print("epoch complete", round(record["epoch_seconds"], 1), "seconds", flush=True)
+    return record
+
+
 def run(args):
     if args.smoke:
         raise ValueError("Throughput uses full source catalogs, not smoke selection")
@@ -121,11 +193,15 @@ def run(args):
               "source": args.source, "arm": args.arm, "rows": [], "failures": [],
               "revision": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()}
     prepared = model = optimizer = None
+    started = time.perf_counter()
     try:
         seed_run(0)
         prepared = assembly(args)
         record["config"] = prepared["config"]
         populations = {p: prepared["dataset"](args.source, p) for p in ("training", "validation")}
+        record["assembly_seconds"] = time.perf_counter()-started
+        if args.full_epoch:
+            return full_epoch(args, prepared, populations, record)
         for operation, dataset in populations.items():
             if args.breakdown and operation != "training":
                 continue
@@ -154,7 +230,7 @@ def run(args):
                     torch.cuda.synchronize()
                     begin = time.perf_counter()
                     if operation == "training":
-                        timed_update = OneUpdate(logical, indices)
+                        timed_update = TimedBatches(logical, indices)
                         with breakdown_timers(args.breakdown) as detail:
                             result = train_accumulated_epoch(model, timed_update, optimizer,
                                 torch.device(args.device), 1., peak_lr=.0003,
@@ -207,6 +283,7 @@ def run(args):
             record["failures"].append(traceback.format_exc())
             raise
         finally:
+            record["total_seconds_including_assembly_cleanup"] = time.perf_counter()-started
             write_json(args.output/"throughput.json", record)
 
 
@@ -216,6 +293,7 @@ def main():
     parser.add_argument("--breakdown", action="store_true", help="Only the same shuffled training update twice, with load/model timers")
     parser.add_argument("--serial", action="store_true", help="Diagnostic only: disable prepared-microbatch overlap")
     parser.add_argument("--retained-cold", action="store_true", help="Also advise page eviction while retaining verified chunk flags")
+    parser.add_argument("--full-epoch", action="store_true", help="One complete training/source-validation epoch; discard weights")
     args = parser.parse_args()
     if args.device != "cuda":
         raise ValueError("GPU throughput readiness requires CUDA")

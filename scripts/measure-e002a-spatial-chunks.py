@@ -110,10 +110,18 @@ def run(args):
               "workers": args.point_workers, "repeats": args.repeats, "seed": 0,
               "finite_check_comparison": ["torch", "numpy"], "rows": [], "failures": [],
               "async_spatial_transfer": args.async_spatial_transfer,
+              "driver_memory_recorded": args.record_driver_memory,
               "cpu_thread_limits": {k: os.environ.get(k) for k in
                                     ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS")}}
     prepared = None
+    driver_log = driver_monitor = None
     try:
+        if args.record_driver_memory:
+            driver_log = (args.output / "driver-memory.csv").open("w")
+            driver_monitor = subprocess.Popen(
+                ["nvidia-smi", "--query-gpu=timestamp,memory.used,memory.free,utilization.gpu",
+                 "--format=csv,noheader,nounits", "-l", "1"],
+                stdout=driver_log, stderr=subprocess.STDOUT)
         seed_run(0)
         prepared = assembly(args)
         dataset = prepared["dataset"](args.source, "training")
@@ -242,6 +250,11 @@ def run(args):
         write_json(args.output / "throughput.json", record)
         raise
     finally:
+        if driver_monitor is not None:
+            driver_monitor.terminate()
+            driver_monitor.wait(timeout=10)
+        if driver_log is not None:
+            driver_log.close()
         if prepared is not None:
             prepared["close"]()
 
@@ -263,6 +276,8 @@ def main():
                         help="Export a bounded CPU/CUDA trace for the one async largest-microbatch update")
     parser.add_argument("--preflight-only", action="store_true",
                         help="Write physical packing and padded-token estimates without a CUDA update")
+    parser.add_argument("--record-driver-memory", action="store_true",
+                        help="Sample nvidia-smi used/free memory at1s intervals during the run")
     run(parser.parse_args())
 
 

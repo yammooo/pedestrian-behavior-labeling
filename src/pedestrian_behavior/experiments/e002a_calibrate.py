@@ -22,7 +22,7 @@ from pedestrian_behavior.models.multimodal import MultimodalClassifier, frame_ch
 from pedestrian_behavior.training import seed_run
 from . import e001b_run
 from .e002a_execution_probe import loaded_track
-from .e002a_run import FUSION_PROTOCOL, resource_code, SETTINGS, POINT_PROTOCOL, validate_profile
+from .e002a_run import FUSION_PROTOCOL, resource_code, SETTINGS, POINT_PROTOCOL, validate_profile, DEFAULT_POINT_WORKERS
 from .e002a_features import FeatureCatalog, load_configuration
 from pedestrian_behavior.data.prepared_points import PreparedPoints
 from pedestrian_behavior.inspection.pretrained import DITR_REVISION, DITR_SHA256, DITR_CONFIG_SHA256
@@ -242,5 +242,5 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--device", choices=("cpu", "cuda"), required=True)
     parser.add_argument("--reference-profile", type=Path, help="Revalidate existing packing limits without retuning them")
-    parser.add_argument("--point-workers", type=int, default=1)
+    parser.add_argument("--point-workers", type=int, default=DEFAULT_POINT_WORKERS)
     run(parser.parse_args())

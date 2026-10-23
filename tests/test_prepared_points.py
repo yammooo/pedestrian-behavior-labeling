@@ -57,6 +57,15 @@ def open_points(root, catalog, **kwargs):
 
 
 class PreparedInputsTest(unittest.TestCase):
+    def test_experiment_worker_default_and_override_are_explicit(self):
+        import argparse
+        from pedestrian_behavior.experiments.e002a_run import add_arguments, DEFAULT_POINT_WORKERS
+        parser=argparse.ArgumentParser();add_arguments(parser)
+        command=["--source","loki","--arm","g-rgb-dditr","--device","cuda","--output","/tmp/run","--profile","/tmp/profile"]
+        self.assertEqual(parser.parse_args(command).point_workers,DEFAULT_POINT_WORKERS)
+        self.assertEqual(DEFAULT_POINT_WORKERS,4)
+        self.assertEqual(parser.parse_args(command+["--point-workers","32"]).point_workers,32)
+
     def test_frame_worker_counts_preserve_order_values_and_verification(self):
         with tempfile.TemporaryDirectory() as folder:
             catalog=Catalog();root=prepared_fixture(Path(folder)/"points",catalog)

@@ -27,6 +27,7 @@ from .run import run_attempt as execute_attempt, write_json
 
 
 ARMS = ("g", "g-rgb", "g-rgb-dditr")
+DEFAULT_POINT_WORKERS = 4
 FUSION_PROTOCOL = "enabled-branches-v2"
 STRATA = e001b_run.STRATA | {"rgb-observed": ("missing", "valid"), "lidar-observed": ("missing", "valid")}
 SETTINGS = {"seed": 0, "batch_size": 64, "epochs": 100, "patience": 15, "clip_norm": 1.,
@@ -162,7 +163,7 @@ def assembly(args):
             if args.arm == "g-rgb-dditr":
                 points = PreparedPoints(point_root, args.source, catalog.identity, catalog.tracks,
                     {"revision": DITR_REVISION, "checkpoint": DITR_SHA256, "configuration": DITR_CONFIG_SHA256},
-                    allow_partial=args.smoke, frame_workers=getattr(args, "point_workers", 1))
+                    allow_partial=args.smoke, frame_workers=getattr(args, "point_workers", DEFAULT_POINT_WORKERS))
                 stack.callback(points.close)
                 if profile_record.get("point_storage_protocol") != POINT_PROTOCOL:
                     raise ValueError("Resource calibration for indexed point storage required")
@@ -302,7 +303,7 @@ def add_arguments(parser):
     parser.add_argument("--rgb-preparation", type=Path, help="Required for full RGB-enabled attempts: matching RGB preparation JSON")
     parser.add_argument("--indexed-point-cache", type=Path,
                         help="Completed source cache; default outputs-root/experiments/E002a/indexed-<source>")
-    parser.add_argument("--point-workers", type=int, default=1, help="Bounded ordered CPU frame-preparation workers")
+    parser.add_argument("--point-workers", type=int, default=DEFAULT_POINT_WORKERS, help="Bounded ordered CPU frame-preparation workers")
     parser.add_argument("--smoke", action="store_true")
     parser.add_argument("--smoke-selection", type=Path, help="Explicit bounded track selection; required for smoke")
 

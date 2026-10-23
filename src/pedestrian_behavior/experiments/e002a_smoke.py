@@ -12,6 +12,7 @@ import torch
 from pedestrian_behavior.data.preparation import checksum
 from pedestrian_behavior.evaluation import load_predictions, prediction_metrics
 from .run import write_json
+from .e002a_run import DEFAULT_POINT_WORKERS
 
 
 def selection(root, probe, fixture):
@@ -76,6 +77,7 @@ def run(args):
                     "--device", "cuda", "--smoke", "--smoke-selection", str(chosen), "--profile", str(args.profile),
                     "--rgb-cache-root", str(args.rgb_cache_root), "--rgb-preparation", str(args.rgb_preparation),
                     "--indexed-point-cache", str(args.indexed_cache_root / ("indexed-" + source)), "--output", str(output)]
+                command += ["--point-workers", str(args.point_workers)]
                 with (args.output / (source + "-" + state + ".log")).open("w") as log:
                     subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, check=True)
                 record["attempts"].append(audit(output, source) | {"state": state, "command": command})
@@ -99,4 +101,5 @@ def main():
     parser.add_argument("--outputs-root", type=Path, default=Path("outputs"))
     parser.add_argument("--probe", type=Path, default=Path("outputs/experiments/E002a/native-probe-07"))
     parser.add_argument("--fixtures", type=Path, default=Path("outputs/experiments/E002a/execution-probe-04"))
+    parser.add_argument("--point-workers", type=int, default=DEFAULT_POINT_WORKERS)
     run(parser.parse_args())

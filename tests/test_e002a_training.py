@@ -309,6 +309,15 @@ class MultimodalTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "spatial"):
             model(batch)
 
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA unavailable")
+    def test_nonfinite_cuda_point_tokens_still_fail(self):
+        model = MultimodalClassifier("g-rgb-dditr", PROFILE).cuda()
+        batch = collate_multimodal([sample(3)])
+        batch["points"][0] = batch["points"][0].cuda()
+        batch["points"][0][0, 0] = float("inf")
+        with self.assertRaisesRegex(ValueError, "spatial"):
+            model(batch)
+
     def test_dataset_never_requests_disabled_features_or_point_costs(self):
         from pedestrian_behavior.experiments.e002a_run import FeatureDataset
         from unittest.mock import Mock

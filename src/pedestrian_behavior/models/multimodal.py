@@ -2,6 +2,7 @@
 
 from contextlib import nullcontext
 
+import numpy as np
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -12,6 +13,10 @@ from torch.utils.checkpoint import checkpoint
 
 ARM_FLAGS = {"g": ("geometry_valid",), "g-rgb": ("geometry_valid", "rgb_valid"),
              "g-rgb-dditr": ("geometry_valid", "rgb_valid", "lidar_valid")}
+
+
+def _all_finite_point_tokens(value):
+    return np.isfinite(value.detach().numpy()).all() if value.device.type == "cpu" else torch.isfinite(value).all()
 
 
 def rotary(x):
@@ -135,7 +140,7 @@ class MultimodalClassifier(nn.Module):
             frames = batch["points"]
             if len(frames) != b * t:
                 raise ValueError("Point slots do not match temporal padding")
-            if any(x.ndim != 2 or x.shape[1] != 68 or x.dtype != torch.float32 or not torch.isfinite(x).all() for x in frames):
+            if any(x.ndim != 2 or x.shape[1] != 68 or x.dtype != torch.float32 or not _all_finite_point_tokens(x) for x in frames):
                 raise ValueError("Invalid/nonfinite spatial tokens")
             observed = torch.tensor([len(x) > 0 for x in frames], device=device).reshape(b, t)
             if not torch.equal(observed, flags[..., 2].bool() & valid):

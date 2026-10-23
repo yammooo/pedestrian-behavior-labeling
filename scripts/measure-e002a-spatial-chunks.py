@@ -50,6 +50,8 @@ def one_update(prepared, dataset, indices, profile, finite_check, phase, trace_p
     torch.cuda.empty_cache()
     model = prepared["build_model"]().to("cuda")
     model.profile.update(profile)
+    if profile.get("async_spatial_transfer") is True:
+        model._spatial_transfer_stream = torch.cuda.Stream(device="cuda")
     optimizer = torch.optim.AdamW(model.parameters(), **SETTINGS["optimizer"])
     logical = prepared["batches"](dataset, training=True, seed=0)
     logical.profile = dict(profile)

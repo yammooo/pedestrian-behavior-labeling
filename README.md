@@ -498,6 +498,18 @@ uv run --no-project --python "$probe_root/extractor-env/bin/python" python scrip
 
 Calibration retains the six complete development tracks and labelled shape stresses, reads their new pooled points and existing3× RGB fixtures, and measures real CE/backward/AdamW plus spatial concurrency. It preserves the78% VRAM allocation ceiling; frozen-miss reserve is zero because no encoder runs during fitting. Profile hashes/backend/GPU must match; the LiDAR arm additionally requires the indexed point protocol. The smoke command makes first/repeated prepared reads (not guaranteed physically cold/warm disk) on both sources with actual W&B and checkpoint/plot/prediction reconstruction. These are operational checks, not comparison results. Run them after builders finish; full-population throughput acceptance is still separate.
 
+Before the six attempts, measure complete64-track updates on shuffled, dense and long groups using the actual prepared pipeline:
+
+```bash
+uv run --no-project --python "$probe_root/extractor-env/bin/python" python scripts/check-e002a-throughput.py \
+  --source road-waymo --arm g-rgb-dditr --device cuda \
+  --profile "$probe_root/my-indexed-calibration/profile.json" \
+  --rgb-preparation "$probe_root/rgb-cache-preparation-03/cache.json" \
+  --output "$probe_root/my-road-throughput"
+```
+
+Repeat per source/arm with fresh outputs. This is bounded operational timing with discarded weights, no W&B or held-out scoring. Each input-only case gets advisory-cold/repeated reads; `throughput.json` retains timings, packing/read counts and a conservative sampled stress-envelope extrapolation with explicit60 s overhead. It is not a measured full epoch or guaranteed cold/worst-case bound. [Readiness evidence](experiments/E002a-feature-feasibility/README.md#completed-caches-and-gpu-readiness--2026-10-23).
+
 Then the manual six-attempt interface is:
 
 ```bash

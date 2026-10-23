@@ -113,7 +113,6 @@ class MultimodalClassifier(nn.Module):
         self.final_norm = nn.LayerNorm(256)
         self.head = nn.Linear(256, 4)
         self.arm, self.profile = arm, dict(profile)
-        self._spatial_transfer_stream = None
 
     def forward(self, batch, *, mode=None):
         device = self.head.weight.device
@@ -151,45 +150,18 @@ class MultimodalClassifier(nn.Module):
             mode = mode or ("ordinary" if tokens <= self.profile["ordinary_tokens"] else "recompute")
             if mode not in ("ordinary", "recompute", "offload"):
                 raise ValueError("Unknown spatial execution mode")
-            async_transfer = (self.profile.get("async_spatial_transfer") is True and device.type == "cuda"
-                              and mode == "ordinary" and all(x.device.type == "cpu" and not x.requires_grad for x in frames))
-            if async_transfer and chunks:
-                if self._spatial_transfer_stream is None or self._spatial_transfer_stream.device != device:
-                    self._spatial_transfer_stream = torch.cuda.Stream(device=device)
-                transfer_stream = self._spatial_transfer_stream
-                compute_stream = torch.cuda.current_stream(device)
-                host_sources = []
-                try:
-                    for chunk in chunks:
-                        indices, values = zip(*chunk)
-                        sizes = tuple(len(x) for x in values)
-                        source = torch.cat(values).pin_memory()
-                        with torch.cuda.stream(transfer_stream):
-                            inputs = source.to(device, non_blocking=True)
-                            ready = torch.cuda.Event()
-                            ready.record(transfer_stream)
-                        host_sources.append((source, ready))
-                        host_sources[:] = [(value, event) for value, event in host_sources if not event.query()]
-                        compute_stream.wait_event(ready)
-                        inputs.record_stream(compute_stream)
+            for chunk in chunks:
+                indices, values = zip(*chunk)
+                inputs = torch.cat(values)
+                sizes = tuple(len(x) for x in values)
+                if mode == "recompute" and self.training and torch.is_grad_enabled():
+                    # CPU inputs bound retained VRAM; CUDA seed preserves CUDA dropout RNG.
+                    descriptor = checkpoint(self.spatial, inputs, sizes, self.spatial.seed, use_reentrant=False)
+                else:
+                    scope = torch.autograd.graph.save_on_cpu(pin_memory=device.type == "cuda") if mode == "offload" else nullcontext()
+                    with scope:
                         descriptor = self.spatial(inputs, sizes, self.spatial.seed)
-                        lidar = lidar.index_copy(0, torch.tensor(indices, device=device), descriptor)
-                finally:
-                    transfer_stream.synchronize()
-                    host_sources.clear()
-            else:
-                for chunk in chunks:
-                    indices, values = zip(*chunk)
-                    inputs = torch.cat(values)
-                    sizes = tuple(len(x) for x in values)
-                    if mode == "recompute" and self.training and torch.is_grad_enabled():
-                        # CPU inputs bound retained VRAM; CUDA seed preserves CUDA dropout RNG.
-                        descriptor = checkpoint(self.spatial, inputs, sizes, self.spatial.seed, use_reentrant=False)
-                    else:
-                        scope = torch.autograd.graph.save_on_cpu(pin_memory=device.type == "cuda") if mode == "offload" else nullcontext()
-                        with scope:
-                            descriptor = self.spatial(inputs, sizes, self.spatial.seed)
-                    lidar = lidar.index_copy(0, torch.tensor(indices, device=device), descriptor)
+                lidar = lidar.index_copy(0, torch.tensor(indices, device=device), descriptor)
             descriptors.append(lidar.reshape(b, t, 128))
         x = self.fusion(torch.cat((*descriptors, flags), -1))
         for layer in self.temporal:

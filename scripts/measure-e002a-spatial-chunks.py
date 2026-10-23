@@ -44,14 +44,12 @@ def preflight(prepared, dataset, indices, profile, *, include_locators=False):
     return rows
 
 
-def one_update(prepared, dataset, indices, profile, finite_check, phase, trace_path=None):
+def one_update(prepared, dataset, indices, profile, finite_check, phase):
     seed_run(0)
     torch.cuda.synchronize()
     torch.cuda.empty_cache()
     model = prepared["build_model"]().to("cuda")
     model.profile.update(profile)
-    if profile.get("async_spatial_transfer") is True:
-        model._spatial_transfer_stream = torch.cuda.Stream(device="cuda")
     optimizer = torch.optim.AdamW(model.parameters(), **SETTINGS["optimizer"])
     logical = prepared["batches"](dataset, training=True, seed=0)
     logical.profile = dict(profile)
@@ -64,16 +62,8 @@ def one_update(prepared, dataset, indices, profile, finite_check, phase, trace_p
              patch.object(multimodal, "_all_finite_point_tokens", lambda value: torch.isfinite(value).all()))
     try:
         with check:
-            if trace_path is None:
-                result = train_accumulated_epoch(model, batches, optimizer, torch.device("cuda"), 1.,
-                    peak_lr=.0003, warmup_steps=prepared["config"]["warmup_updates"])
-            else:
-                with torch.profiler.profile(activities=[torch.profiler.ProfilerActivity.CPU,
-                                                        torch.profiler.ProfilerActivity.CUDA],
-                                            record_shapes=False, with_stack=False, profile_memory=False) as profiler:
-                    result = train_accumulated_epoch(model, batches, optimizer, torch.device("cuda"), 1.,
-                        peak_lr=.0003, warmup_steps=prepared["config"]["warmup_updates"])
-                profiler.export_chrome_trace(str(trace_path))
+            result = train_accumulated_epoch(model, batches, optimizer, torch.device("cuda"), 1.,
+                peak_lr=.0003, warmup_steps=prepared["config"]["warmup_updates"])
         torch.cuda.synchronize()
         row = {"phase": phase, "finite_check": finite_check, "frame_chunk": profile["frame_chunk"],
                "seconds": time.perf_counter() - begin, "input_wait_seconds": batches.loading_seconds,
@@ -105,16 +95,12 @@ def run(args):
         raise ValueError("Ordinary-token override must be positive")
     if args.microbatch_token_budget is not None and args.microbatch_token_budget < 1:
         raise ValueError("Microbatch token budget must be positive")
-    if args.trace_one_update and (not args.largest_microbatch_only or not args.async_spatial_transfer
-                                  or args.repeats != 1):
-        raise ValueError("Trace requires one async largest-microbatch measurement")
     args.output.mkdir(parents=True, exist_ok=False)
     torch.set_num_threads(2)
     record = {"status": "incomplete", "source": args.source, "arm": args.arm, "device": args.device,
               "revision": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
               "workers": args.point_workers, "repeats": args.repeats, "seed": 0,
               "finite_check_comparison": ["torch", "numpy"], "rows": [], "failures": [],
-              "async_spatial_transfer": args.async_spatial_transfer,
               "driver_memory_recorded": args.record_driver_memory,
               "cpu_thread_limits": {k: os.environ.get(k) for k in
                                     ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS")}}
@@ -127,19 +113,6 @@ def run(args):
                 ["nvidia-smi", "--query-gpu=timestamp,memory.used,memory.free,utilization.gpu",
                  "--format=csv,noheader,nounits", "-l", "1"],
                 stdout=driver_log, stderr=subprocess.STDOUT)
-        if args.allow_model_code_diagnostic:
-            from pedestrian_behavior.experiments import e002a_run as e002a_module
-            profile_code = json.loads(args.profile.read_text()).get("code", {})
-            actual_code = e002a_module.resource_code()
-            changed = {name for name in set(profile_code) | set(actual_code)
-                       if profile_code.get(name) != actual_code.get(name)}
-            if changed != {"pedestrian_behavior.models.multimodal"}:
-                raise ValueError("Diagnostic override permits only the spatial model module hash to differ")
-            e002a_module.resource_code = lambda: profile_code
-            record["diagnostic_code_override"] = {
-                "changed_module": next(iter(changed)), "profile_code": profile_code,
-                "actual_code": actual_code,
-            }
         seed_run(0)
         prepared = assembly(args)
         dataset = prepared["dataset"](args.source, "training")
@@ -207,8 +180,6 @@ def run(args):
             profile = base_profile | {"frame_chunk": size}
             if args.ordinary_token_threshold is not None:
                 profile["ordinary_tokens"] = args.ordinary_token_threshold
-            if args.async_spatial_transfer:
-                profile["async_spatial_transfer"] = True
             candidate = "all-under-token-ceiling" if size > 1000 else size
             plan = preflight(prepared, dataset, selected_indices, profile)
             if args.largest_microbatch_only and len(plan) != 1:
@@ -235,10 +206,7 @@ def run(args):
             write_json(args.output / "throughput.json", record)
             rows = []
             for repeat in range(args.repeats):
-                trace_path = (args.output / "async-single-batch-trace.json"
-                              if args.trace_one_update and repeat == 0 else None)
-                row = one_update(prepared, dataset, selected_indices, profile, finite_check,
-                                 f"warm-{repeat+1}", trace_path=trace_path)
+                row = one_update(prepared, dataset, selected_indices, profile, finite_check, f"warm-{repeat+1}")
                 row["frame_chunk_variant"] = candidate
                 rows.append(row)
                 record["rows"].append(row)
@@ -301,12 +269,6 @@ def main():
                         help="Temporary complete-track physical packing budget; never updates a saved profile")
     parser.add_argument("--largest-microbatch-only", action="store_true",
                         help="Restrict the probe to the matched physical batch with greatest padded spatial cost")
-    parser.add_argument("--async-spatial-transfer", action="store_true",
-                        help="Prototype pinned host staging and an explicit copy stream in ordinary CUDA mode")
-    parser.add_argument("--allow-model-code-diagnostic", action="store_true",
-                        help="Allow only the spatial model hash to differ for a staged-transfer prototype probe")
-    parser.add_argument("--trace-one-update", action="store_true",
-                        help="Export a bounded CPU/CUDA trace for the one async largest-microbatch update")
     parser.add_argument("--preflight-only", action="store_true",
                         help="Write physical packing and padded-token estimates without a CUDA update")
     parser.add_argument("--record-driver-memory", action="store_true",

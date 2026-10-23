@@ -2,6 +2,7 @@
 
 import argparse
 import contextlib
+import csv
 import gc
 import json
 import os
@@ -122,6 +123,19 @@ def run(args):
                 ["nvidia-smi", "--query-gpu=timestamp,memory.used,memory.free,utilization.gpu",
                  "--format=csv,noheader,nounits", "-l", "1"],
                 stdout=driver_log, stderr=subprocess.STDOUT)
+        if args.allow_model_code_diagnostic:
+            from pedestrian_behavior.experiments import e002a_run as e002a_module
+            profile_code = json.loads(args.profile.read_text()).get("code", {})
+            actual_code = e002a_module.resource_code()
+            changed = {name for name in set(profile_code) | set(actual_code)
+                       if profile_code.get(name) != actual_code.get(name)}
+            if changed != {"pedestrian_behavior.models.multimodal"}:
+                raise ValueError("Diagnostic override permits only the spatial model module hash to differ")
+            e002a_module.resource_code = lambda: profile_code
+            record["diagnostic_code_override"] = {
+                "changed_module": next(iter(changed)), "profile_code": profile_code,
+                "actual_code": actual_code,
+            }
         seed_run(0)
         prepared = assembly(args)
         dataset = prepared["dataset"](args.source, "training")
@@ -159,18 +173,21 @@ def run(args):
                 scale = max(largest["tokens"] / reference_workload["tokens"],
                             largest["padded_tokens"] / reference_workload["padded_tokens"])
                 estimate = int(reference_workload["peak_allocated"] * scale * 1.25)
+                reserved_estimate = int(reference_workload["peak_reserved"] * scale * 1.25)
                 ceiling = calibration["allocated_ceiling"]
                 record["ordinary_probe_memory_estimate"] = {
                     "reference_workload": reference_workload["name"],
                     "reference_peak_allocated_bytes": reference_workload["peak_allocated"],
+                    "reference_peak_reserved_bytes": reference_workload["peak_reserved"],
                     "reference_tokens": reference_workload["tokens"],
                     "reference_padded_tokens": reference_workload["padded_tokens"],
                     "scale": scale, "safety_factor": 1.25,
                     "estimated_peak_allocated_bytes": estimate,
+                    "estimated_peak_reserved_bytes": reserved_estimate,
                     "calibrated_78pct_ceiling_bytes": ceiling,
                 }
-                if estimate >= ceiling * 0.70:
-                    raise ValueError("Conservative ordinary-mode estimate exceeds 70% of the calibrated ceiling")
+                if max(estimate, reserved_estimate) >= ceiling:
+                    raise ValueError("Conservative ordinary-mode estimate reaches the calibrated ceiling")
         record.update(scope="one warmed pass plus matched shuffled64 updates; weights discarded; no W&B/validation/tests",
                       model_config=prepared["config"],
                       selections=[dataset.entries[i]["locator"] for i in indices],
@@ -255,6 +272,17 @@ def run(args):
             driver_monitor.wait(timeout=10)
         if driver_log is not None:
             driver_log.close()
+            samples = []
+            with (args.output / "driver-memory.csv").open(newline="") as stream:
+                for row in csv.reader(stream):
+                    try:
+                        samples.append({"used_mib": int(row[1].strip()), "free_mib": int(row[2].strip())})
+                    except (IndexError, ValueError):
+                        continue
+            record["driver_memory"] = {"file": "driver-memory.csv", "samples": len(samples),
+                                       "peak_used_mib": max((r["used_mib"] for r in samples), default=None),
+                                       "minimum_free_mib": min((r["free_mib"] for r in samples), default=None)}
+            write_json(args.output / "throughput.json", record)
         if prepared is not None:
             prepared["close"]()
 
@@ -272,6 +300,8 @@ def main():
                         help="Restrict the probe to the matched physical batch with greatest padded spatial cost")
     parser.add_argument("--async-spatial-transfer", action="store_true",
                         help="Prototype pinned host staging and an explicit copy stream in ordinary CUDA mode")
+    parser.add_argument("--allow-model-code-diagnostic", action="store_true",
+                        help="Allow only the spatial model hash to differ for a staged-transfer prototype probe")
     parser.add_argument("--trace-one-update", action="store_true",
                         help="Export a bounded CPU/CUDA trace for the one async largest-microbatch update")
     parser.add_argument("--preflight-only", action="store_true",

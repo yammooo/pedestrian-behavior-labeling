@@ -113,6 +113,7 @@ class MultimodalClassifier(nn.Module):
         self.final_norm = nn.LayerNorm(256)
         self.head = nn.Linear(256, 4)
         self.arm, self.profile = arm, dict(profile)
+        self._spatial_transfer_stream = None
 
     def forward(self, batch, *, mode=None):
         device = self.head.weight.device
@@ -153,7 +154,9 @@ class MultimodalClassifier(nn.Module):
             async_transfer = (self.profile.get("async_spatial_transfer") is True and device.type == "cuda"
                               and mode == "ordinary" and all(x.device.type == "cpu" and not x.requires_grad for x in frames))
             if async_transfer and chunks:
-                transfer_stream = torch.cuda.Stream(device=device)
+                if self._spatial_transfer_stream is None or self._spatial_transfer_stream.device != device:
+                    self._spatial_transfer_stream = torch.cuda.Stream(device=device)
+                transfer_stream = self._spatial_transfer_stream
                 compute_stream = torch.cuda.current_stream(device)
                 host_sources = []
                 try:

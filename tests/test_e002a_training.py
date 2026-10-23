@@ -301,7 +301,10 @@ class MultimodalTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "spatial failure"):
                 model(batch)
         torch.cuda.synchronize()
+        transfer_stream = model._spatial_transfer_stream
+        self.assertIsNotNone(transfer_stream)
         self.assertTrue(torch.isfinite(model(batch)).all())
+        self.assertIs(model._spatial_transfer_stream, transfer_stream)
         batch["points"] = [value.cuda() for value in batch["points"]]
         self.assertTrue(torch.isfinite(model(batch)).all())
 

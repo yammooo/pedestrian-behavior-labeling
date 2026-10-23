@@ -117,8 +117,11 @@ class IndexedPointsTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,"changed"):reader.crop("0","a")
             reader.close()
             reader = IndexedShard(writer.root,sha)
-            with self.assertRaisesRegex(ValueError,"checksum"):reader.crop("0","a")
-            reader.close()
+            with self.assertRaisesRegex(ValueError,"checksum"):
+                try:
+                    reader.crop("0","a")
+                finally:
+                    reader.close()
             path.write_bytes(b"")
             with self.assertRaisesRegex(ValueError,"Truncated"):IndexedShard(writer.root,sha)
 

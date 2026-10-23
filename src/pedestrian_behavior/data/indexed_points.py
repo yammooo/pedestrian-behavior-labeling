@@ -206,9 +206,15 @@ class IndexedShard:
                 continue
             start = int(chunk) * CHUNK_ROWS
             raw = memoryview(self.maps[name][start:start + CHUNK_ROWS]).cast("B")
-            if hashlib.sha256(raw).hexdigest() != spec["chunks"][int(chunk)]:
+            try:
+                matches = hashlib.sha256(raw).hexdigest() == spec["chunks"][int(chunk)]
+                size = len(raw)
+            finally:
+                # A failed producer retains its traceback; never retain an exported mmap buffer.
+                raw.release()
+            if not matches:
                 raise ValueError("Indexed chunk checksum mismatch")
-            self.stats["verified_bytes"] += len(raw)
+            self.stats["verified_bytes"] += size
             self.stats["checked_chunks"] += 1
             if flags is not None:
                 flags[chunk] = True

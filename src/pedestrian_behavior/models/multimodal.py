@@ -12,6 +12,7 @@ from torch.utils.checkpoint import checkpoint
 
 
 ARM_FLAGS = {"g": ("geometry_valid",), "g-rgb": ("geometry_valid", "rgb_valid"),
+             "g-dditr": ("geometry_valid", "lidar_valid"),
              "g-rgb-dditr": ("geometry_valid", "rgb_valid", "lidar_valid")}
 
 
@@ -103,11 +104,11 @@ class MultimodalClassifier(nn.Module):
 
     def __init__(self, arm, profile):
         super().__init__()
-        if arm not in ("g", "g-rgb", "g-rgb-dditr"):
+        if arm not in ARM_FLAGS:
             raise ValueError("Unknown multimodal arm")
         self.geometry = nn.Sequential(nn.Linear(20, 64), nn.GELU(), nn.Linear(64, 64), nn.GELU())
-        self.rgb = nn.Linear(768, 128) if arm != "g" else None
-        self.spatial = SpatialReadout() if arm == "g-rgb-dditr" else None
+        self.rgb = nn.Linear(768, 128) if "rgb_valid" in ARM_FLAGS[arm] else None
+        self.spatial = SpatialReadout() if "lidar_valid" in ARM_FLAGS[arm] else None
         self.fusion = nn.Linear(64 + 128 * (len(ARM_FLAGS[arm]) - 1) + len(ARM_FLAGS[arm]), 256)
         self.temporal = nn.ModuleList([TemporalBlock(), TemporalBlock()])
         self.final_norm = nn.LayerNorm(256)
@@ -143,7 +144,8 @@ class MultimodalClassifier(nn.Module):
             if any(x.ndim != 2 or x.shape[1] != 68 or x.dtype != torch.float32 or not _all_finite_point_tokens(x) for x in frames):
                 raise ValueError("Invalid/nonfinite spatial tokens")
             observed = torch.tensor([len(x) > 0 for x in frames], device=device).reshape(b, t)
-            if not torch.equal(observed, flags[..., 2].bool() & valid):
+            lidar_flag = ARM_FLAGS[self.arm].index("lidar_valid")
+            if not torch.equal(observed, flags[..., lidar_flag].bool() & valid):
                 raise ValueError("LiDAR validity and point tokens disagree")
             chunks = list(frame_chunks(frames, self.profile["frame_chunk"], self.profile["frame_tokens"]))
             tokens = sum(len(chunk) * max(len(x) for _, x in chunk) for chunk in chunks)

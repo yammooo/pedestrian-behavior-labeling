@@ -549,6 +549,38 @@ uv run --no-project --python "$probe_root/extractor-env/bin/python" python scrip
 
 `--indexed-point-cache` defaults to `outputs-root/experiments/E002a/indexed-<source>`; the sweep's `--indexed-cache-root` is their parent. Retired training options `--point-cache-root`, `--point-cache-gb`, `--min-free-gb` are removed; storage capacity/headroom belong to preparation. Geometry (`--arm g`) needs neither RGB preparation, point cache nor encoder probe. The existing [cache inventory](experiments/E002a-feature-feasibility/README.md#cache-inventory-and-retirement--2026-10-22) distinguishes training dependencies from historical fixtures.
 
+### Geometry + D-DITR follow-up
+
+The post-pilot `g-dditr` diagnostic uses Geometry64 + D-DITR128 with only `geometry_valid` and `lidar_valid` flags. It does not need RGB preparation, the RGB cache or DINO weights. The six-attempt launcher above remains unchanged. The revalidated profile is already saved at `$execution_root/calibration-g-dditr-followup/profile.json`; use it directly for a run. Recalibrate only after further execution-code changes, writing to a fresh output directory:
+
+```bash
+probe_root="$PWD/outputs/experiments/E002a"
+execution_root="/home/user20/projects/e002a-execution-optimizations-20261023"
+uv run --no-project --python "$probe_root/extractor-env/bin/python" python scripts/calibrate-e002a.py \
+  --device cuda --indexed-cache-root "$probe_root" --reference-profile "$execution_profile" \
+  --output "$execution_root/calibration-g-dditr-followup"
+
+point_only_profile="$execution_root/calibration-g-dditr-followup/profile.json"
+```
+
+Then run one source at a time, with a fresh output directory for each:
+
+```bash
+probe_root="$PWD/outputs/experiments/E002a"
+execution_root="/home/user20/projects/e002a-execution-optimizations-20261023"
+point_only_profile="$execution_root/calibration-g-dditr-followup/profile.json"
+
+for source in road-waymo loki; do
+  uv run --no-project --python "$probe_root/extractor-env/bin/python" python scripts/train-e002a.py \
+    --source "$source" --arm g-dditr --device cuda \
+    --profile "$point_only_profile" \
+    --indexed-point-cache "$probe_root/indexed-$source" \
+    --output "$probe_root/runs/g-dditr-$source-s0"
+done
+```
+
+These are full source train/validation runs under the existing100-epoch /15-patience recipe, not a smoke or part of the original paired six-run summary. Keep each output directory fresh. See the [follow-up protocol and limits](experiments/E002a-feature-feasibility/README.md#post-pilot-geometry--d-ditr-follow-up--2026-10-24).
+
 The [DINO patch visual check](experiments/E002a-feature-feasibility/README.md#dino-patch-visual-check--2026-10-19) adds PCA/similarity panels and a corrected crop gallery from the same development sample: `scripts/check-e002a-rgb.py --help`. It reuses the completed probe and original checkpoint without a segmentation head or training.
 
 Add `--compare-crop-scales` with a fresh output directory for the [1.5×/2×/3× side-by-side diagnostic](experiments/E002a-feature-feasibility/README.md#crop-size-visual-comparison--2026-10-19); every crop remains 256×256. These earlier diagnostics retain their original scales; the E002a pilot now uses cached CLS from3× crops.

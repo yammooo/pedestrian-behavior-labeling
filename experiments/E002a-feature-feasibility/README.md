@@ -26,6 +26,18 @@ Prepare one source-training/validation pilot on each source:
 
 This explicitly supersedes the shared-three-flag/zero-descriptor protocol used by build6050233 and the21 October acceptance. Preserve those outputs as historical `shared-availability-v1`; do not combine protocols in a paired comparison. The active checkout/process is unchanged by this revision. Frozen feature identities/storage are unchanged, but model/execution hashes change: profile05 is historical and a new resource calibration is required before new attempts, alongside the unmet [throughput gate](#throughput-gate--agreed-2026-10-22).
 
+## Post-pilot geometry + D-DITR follow-up — 2026-10-24
+
+After inspection of the completed original six-run pilot, add an **optional single-arm diagnostic** for each source: `g-dditr`. It tests the user-requested geometry + LiDAR combination without RGB. This is a follow-up to the pilot, not a fourth arm in its six-attempt launcher or paired summary; it has one seed (`0`) and no results yet.
+
+| Arm | Fusion receives | Fusion projection |
+|---|---|---|
+| `g-dditr` | Geometry64 + D-DITR128 + `geometry_valid` / `lidar_valid` |194→256|
+
+The arm uses the same frozen complete-track point features, source split, seed, optimizer, dropout, effective batch and stopping rules as E002a. It requires the indexed source point cache and a current execution profile; it does **not** read or hash RGB features, RGB preparation metadata or DINO weights. The shared full D-DITR arm remains unchanged. The point-only path validates the pinned D-DITR checkpoint/configuration and uses the existing enabled-branch fusion protocol.
+
+The original six-run launcher remains `g`, `g-rgb`, and `g-rgb-dditr` for ROAD and LOKI. Use the explicit [single-run command](../../README.md#geometry--d-ditr-follow-up) for this separate diagnostic. A current profile must be revalidated against the accepted resource limits before the run; the new calibration records a bounded point-only optimizer update for each source and does not launch population training. Existing run folders and checkpoints are unchanged.
+
 The earlier LR/query sweep is not the next increment. No further standalone segmentation optimization is planned before the behavior pilot.
 
 ## Retained data and evaluation contract

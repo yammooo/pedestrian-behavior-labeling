@@ -26,7 +26,10 @@ from pedestrian_behavior.inspection.pretrained import DITR_REVISION, DITR_SHA256
 from .run import run_attempt as execute_attempt, write_json
 
 
-ARMS = ("g", "g-rgb", "g-rgb-dditr")
+ARMS = ("g", "g-rgb", "g-rgb-dditr")  # Keep the original six-run pilot unchanged.
+SUPPORTED_ARMS = tuple(ARM_FLAGS)
+RGB_ARMS = ("g-rgb", "g-rgb-dditr")
+POINT_ARMS = ("g-dditr", "g-rgb-dditr")
 DEFAULT_POINT_WORKERS = 4
 FUSION_PROTOCOL = "enabled-branches-v2"
 STRATA = e001b_run.STRATA | {"rgb-observed": ("missing", "valid"), "lidar-observed": ("missing", "valid")}
@@ -63,8 +66,9 @@ class PreparedSupply:
     def __init__(self, catalog, rgb, points, identity):
         self.catalogs = {catalog.dataset: catalog}
         self.points = points
-        self.rgb_supply = FeatureSupply(self.catalogs, rgb, None, None, identity)
-        self.identity = {"rgb": identity, "points": points.identity if points is not None else None}
+        self.rgb_supply = FeatureSupply(self.catalogs, rgb, None, None, identity) if rgb is not None else None
+        self.identity = {"rgb": identity if rgb is not None else None,
+                         "points": points.identity if points is not None else None}
 
     def rgb(self, source, locator):
         return self.rgb_supply.rgb(source, locator)
@@ -74,6 +78,18 @@ class PreparedSupply:
 
     def point_tensors(self, source, locator):
         return self.points.iter_track(locator)
+
+
+def load_point_configuration(probe):
+    """Load pinned point assets without validating or depending on RGB weights."""
+    probe = Path(probe).resolve()
+    record = json.loads((probe / "probe.json").read_text())
+    if record.get("status") != "complete":
+        raise ValueError("Completed pinned native probe required")
+    config = record["config"]
+    if checksum(config["ditr_config"]) != DITR_CONFIG_SHA256 or checksum(config["ditr_weights"]) != DITR_SHA256:
+        raise ValueError("Changed point encoder assets")
+    return config, probe / "loki-transform.json"
 
 
 def indexed_path(args):
@@ -99,7 +115,7 @@ class FeatureDataset:
         return len(self.entries)
 
     def cost(self, index):
-        if self.arm != "g-rgb-dditr":
+        if self.arm not in POINT_ARMS:
             return 0
         entry = self.entries[index]
         return self.supply.track_cost(self.source, entry["locator"])
@@ -113,14 +129,14 @@ class FeatureDataset:
         geometry_valid = geometry[:, [8, 9, 10, 11, 18, 19]].bool().any(-1)
         flags, source_flags = [geometry_valid], {}
         sample["geometry"] = geometry
-        if self.arm != "g":
+        if self.arm in RGB_ARMS:
             rgb = self.supply.rgb(self.source, locator)
             if len(rgb["valid"]) != n:
                 raise ValueError("RGB/geometry complete-track mismatch")
             sample["rgb"] = torch.from_numpy(rgb["cls"])
             flags.append(torch.from_numpy(rgb["valid"]))
             source_flags["rgb_valid"] = rgb["valid"]
-        if self.arm == "g-rgb-dditr":
+        if self.arm in POINT_ARMS:
             frames = [torch.from_numpy(value) for value in self.supply.point_tensors(self.source, locator)]
             if len(frames) != n:
                 raise ValueError("LiDAR/geometry complete-track mismatch")
@@ -136,7 +152,12 @@ class FeatureDataset:
 
 def assembly(args):
     """Open only the source train/validation archives; own resources until attempt exit."""
-    config, transform = load_configuration(args.probe) if args.arm != "g" else ({}, None)
+    if args.arm in RGB_ARMS:
+        config, transform = load_configuration(args.probe)
+    elif args.arm in POINT_ARMS:
+        config, transform = load_point_configuration(args.probe)
+    else:
+        config, transform = {}, None
     point_root = indexed_path(args)
     validate_roots(argparse.Namespace(**(vars(args) | {"point_cache_root": point_root})), config)
     profile_record = json.loads(args.profile.read_text())
@@ -158,27 +179,31 @@ def assembly(args):
         rgb = points = supply = identity = None
         protected = {}
         if catalog is not None:
-            rgb = PreparedRGB(args.rgb_cache_root)
-            stack.callback(rgb.close)
-            if args.arm == "g-rgb-dditr":
+            if args.arm in RGB_ARMS:
+                rgb = PreparedRGB(args.rgb_cache_root)
+                stack.callback(rgb.close)
+            if args.arm in POINT_ARMS:
                 points = PreparedPoints(point_root, args.source, catalog.identity, catalog.tracks,
                     {"revision": DITR_REVISION, "checkpoint": DITR_SHA256, "configuration": DITR_CONFIG_SHA256},
                     allow_partial=args.smoke, frame_workers=getattr(args, "point_workers", DEFAULT_POINT_WORKERS))
                 stack.callback(points.close)
                 if profile_record.get("point_storage_protocol") != POINT_PROTOCOL:
                     raise ValueError("Resource calibration for indexed point storage required")
-            identity = extraction_identity(args.device, config)
+            identity = extraction_identity(args.device, config) if args.arm in RGB_ARMS else None
             supply = PreparedSupply(catalog, rgb, points, identity)
             protected = catalog.protected
             if points is not None:
                 protected.update(points.protected)
-            protected[str(args.rgb_preparation.resolve())] = checksum(args.rgb_preparation)
-            assets = [args.probe / "probe.json", transform, Path(config["dino_weights"])]
+            if rgb is not None:
+                protected[str(args.rgb_preparation.resolve())] = checksum(args.rgb_preparation)
+            assets = [args.probe / "probe.json", transform]
+            if rgb is not None:
+                assets.append(Path(config["dino_weights"]))
             if points is not None:
                 assets += [Path(config[k]) for k in ("ditr_weights", "ditr_config")]
             for path in assets:
                 protected[str(path.resolve())] = checksum(path)
-        if catalog is not None:
+        if catalog is not None and args.arm in RGB_ARMS:
             preparation = json.loads(args.rgb_preparation.read_text())
             expected = {k for k in catalog.tracks}
             actual = {t["locator"] for t in preparation.get("tracks", []) if t["dataset"] == args.source}
@@ -251,7 +276,7 @@ def assembly(args):
                 with (args.output / "packing.jsonl").open("a") as stream:
                     stream.write(json.dumps(row | {"phase": "training" if training else "validation"}, allow_nan=False) + "\n")
             logical = LogicalBatches(d, profile, training, seed, max_updates=2 if args.smoke and training else None,
-                                     on_pack=packing, prefetch=args.arm == "g-rgb-dditr")
+                                     on_pack=packing, prefetch=args.arm in POINT_ARMS)
             return logical if training else PredictionBatches(logical)
 
         def conditions(metadata, arrays, track, dataset):
@@ -263,7 +288,8 @@ def assembly(args):
 
         return {"config": {"experiment": "E002a", "arm": args.arm, "fusion_protocol": FUSION_PROTOCOL,
                     "model": model_spec(args.arm), "geometry": "E001b-native-geometry",
-                    "frozen_features": identity, "profile": profile, "profile_sha256": checksum(args.profile),
+                    "frozen_features": supply.identity if identity is None and supply is not None else identity,
+                    "profile": profile, "profile_sha256": checksum(args.profile),
                     "indexed_point_cache": points.identity if points is not None else None,
                     "point_storage_protocol": POINT_PROTOCOL if points is not None else None,
                     "point_loading": {"prefetch_physical_microbatches": 1, "open_scenes": points.limit,
@@ -293,7 +319,7 @@ def assembly(args):
 
 def add_arguments(parser):
     parser.add_argument("--source", choices=("loki", "road-waymo"), required=True)
-    parser.add_argument("--arm", choices=ARMS, required=True)
+    parser.add_argument("--arm", choices=SUPPORTED_ARMS, required=True)
     parser.add_argument("--device", choices=("cpu", "cuda"), required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--profile", type=Path, required=True)
@@ -311,14 +337,14 @@ def add_arguments(parser):
 def run(args):
     if args.smoke and args.smoke_selection is None:
         raise ValueError("Smoke requires an explicit bounded source train/validation selection")
-    if args.arm != "g" and args.rgb_preparation is None:
+    if args.arm in RGB_ARMS and args.rgb_preparation is None:
         raise ValueError("RGB-enabled attempt requires --rgb-preparation with completed matching RGB preparation")
     torch.set_num_threads(2)
     return execute_attempt(args.source, args.arm, "Transformer", args.output, args.device, args.smoke,
                            settings=SETTINGS, assemble=lambda *_: assembly(args), classes=CLASSES,
                            axes={k: v for k, v in STRATA.items() if k not in ("rgb-observed", "lidar-observed")
-                                 or (k == "rgb-observed" and args.arm != "g")
-                                 or (k == "lidar-observed" and args.arm == "g-rgb-dditr")})
+                                 or (k == "rgb-observed" and args.arm in RGB_ARMS)
+                                 or (k == "lidar-observed" and args.arm in POINT_ARMS)})
 
 
 def main():

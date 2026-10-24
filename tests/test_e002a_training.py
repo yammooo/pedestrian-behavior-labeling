@@ -37,12 +37,13 @@ def sample(n=3, name="track", points=True, arm="g-rgb-dditr"):
     frames = [torch.randn(7 + i, 68) if flags[i, 2] and points else torch.zeros(0, 68) for i in range(n)]
     if not points:
         flags[:, 2] = 0
-    result = {"geometry": geometry, "flags": flags[:, :{"g": 1, "g-rgb": 2, "g-rgb-dditr": 3}[arm]],
+    selected = {"g": [0], "g-rgb": [0, 1], "g-dditr": [0, 2], "g-rgb-dditr": [0, 1, 2]}[arm]
+    result = {"geometry": geometry, "flags": flags[:, selected],
             "targets": torch.arange(n) % 4, "gt_valid": torch.ones(n, dtype=torch.bool),
             "locator": name, "archive": name + ".npz"}
-    if arm != "g":
+    if arm in ("g-rgb", "g-rgb-dditr"):
         result["rgb"] = rgb
-    if arm == "g-rgb-dditr":
+    if arm in ("g-dditr", "g-rgb-dditr"):
         result["points"] = frames
     return result
 
@@ -200,7 +201,7 @@ class MultimodalTest(unittest.TestCase):
 
     def test_enabled_only_fusion_shapes_missingness_checkpoint_and_no_gt_inputs(self):
         from pedestrian_behavior.experiments.e002a_run import model_spec
-        for arm, width, count in (("g", 65, 1), ("g-rgb", 194, 2), ("g-rgb-dditr", 323, 3)):
+        for arm, width, count in (("g", 65, 1), ("g-rgb", 194, 2), ("g-dditr", 194, 2), ("g-rgb-dditr", 323, 3)):
             batch = collate_multimodal([sample(3, arm=arm), sample(2, "b", arm=arm)])
             seed_run(0)
             model = MultimodalClassifier(arm, PROFILE).eval()
@@ -215,8 +216,8 @@ class MultimodalTest(unittest.TestCase):
             self.assertEqual(fused[0].shape[-1], width)
             self.assertTrue((fused[0][0, 1, :width - count] == 0).all())
             torch.testing.assert_close(fused[0][..., -count:], batch["flags"])
-            self.assertEqual(model.rgb is None, arm == "g")
-            self.assertEqual(model.spatial is None, arm != "g-rgb-dditr")
+            self.assertEqual(model.rgb is None, arm not in ("g-rgb", "g-rgb-dditr"))
+            self.assertEqual(model.spatial is None, arm not in ("g-dditr", "g-rgb-dditr"))
             absent = {key: object() for key in ("rgb", "points") if key not in batch}
             changed = batch | {"targets": batch["targets"] + 99, "gt_valid": ~batch["gt_valid"]}
             torch.testing.assert_close(logits, model(changed | absent), rtol=0, atol=0)
@@ -362,28 +363,49 @@ class MultimodalTest(unittest.TestCase):
                 return 1
             def __getitem__(self, index):
                 return deepcopy(value)
-        for arm in ("g", "g-rgb"):
+        for arm in ("g", "g-rgb", "g-dditr"):
             supply = Mock()
             supply.catalogs = {"loki": SimpleNamespace(tracks={"track": Baseline.entries[0]})}
             supply.identity = {"fixture": True}
-            supply.point_cost.side_effect = AssertionError("Disabled LiDAR cost read")
-            supply.iter_points.side_effect = AssertionError("Disabled LiDAR feature read")
+            supply.track_cost.return_value = 8
+            supply.point_tensors.return_value = [np.ones((2, 68), np.float32), np.ones((3, 68), np.float32),
+                                                 np.zeros((0, 68), np.float32)]
             supply.rgb.return_value = {"cls": np.ones((3, 768), np.float32), "valid": np.array([True, False, True])}
-            if arm == "g":
+            if arm not in ("g-rgb", "g-rgb-dditr"):
                 supply.rgb.side_effect = AssertionError("Disabled RGB feature read")
             dataset = FeatureDataset(Baseline(), supply if arm != "g" else None, "loki", arm)
             result = dataset[0]
-            self.assertEqual(dataset.cost(0), 0)
-            self.assertNotIn("points", result)
-            self.assertEqual("rgb" in result, arm != "g")
+            has_rgb, has_points = arm in ("g-rgb", "g-rgb-dditr"), arm in ("g-dditr", "g-rgb-dditr")
+            self.assertEqual(dataset.cost(0), 8 if has_points else 0)
+            self.assertEqual("points" in result, has_points)
+            self.assertEqual("rgb" in result, has_rgb)
             torch.testing.assert_close(result["flags"][:, 0], torch.tensor([1., 0., 1.]))
-            self.assertEqual(set(result["prediction_metadata"]["source_flags"]), {"rgb_valid"} if arm != "g" else set())
-            self.assertFalse(supply.point_cost.called or supply.iter_points.called)
-            self.assertEqual(supply.rgb.call_count, int(arm != "g"))
+            expected_flags = ({"rgb_valid"} if has_rgb else set()) | ({"lidar_valid", "point_tokens"} if has_points else set())
+            self.assertEqual(set(result["prediction_metadata"]["source_flags"]), expected_flags)
+            self.assertEqual(supply.point_tensors.call_count, int(has_points))
+            self.assertEqual(supply.track_cost.call_count, int(has_points))
+            self.assertEqual(supply.rgb.call_count, int(has_rgb))
             batch = collate_multimodal([result])
             self.assertTrue(torch.isfinite(MultimodalClassifier(arm, PROFILE)(batch)).all())
         with self.assertRaisesRegex(ValueError, "Mixed modality"):
             collate_multimodal([sample(2, arm="g"), sample(2, arm="g-rgb")])
+
+    def test_point_configuration_does_not_require_rgb_weights(self):
+        from pedestrian_behavior.experiments import e002a_run
+        from pedestrian_behavior.inspection.pretrained import DITR_CONFIG_SHA256, DITR_SHA256
+        with tempfile.TemporaryDirectory() as temporary:
+            probe = Path(temporary)
+            config = {"dino_weights": str(probe / "missing-dino.safetensors"),
+                      "ditr_config": str(probe / "ditr-config"), "ditr_weights": str(probe / "ditr-weights")}
+            (probe / "probe.json").write_text(json.dumps({"status": "complete", "config": config}))
+            def point_checksum(path):
+                if Path(path) == Path(config["dino_weights"]):
+                    raise AssertionError("RGB weights must not be inspected")
+                return DITR_CONFIG_SHA256 if Path(path) == Path(config["ditr_config"]) else DITR_SHA256
+            with patch.object(e002a_run, "checksum", side_effect=point_checksum):
+                loaded, transform = e002a_run.load_point_configuration(probe)
+            self.assertEqual(loaded, config)
+            self.assertEqual(transform, probe.resolve() / "loki-transform.json")
 
     def test_preparation_image_reuse_keeps_sources_and_bounds_ram(self):
         from PIL import Image
@@ -524,13 +546,18 @@ class MultimodalTest(unittest.TestCase):
             def rgb(supply, dataset, key):
                 n = supply.catalogs[dataset].tracks[key]["slots"]
                 return {"cls": np.ones((n, 768), np.float32), "valid": np.ones(n, bool)}
-            for arm, fail in (("g", None), ("g-rgb", None), ("g-rgb-dditr", None), ("g-rgb-dditr", "final")):
+            point_config = config | {"dino_weights": str(probe / "not-needed-dino-weights")}
+            for arm, fail in (("g", None), ("g-rgb", None), ("g-dditr", None),
+                              ("g-rgb-dditr", None), ("g-rgb-dditr", "final")):
                 events = []
                 args = SimpleNamespace(source="loki", arm=arm, device="cpu", smoke=True,
                     outputs_root=root, output=root / "experiments/E002a" / ("failed" if fail else arm),
                     probe=probe, profile=profile, smoke_selection=selection,
-                    rgb_cache_root=rgb_root, rgb_preparation=rgb_preparation, indexed_point_cache=points_root)
+                    rgb_cache_root=root / "experiments/E002a/missing-rgb-cache" if arm == "g-dditr" else rgb_root,
+                    rgb_preparation=None if arm == "g-dditr" else rgb_preparation,
+                    indexed_point_cache=points_root)
                 with patch.object(e002a_run, "load_configuration", return_value=(config, root / "experiments/fixture-transform.json")) as load_config, \
+                     patch.object(e002a_run, "load_point_configuration", return_value=(point_config, root / "experiments/fixture-transform.json")) as load_point_config, \
                      patch.object(e002a_run.FeatureSupply, "rgb", side_effect=rgb, autospec=True) as rgb_read, \
                      patch.object(e002a_run.PreparedSupply, "point_tensors", autospec=True,
                                   side_effect=lambda supply, source, key: supply.points.iter_track(key)) as point_read, \
@@ -542,10 +569,11 @@ class MultimodalTest(unittest.TestCase):
                             e002a_run.run(args)
                     else:
                         e002a_run.run(args)
-                    self.assertEqual(rgb_read.called, arm != "g")
-                    self.assertEqual(load_config.called, arm != "g")
-                    self.assertEqual(point_read.called, arm == "g-rgb-dditr")
-                    self.assertEqual(cost_read.called, arm == "g-rgb-dditr")
+                    self.assertEqual(rgb_read.called, arm in ("g-rgb", "g-rgb-dditr"))
+                    self.assertEqual(load_config.called, arm in ("g-rgb", "g-rgb-dditr"))
+                    self.assertEqual(load_point_config.called, arm == "g-dditr")
+                    self.assertEqual(point_read.called, arm in ("g-dditr", "g-rgb-dditr"))
+                    self.assertEqual(cost_read.called, arm in ("g-dditr", "g-rgb-dditr"))
                 self.assertFalse((root / "experiments/E002a/point-cache").exists())
                 status = json.loads((args.output / "status.json").read_text())
                 self.assertEqual(status["status"], "failed" if fail else "complete")
@@ -559,8 +587,8 @@ class MultimodalTest(unittest.TestCase):
                 actual = prediction_metrics(load_predictions(destination / "predictions.npz"), 4)
                 self.assertEqual(actual, json.loads((destination / "metrics.json").read_text())["primary"])
                 tracks = load_predictions(destination / "predictions.npz")
-                self.assertEqual("rgb-observed" in tracks[0]["conditions"], arm != "g")
-                self.assertEqual("lidar-observed" in tracks[0]["conditions"], arm == "g-rgb-dditr")
+                self.assertEqual("rgb-observed" in tracks[0]["conditions"], arm in ("g-rgb", "g-rgb-dditr"))
+                self.assertEqual("lidar-observed" in tracks[0]["conditions"], arm in ("g-dditr", "g-rgb-dditr"))
                 step = next(e for e in events if "train/loss_step" in e)
                 self.assertIn("train/learning_rate", step)
                 self.assertEqual(json.loads((args.output / "protected.json").read_text())["changed"], [])
@@ -568,7 +596,10 @@ class MultimodalTest(unittest.TestCase):
                 self.assertEqual(provenance["runtime"]["encoder_calls"], {})
                 self.assertEqual(checkpoint["config"]["feature_supply"], "prepared-read-only-no-inference")
                 self.assertEqual(checkpoint["config"]["point_storage_protocol"],
-                                 e002a_run.POINT_PROTOCOL if arm == "g-rgb-dditr" else None)
+                                 e002a_run.POINT_PROTOCOL if arm in ("g-dditr", "g-rgb-dditr") else None)
+                if arm == "g-dditr":
+                    self.assertNotIn(str((probe / "not-needed-dino-weights").resolve()),
+                                     json.loads((args.output / "protected.json").read_text())["hashes"])
             saved_profile = profile.read_text()
             changed_profile = json.loads(saved_profile)
             changed_profile["profile"]["frame_tokens"] = 1

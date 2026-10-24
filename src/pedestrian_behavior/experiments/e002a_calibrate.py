@@ -18,7 +18,7 @@ import torch
 from pedestrian_behavior.data.multimodal import collate_multimodal
 from pedestrian_behavior.data.preparation import checksum
 from pedestrian_behavior.evaluation import track_cross_entropy
-from pedestrian_behavior.models.multimodal import MultimodalClassifier, frame_chunks
+from pedestrian_behavior.models.multimodal import ARM_FLAGS, MultimodalClassifier, frame_chunks
 from pedestrian_behavior.training import seed_run
 from . import e001b_run
 from .e002a_execution_probe import loaded_track
@@ -57,16 +57,18 @@ def fixture_samples(fixtures, point_sources=None):
             raise ValueError("Fixture/geometry slots differ")
         flags = torch.stack((geometry[:, [8, 9, 10, 11, 18, 19]].bool().any(-1), valid.bool(),
                              torch.tensor([len(f) > 0 for f in frames])), -1).float()
-        result.append((item["name"], sample | {"geometry": geometry, "rgb": rgb, "flags": flags, "points": frames}))
+        result.append((item["name"], sample | {"geometry": geometry, "rgb": rgb, "flags": flags,
+                                                "points": frames, "_resource_source": d}))
     return result
 
 
 def measure(sample, arm, count, profile, mode, device):
     seed_run(0)
-    sample = sample | {"flags": sample["flags"][:, :{"g": 1, "g-rgb": 2, "g-rgb-dditr": 3}[arm]]}
-    if arm != "g-rgb-dditr":
+    flag_indices = {"geometry_valid": 0, "rgb_valid": 1, "lidar_valid": 2}
+    sample = sample | {"flags": sample["flags"][:, [flag_indices[flag] for flag in ARM_FLAGS[arm]]]}
+    if "lidar_valid" not in ARM_FLAGS[arm]:
         sample = {k: v for k, v in sample.items() if k != "points"}
-    if arm == "g":
+    if "rgb_valid" not in ARM_FLAGS[arm]:
         sample = {k: v for k, v in sample.items() if k != "rgb"}
     batch = collate_multimodal([sample] * count)
     model = MultimodalClassifier(arm, profile).to(device)
@@ -90,9 +92,9 @@ def measure(sample, arm, count, profile, mode, device):
         del logits, loss
     seconds = float(np.median(timings))
     result = {"arm": arm, "mode": mode, "tracks": count, "slots": int(batch["lengths"].sum()),
-              "tokens": sum(len(f) for f in batch["points"]) if arm == "g-rgb-dditr" else 0,
+              "tokens": sum(len(f) for f in batch["points"]) if "lidar_valid" in ARM_FLAGS[arm] else 0,
               "padded_tokens": sum(len(c) * max(len(f) for _, f in c) for c in
-                  frame_chunks(batch["points"], profile["frame_chunk"], profile["frame_tokens"])) if arm == "g-rgb-dditr" else 0,
+                  frame_chunks(batch["points"], profile["frame_chunk"], profile["frame_tokens"])) if "lidar_valid" in ARM_FLAGS[arm] else 0,
               "frame_chunk": profile["frame_chunk"],
               "seconds": seconds, "tracks_per_second": count / seconds,
               "peak_allocated": torch.cuda.max_memory_allocated() if device == "cuda" else None,
@@ -177,6 +179,12 @@ def run(args):
                         workloads.append((name, sample, "g-rgb-dditr", count, mode))
         workloads.append(("single-frame-524288-token-shape-stress", stress, "g-rgb-dditr", 1, "recompute"))
         typical = max(samples, key=lambda row: len(row[1]["targets"]))
+        representatives = {}
+        for name, sample in samples:
+            representatives.setdefault(sample["_resource_source"], (name, sample))
+        for source in ("loki", "road-waymo"):
+            name, sample = representatives[source]
+            workloads.append((name, sample, "g-dditr", 1, "ordinary"))
         for arm in ("g", "g-rgb"):
             for count in (8, 16, 32, 64):
                 workloads.append((typical[0], typical[1], arm, count, "ordinary"))

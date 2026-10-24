@@ -551,32 +551,36 @@ uv run --no-project --python "$probe_root/extractor-env/bin/python" python scrip
 
 ### Geometry + D-DITR follow-up
 
-The post-pilot `g-dditr` diagnostic uses Geometry64 + D-DITR128 with only `geometry_valid` and `lidar_valid` flags. It does not need RGB preparation, the RGB cache or DINO weights. The six-attempt launcher above remains unchanged. The revalidated profile is already saved at `$execution_root/calibration-g-dditr-followup/profile.json`; use it directly for a run. Recalibrate only after further execution-code changes, writing to a fresh output directory:
+The post-pilot `g-dditr` diagnostic uses Geometry64 + D-DITR128 with only `geometry_valid` and `lidar_valid` flags. It does not need RGB preparation, the RGB cache or DINO weights. The six-attempt launcher above remains unchanged. The revalidated profile is already saved at `/home/user20/projects/e002a-execution-optimizations-20261023/calibration-g-dditr-followup/profile.json`; use it directly for a run. The commands below run from the new isolated checkout, whose `outputs` link points to the canonical Aalto output directory. They do not change the existing training checkout.
+
+The profile is complete, so **skip this calibration command** unless execution code changes again. For a future revalidation, use the current completed profile as the reference and choose a fresh output directory; then point training to that new profile:
 
 ```bash
+cd /home/user20/projects/pedestrian-behavior-labeling-gdditr
+export PYTHONPATH="$PWD/src" OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
 probe_root="$PWD/outputs/experiments/E002a"
 execution_root="/home/user20/projects/e002a-execution-optimizations-20261023"
+execution_profile="$execution_root/calibration-chunk4-final/profile.json"
 uv run --no-project --python "$probe_root/extractor-env/bin/python" python scripts/calibrate-e002a.py \
   --device cuda --indexed-cache-root "$probe_root" --reference-profile "$execution_profile" \
-  --output "$execution_root/calibration-g-dditr-followup"
-
-point_only_profile="$execution_root/calibration-g-dditr-followup/profile.json"
+  --output "$execution_root/my-fresh-recalibration"
 ```
 
-Then run one source at a time, with a fresh output directory for each:
+Run one source at a time, with a fresh output directory for each:
 
 ```bash
+cd /home/user20/projects/pedestrian-behavior-labeling-gdditr
+export PYTHONPATH="$PWD/src" OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
 probe_root="$PWD/outputs/experiments/E002a"
-execution_root="/home/user20/projects/e002a-execution-optimizations-20261023"
-point_only_profile="$execution_root/calibration-g-dditr-followup/profile.json"
-
-for source in road-waymo loki; do
-  uv run --no-project --python "$probe_root/extractor-env/bin/python" python scripts/train-e002a.py \
-    --source "$source" --arm g-dditr --device cuda \
-    --profile "$point_only_profile" \
-    --indexed-point-cache "$probe_root/indexed-$source" \
-    --output "$probe_root/runs/g-dditr-$source-s0"
-done
+point_only_profile="/home/user20/projects/e002a-execution-optimizations-20261023/calibration-g-dditr-followup/profile.json"
+uv run --no-project --python "$probe_root/extractor-env/bin/python" python scripts/train-e002a.py \
+  --source road-waymo --arm g-dditr --device cuda \
+  --profile "$point_only_profile" --indexed-point-cache "$probe_root/indexed-road-waymo" \
+  --output "$probe_root/runs/g-dditr-road-waymo-s0"
+uv run --no-project --python "$probe_root/extractor-env/bin/python" python scripts/train-e002a.py \
+  --source loki --arm g-dditr --device cuda \
+  --profile "$point_only_profile" --indexed-point-cache "$probe_root/indexed-loki" \
+  --output "$probe_root/runs/g-dditr-loki-s0"
 ```
 
 These are full source train/validation runs under the existing100-epoch /15-patience recipe, not a smoke or part of the original paired six-run summary. Keep each output directory fresh. See the [follow-up protocol and limits](experiments/E002a-feature-feasibility/README.md#post-pilot-geometry--d-ditr-follow-up--2026-10-24).

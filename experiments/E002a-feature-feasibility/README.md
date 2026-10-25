@@ -66,7 +66,7 @@ Per-class F1 deltas below are `g-dditr` minus the comparator, in MOVING / STOPPE
 
 The ROAD macro-F1 gain over geometry is concentrated in CROSSING; the LOKI gain is spread across classes, especially CROSSING, STOPPED and WAITING_TO_CROSS. The RGB arms' train CE falls far below validation CE, and `g-dditr` also develops a late train/validation gap by stopping. This single seed does not establish why RGB overfits, a causal modality effect, or cross-seed/cross-source generalization; the enabled descriptors and fusion parameterization also differ. No held-out evaluation was run.
 
-The earlier LR/query sweep is not the next increment. No further standalone segmentation optimization is planned before the behavior pilot.
+The next agreed increment is [E002b's branch-normalization/capacity comparison](../E002b-normalization-capacity/README.md), documented separately after these validation results. The earlier LR/query sweep is not part of that increment. Original E002a settings and evidence remain unchanged.
 
 ## Retained data and evaluation contract
 

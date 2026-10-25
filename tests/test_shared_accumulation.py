@@ -229,8 +229,12 @@ class SharedAccumulationTest(unittest.TestCase):
             models[name] = model
             optimizers[name] = RecordingAdamW(model.parameters(), lr=.001, weight_decay=.0001)
         states = {name: _clone_rng(model_rng) for name in models}
-        before = [{key: value.clone() if torch.is_tensor(value) else value for key, value in row.items()}
-                  for row in data.values]
+        before = []
+        for row in data.values:
+            snapshot = {key: value.clone() if torch.is_tensor(value) else value for key, value in row.items()}
+            if "points" in row:
+                snapshot["points"] = [frame.clone() for frame in row["points"]]
+            before.append(snapshot)
         rows, _ = train_shared_accumulated_epoch(models, LogicalBatches(data, profile, training=True, seed=0),
             optimizers, "cpu", 1., rng_states=states, peak_lr=.001, warmup_steps=3)
         self.assertEqual(rows["first"]["processed_tracks"], 2)
@@ -248,6 +252,8 @@ class SharedAccumulationTest(unittest.TestCase):
             for key in before_row:
                 if torch.is_tensor(before_row[key]):
                     self.assertTrue(torch.equal(before_row[key], after_row[key]), key)
+            for before_frame, after_frame in zip(before_row.get("points", ()), after_row.get("points", ())):
+                self.assertTrue(torch.equal(before_frame, after_frame), "points")
 
     def test_group_failure_finishes_every_open_run_and_marks_attempts_failed(self):
         class FailedModel(nn.Module):

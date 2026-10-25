@@ -1,6 +1,6 @@
 # E002b — Branch normalization and model capacity
 
-**Design agreed 2026-10-25; not implemented or run.** Follow-up to the [eight E002a source-validation runs](../E002a-feature-feasibility/README.md#completed-source-validation-runs--2026-10-25). This record owns the new comparison; E002a retains its original models, checkpoints and results.
+**Design agreed 2026-10-25; model definitions implemented; grouped execution and training pending.** Follow-up to the [eight E002a source-validation runs](../E002a-feature-feasibility/README.md#completed-source-validation-runs--2026-10-25). This record owns the new comparison; E002a retains its original models, checkpoints and results.
 
 ## Question and evidence
 
@@ -61,11 +61,33 @@ Compare `temporal-small` and `branches-small` separately with `norm` within each
 
 ## Shared prepared batches for LiDAR variants
 
-**Agreed execution direction, not yet benchmarked:** share preparation only among `g-dditr` variants with the same source, seed and shuffle schedule. Geometry/RGB-only arms retain ordinary independent execution. Shared loading does not constitute independent repetitions.
+**Agreed execution direction, not yet benchmarked:** share training and validation preparation only among `g-dditr` variants with the same source, seed and shuffle schedule. Geometry/RGB-only arms retain ordinary independent execution. Shared loading does not constitute independent repetitions.
 
 One bounded CPU producer prepares a physical microbatch from the existing indexed cache once. Each active model independently performs forward/backward on that immutable input, releasing its activation graph before the next model. Accumulate each model's track-loss sum divided by the actual logical batch count; clip and update each optimizer once after the logical batch completes. Retain bounded prefetch, complete tracks and a common packing schedule safe for all models; do not retain a whole logical point batch in VRAM.
 
 Each model owns its parameters, optimizer, learning-rate/update counters, training RNG state, early stopping, best/last checkpoints, output directory and W&B run. Model initialization/dropout randomness must not depend on the number or order of other active models. A stopped model leaves the group without changing surviving models' data order or RNG. No shared learned readout or retained cross-model activation graph. Failures preserve available local evidence and propagate; no automatic retry or resume.
+
+### Implementation sequence
+
+1. Prepare the three model definitions and their shape, masking, backward and checkpoint checks, preserving the E002a constructor and state dictionaries. This is a separate increment from the grouped trainer.
+2. Add a shared-input accumulation loop using the existing logical64-track loader and bounded prefetch. For each prepared physical microbatch, run each active model's forward/backward sequentially under its own RNG state; then release the inputs. At the logical boundary, clip and step each model's optimizer independently.
+3. Add the E002b group lifecycle with explicit per-model logging handles, local evidence, validation/selection and stopping. Keep experiment policy outside shared training operations; reuse existing artifact/metric helpers. An error ends the group and preserves each unfinished attempt's failure evidence.
+4. Prove equivalence to independent execution before timing two models, then three. Include the final partial update, dropout, recomputation, model-order/stopping invariance and immutable inputs. Benchmark preparation once versus repeated loading, total group time, memory and GPU activity.
+5. Recalibrate on the4080, run bounded both-source artifact/W&B checks, then supply the manual launcher. Full training remains a separate manual action.
+
+The launcher will expose one command per dataset for all nine models: geometry/RGB variants execute independently, while the three LiDAR variants share both training and validation preparation. Validation evaluates each model sequentially per prepared microbatch, retaining independent complete-split metrics and selection. Both choices are agreed; training remains a separate manual action.
+
+## Model preparation — 2026-10-25
+
+[`experiments/e002b.py`](../../src/pedestrian_behavior/experiments/e002b.py) exposes the frozen `model_spec(arm, variant)` and `build_model(arm, variant, profile)` for all nine model configurations. Shared [`multimodal.py`](../../src/pedestrian_behavior/models/multimodal.py) accepts their dimensions and final branch-normalization setting; its default constructor retains E002a behavior. No runner, cache or fitting change is included.
+
+| Variant | `g` parameters | `g-rgb` parameters | `g-dditr` parameters |
+|---|---:|---:|---:|
+| `norm` |1,603,588|1,735,300|1,843,972|
+| `temporal-small` |411,396|526,596|635,268|
+| `branches-small` |1,591,556|1,657,540|1,662,788|
+
+All counted parameters are trainable; frozen encoders are absent from this model. Compact geometry changes total capacity little because the temporal blocks dominate. [`Model acceptance`](../../tests/test_e002b_models.py) covers all nine shapes, enabled flags, post-LayerNorm missing/padding masks with nonzero affine bias, backward propagation and exact checkpoint roundtrips. A direct comparison against the pre-change E002a implementation confirms identical seeded parameters/state keys and evaluation/dropout logits for all four original arms. The full locked CPU suite passes206 tests with12 CUDA-only skips;362 local owner links and `git diff --check` pass. GPU memory calibration and native integration remain pending; old execution profiles are not revalidated by these CPU checks.
 
 ## Before implementation and full execution
 

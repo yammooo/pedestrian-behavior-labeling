@@ -29,40 +29,43 @@ def rotary(x):
 
 
 class TemporalBlock(nn.Module):
-    def __init__(self):
+    def __init__(self, width=256, ffn_width=1024):
         super().__init__()
-        self.norm = nn.LayerNorm(256)
-        self.qkv = nn.Linear(256, 768)
-        self.out = nn.Linear(256, 256)
-        self.norm_ffn = nn.LayerNorm(256)
-        self.ffn = nn.Sequential(nn.Linear(256, 1024), nn.GELU(), nn.Dropout(.1), nn.Linear(1024, 256))
+        if width % 4:
+            raise ValueError("Temporal width must divide evenly across four heads")
+        self.norm = nn.LayerNorm(width)
+        self.qkv = nn.Linear(width, width * 3)
+        self.out = nn.Linear(width, width)
+        self.norm_ffn = nn.LayerNorm(width)
+        self.ffn = nn.Sequential(nn.Linear(width, ffn_width), nn.GELU(), nn.Dropout(.1), nn.Linear(ffn_width, width))
         self.dropout = nn.Dropout(.1)
 
     def forward(self, x, valid):
         b, t, _ = x.shape
-        q, k, v = self.qkv(self.norm(x)).reshape(b, t, 3, 4, 64).permute(2, 0, 3, 1, 4)
+        width = x.shape[-1]
+        q, k, v = self.qkv(self.norm(x)).reshape(b, t, 3, 4, width // 4).permute(2, 0, 3, 1, 4)
         # FP32 math avoids fused-backend mask-alignment limits on irregular track lengths.
         with sdpa_kernel(SDPBackend.MATH):
             y = F.scaled_dot_product_attention(rotary(q), rotary(k), v, attn_mask=valid[:, None, None, :],
                                                dropout_p=.1 if self.training else 0.)
-        x = x + self.dropout(self.out(y.transpose(1, 2).reshape(b, t, 256)))
+        x = x + self.dropout(self.out(y.transpose(1, 2).reshape(b, t, width)))
         return x + self.dropout(self.ffn(self.norm_ffn(x)))
 
 
 class SpatialReadout(nn.Module):
-    def __init__(self):
+    def __init__(self, width=128):
         super().__init__()
         self.feature_norm = nn.LayerNorm(64)
-        self.project = nn.Linear(68, 128)
-        self.point_norm = nn.LayerNorm(128)
-        self.seed = nn.Parameter(torch.randn(1, 128) * .02)
-        self.seed_norm = nn.LayerNorm(128)
-        self.q = nn.Linear(128, 128, bias=False)
-        self.k = nn.Linear(128, 128, bias=False)
-        self.v = nn.Linear(128, 128, bias=False)
-        self.out = nn.Linear(128, 128, bias=False)
-        self.norm_ffn = nn.LayerNorm(128)
-        self.ffn = nn.Sequential(nn.Linear(128, 512), nn.GELU(), nn.Dropout(.1), nn.Linear(512, 128))
+        self.project = nn.Linear(68, width)
+        self.point_norm = nn.LayerNorm(width)
+        self.seed = nn.Parameter(torch.randn(1, width) * .02)
+        self.seed_norm = nn.LayerNorm(width)
+        self.q = nn.Linear(width, width, bias=False)
+        self.k = nn.Linear(width, width, bias=False)
+        self.v = nn.Linear(width, width, bias=False)
+        self.out = nn.Linear(width, width, bias=False)
+        self.norm_ffn = nn.LayerNorm(width)
+        self.ffn = nn.Sequential(nn.Linear(width, width * 4), nn.GELU(), nn.Dropout(.1), nn.Linear(width * 4, width))
         self.dropout = nn.Dropout(.1)
 
     def forward(self, cpu_tokens, lengths, seed):
@@ -72,12 +75,12 @@ class SpatialReadout(nn.Module):
         valid = torch.arange(h.shape[1], device=h.device)[None, :] < torch.tensor(lengths, device=h.device)[:, None]
         h = self.point_norm(h)
         b, n, _ = h.shape
-        q = self.q(self.seed_norm(seed)).reshape(1, 1, 4, 32).transpose(1, 2).expand(b, -1, -1, -1)
-        k, v = (linear(h).reshape(b, n, 4, 32).transpose(1, 2) for linear in (self.k, self.v))
+        q = self.q(self.seed_norm(seed)).reshape(1, 1, 4, seed.shape[-1] // 4).transpose(1, 2).expand(b, -1, -1, -1)
+        k, v = (linear(h).reshape(b, n, 4, seed.shape[-1] // 4).transpose(1, 2) for linear in (self.k, self.v))
         with sdpa_kernel(SDPBackend.MATH):
             y = F.scaled_dot_product_attention(q, k, v, attn_mask=valid[:, None, None, :],
                                                dropout_p=.1 if self.training else 0.)
-        u = seed + self.dropout(self.out(y.transpose(1, 2).reshape(b, 128)))
+        u = seed + self.dropout(self.out(y.transpose(1, 2).reshape(b, seed.shape[-1])))
         return u + self.dropout(self.ffn(self.norm_ffn(u)))
 
 
@@ -100,19 +103,26 @@ def frame_chunks(frames, max_frames, max_padded_tokens):
 
 
 class MultimodalClassifier(nn.Module):
-    """The agreed 64/128/128 -> 256, one-seed, full-track bidirectional model."""
+    """Frozen-feature readout; defaults preserve E002a's 64/128/128 -> 256 model."""
 
-    def __init__(self, arm, profile):
+    def __init__(self, arm, profile, *, geometry_width=64, rgb_width=128, spatial_width=128,
+                 temporal_width=256, temporal_ffn=1024, normalize_branches=False):
         super().__init__()
         if arm not in ARM_FLAGS:
             raise ValueError("Unknown multimodal arm")
-        self.geometry = nn.Sequential(nn.Linear(20, 64), nn.GELU(), nn.Linear(64, 64), nn.GELU())
-        self.rgb = nn.Linear(768, 128) if "rgb_valid" in ARM_FLAGS[arm] else None
-        self.spatial = SpatialReadout() if "lidar_valid" in ARM_FLAGS[arm] else None
-        self.fusion = nn.Linear(64 + 128 * (len(ARM_FLAGS[arm]) - 1) + len(ARM_FLAGS[arm]), 256)
-        self.temporal = nn.ModuleList([TemporalBlock(), TemporalBlock()])
-        self.final_norm = nn.LayerNorm(256)
-        self.head = nn.Linear(256, 4)
+        self.geometry = nn.Sequential(nn.Linear(20, geometry_width), nn.GELU(),
+                                      nn.Linear(geometry_width, geometry_width), nn.GELU())
+        self.geometry_norm = nn.LayerNorm(geometry_width) if normalize_branches else None
+        self.rgb = nn.Linear(768, rgb_width) if "rgb_valid" in ARM_FLAGS[arm] else None
+        self.rgb_norm = nn.LayerNorm(rgb_width) if normalize_branches and self.rgb is not None else None
+        self.spatial = SpatialReadout(spatial_width) if "lidar_valid" in ARM_FLAGS[arm] else None
+        self.spatial_norm = nn.LayerNorm(spatial_width) if normalize_branches and self.spatial is not None else None
+        fusion_width = geometry_width + rgb_width * int(self.rgb is not None) + spatial_width * int(self.spatial is not None)
+        self.fusion = nn.Linear(fusion_width + len(ARM_FLAGS[arm]), temporal_width)
+        self.temporal = nn.ModuleList([TemporalBlock(temporal_width, temporal_ffn),
+                                       TemporalBlock(temporal_width, temporal_ffn)])
+        self.final_norm = nn.LayerNorm(temporal_width)
+        self.head = nn.Linear(temporal_width, 4)
         self.arm, self.profile = arm, dict(profile)
 
     def forward(self, batch, *, mode=None):
@@ -128,16 +138,22 @@ class MultimodalClassifier(nn.Module):
         if any(not torch.isfinite(x[valid]).all() for x in (geometry, flags)) or not ((flags[valid] == 0) | (flags[valid] == 1)).all():
             raise ValueError("Nonfinite features or invalid branch flags")
         geometry, flags = (x.masked_fill(~valid[..., None], 0.) for x in (geometry, flags))
-        g = self.geometry(geometry) * flags[..., :1]
+        g = self.geometry(geometry)
+        if self.geometry_norm is not None:
+            g = self.geometry_norm(g)
+        g = g * flags[..., :1]
         descriptors = [g]
         if self.rgb is not None:
             rgb = batch["rgb"].to(device)
             if rgb.shape != (b, t, 768) or not torch.isfinite(rgb[valid]).all():
                 raise ValueError("Invalid/nonfinite RGB features")
             rgb = rgb.masked_fill(~valid[..., None], 0.)
-            descriptors.append(self.rgb(rgb) * flags[..., 1:2])
+            rgb = self.rgb(rgb)
+            if self.rgb_norm is not None:
+                rgb = self.rgb_norm(rgb)
+            descriptors.append(rgb * flags[..., 1:2])
         if self.spatial is not None:
-            lidar = g.new_zeros(b * t, 128)
+            lidar = g.new_zeros(b * t, self.spatial.project.out_features)
             frames = batch["points"]
             if len(frames) != b * t:
                 raise ValueError("Point slots do not match temporal padding")
@@ -164,7 +180,11 @@ class MultimodalClassifier(nn.Module):
                     with scope:
                         descriptor = self.spatial(inputs, sizes, self.spatial.seed)
                 lidar = lidar.index_copy(0, torch.tensor(indices, device=device), descriptor)
-            descriptors.append(lidar.reshape(b, t, 128))
+            lidar = lidar.reshape(b, t, self.spatial.project.out_features)
+            if self.spatial_norm is not None:
+                lidar_flag = ARM_FLAGS[self.arm].index("lidar_valid")
+                lidar = self.spatial_norm(lidar) * flags[..., lidar_flag:lidar_flag + 1]
+            descriptors.append(lidar)
         x = self.fusion(torch.cat((*descriptors, flags), -1))
         for layer in self.temporal:
             x = layer(x, valid)

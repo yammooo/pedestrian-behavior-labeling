@@ -1,6 +1,6 @@
 # E002b — Branch normalization and model capacity
 
-**Design agreed 2026-10-25; independent geometry/RGB launcher passes CPU/CUDA calibration and native/W&B checks. Shared LiDAR execution and full training remain pending.** Follow-up to the [eight E002a source-validation runs](../E002a-feature-feasibility/README.md#completed-source-validation-runs--2026-10-25). This record owns the new comparison; E002a retains its original models, checkpoints and results.
+**Design agreed 2026-10-25; shared LiDAR execution is implemented and passes CPU/CUDA equivalence and bounded timing checks. Its actual three-run W&B smoke awaits specific approval; independent geometry/RGB training is user-started.** Follow-up to the [eight E002a source-validation runs](../E002a-feature-feasibility/README.md#completed-source-validation-runs--2026-10-25). This record owns the new comparison; E002a retains its original models, checkpoints and results.
 
 ## Question and evidence
 
@@ -61,7 +61,7 @@ Compare `temporal-small` and `branches-small` separately with `norm` within each
 
 ## Shared prepared batches for LiDAR variants
 
-**Agreed execution direction, not yet benchmarked:** share training and validation preparation only among `g-dditr` variants with the same source, seed and shuffle schedule. Geometry/RGB-only arms retain ordinary independent execution. Shared loading does not constitute independent repetitions.
+Share training and validation preparation only among `g-dditr` variants with the same source, seed and shuffle schedule. Geometry/RGB-only arms retain ordinary independent execution. Shared loading does not constitute independent repetitions. The implementation and bounded acceptance are recorded below; they do not establish a full-epoch runtime.
 
 One bounded CPU producer prepares a physical microbatch from the existing indexed cache once. Each active model independently performs forward/backward on that immutable input, releasing its activation graph before the next model. Accumulate each model's track-loss sum divided by the actual logical batch count; clip and update each optimizer once after the logical batch completes. Retain bounded prefetch, complete tracks and a common packing schedule safe for all models; do not retain a whole logical point batch in VRAM.
 
@@ -113,6 +113,39 @@ The full locked CPU suite passes209 tests (12 CUDA skips); the managed CUDA11.8 
 | LOKI / `g` / `branches-small` |[lk4rtxzd](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/lk4rtxzd)|
 | LOKI / `g-rgb` / `norm` |[8g5lgze6](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/8g5lgze6)|
 
+## Shared LiDAR implementation — 2026-10-25
+
+[`shared_accumulation.py`](../../src/pedestrian_behavior/shared_accumulation.py) implements sequential independent updates over one prepared physical batch. [`e002b_group.py`](../../src/pedestrian_behavior/experiments/e002b_group.py) assembles the source once and owns per-model selection, checkpoints, local predictions/plots and explicit W&B handles (`reinit="create_new"`). Final selected checkpoints share another complete source-validation pass. The common packing profile and persistent loader remain unchanged when a model stops. No shared learned features, encoder inference, cache writes, resume or retry.
+
+Initialize each model with seed0 separately and capture its Torch CPU/CUDA state immediately afterward. Restore/capture that state around its forward/backward, including checkpoint recomputation. The current deterministic CPU producer uses no Python/NumPy random operations. Group wall time and peak memory describe the shared process; epoch histories label the training duration `shared_group_seconds`, not independent model compute.
+
+[`Core acceptance`](../../tests/test_shared_accumulation.py) compares independent and grouped logits/loss, pre-step gradients, AdamW state, final weights and RNG. Checks include dropout, a65-track split with a final one-track update, real LiDAR spatial recomputation, reversed model order, stopping one model after the first epoch, and unchanged inputs. CPU comparisons match exactly; preparation reads each track once per group epoch. Forward and final-logging failures propagate, finish all unfinished logging handles and preserve available local evidence. At implementation revision `1eacc41`, the full locked CPU suite passes214 tests with12 CUDA-only skips; the managed CUDA11.8 suite passes all214 without skips. Native lifecycle and timing evidence follow separately.
+
+The [manual shared commands](../../README.md#e002b-shared-lidar-training) run only the three LiDAR variants per dataset. `scripts/run-e002b-all.py` sequences the six independent geometry/RGB models and the LiDAR group for a future complete nine-model run. Existing independent commands, their hashed dependencies and feature formats are preserved so active training can continue in its original checkout.
+
+The first bounded calibration used managed PyTorch2.7.1/CUDA11.8 and passed at `outputs/experiments/E002b/calibration-lidar-group/profile.json` (SHA-256 `1aa217aa0892fbd4801bc04e44057fa73ff5b6d05a0a0790440ade2f7bc2a39b`). Training updates for all three models took20.492→17.780 s on ROAD and11.095→9.658 s on LOKI; validation took11.844→11.221 s and3.304→2.892 s. Both phases reduced track reads192→64, with exact weights/loss/RNG/packing and validation-logit parity. This profile is retained as execution evidence, **not used by the manual training commands**: existing E002b training uses the extractor environment's CUDA12.6 build. Its separate backend-matched profile is required below.
+
+### Backend-matched benchmark and calibration
+
+The authoritative profile is `outputs/experiments/E002b/calibration-lidar-group-extractor/profile.json` (SHA-256 `717a6a058e13de1148eef2c6f17d6ab553662bc1a71d88dbb374afdfde2b0672`), produced at `55680b3` on the4080 using the same PyTorch2.7.1+cu126 /CUDA12.6 extractor environment as existing E002b training. The dedicated checkout is `/home/user20/projects/pedestrian-behavior-labeling-e002b-shared`; the active independent checkout and its runtime hashes are unchanged.
+
+The compact [local calibration audit](../../outputs/experiments/E002b/shared-group-calibration-audit.json) retains profile/system hashes, tests, timings, parity and protected-input checks; full numerical telemetry stays on `aalto` beside each profile.
+
+Each source uses one warm and one measured complete64-track update per path and64 ordered validation tracks. All three variants match independent execution exactly for parameters, CE, training RNG, packing and validation logits. Training is timed independent-first/shared-second; validation shared-first/independent-second. Inputs are warm, no OS/CUDA caches are cleared, and weights are discarded. No other GPU process appeared in the initial snapshot. Model construction, source assembly and artifact exports are outside these timing columns.
+
+| Source / phase | Three independent models | Shared three-model group | Speedup | Track preparations |
+|---|---:|---:|---:|---:|
+| ROAD training update |18.108 s|15.644 s|1.16×|192→64|
+| ROAD validation batch |12.100 s|10.139 s|1.19×|192→64|
+| LOKI training update |10.008 s|9.072 s|1.10×|192→64|
+| LOKI validation batch |3.492 s|2.771 s|1.26×|192→64|
+
+Amortized shared training time is5.21 s/model on ROAD and3.02 s/model on LOKI; these are group time divided by three, not independent model latencies. The benefit is modest despite eliminating two-thirds of preparation: device transfers, spatial/temporal computation and optimizer work still occur per model, and the original loader already overlaps preparation with computation.
+
+Peak process CUDA allocation is4,870,881,280 bytes (4.54 GiB), reserved10,521,411,584 bytes (9.80 GiB); host RSS peaks at6,182,043,648 bytes (5.76 GiB). The187 whole-GPU telemetry samples average39.3% utilization, maximum100%; they mix warmup, preparation and compute and do not establish per-path utilization. Protected-input checks pass; no encoder inference or feature-cache writes occur. These bounded measurements **do not establish full-epoch or worst-case runtime**.
+
+An actual ROAD smoke with three simultaneous W&B handles is prepared using `independent-integration/selection.json`, at most two selected training updates and one epoch, followed by selected-checkpoint prediction/plot checks. Automatic permission review rejected the launch because earlier approval named four independent smokes rather than these three new shared runs. Specific approval is pending; no new W&B run or full LiDAR training was started by that rejected action.
+
 ## Results
 
-No full comparison training has run. Shared-preparation performance and modality/capacity effects are unknown. This record freezes the agreed comparison, not a claim that normalization or compression will improve generalization.
+Independent geometry/RGB training has been started by the user; completed E002b scientific comparisons have not been audited here. Modality/capacity effects remain unknown. This record freezes the agreed comparison, not a claim that normalization or compression will improve generalization.

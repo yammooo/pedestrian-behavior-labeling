@@ -587,7 +587,7 @@ These are full source train/validation runs under the existing100-epoch /15-pati
 
 ### E002b geometry and geometry + RGB
 
-The independent launcher runs the three [E002b variants](experiments/E002b-normalization-capacity/README.md) for `g` and `g-rgb`: six sequential seed0 models per source,100 epochs maximum/patience15, complete source validation and no held-out evaluation. The shared LiDAR runner is separate and remains pending. Each model has its own W&B run, checkpoints and numerical evidence; the existing feature caches stay read-only.
+The independent launcher runs the three [E002b variants](experiments/E002b-normalization-capacity/README.md) for `g` and `g-rgb`: six sequential seed0 models per source,100 epochs maximum/patience15, complete source validation and no held-out evaluation. The shared LiDAR runner is separate; see below. Each model has its own W&B run, checkpoints and numerical evidence; the existing feature caches stay read-only.
 
 Use the isolated E002b checkout on `aalto`. The accepted independent calibration is complete at the profile path below. Changing execution code requires a fresh calibration output. Existing E002a profiles are not accepted as E002b profiles.
 
@@ -618,6 +618,37 @@ uv run --no-project --python "$e002a_root/extractor-env/bin/python" python scrip
   --reference-profile /home/user20/projects/e002a-execution-optimizations-20261023/calibration-g-dditr-followup/profile.json \
   --output outputs/experiments/E002b/my-fresh-calibration
 ```
+
+### E002b shared LiDAR training
+
+`scripts/train-e002b-lidar-group.py` trains the three `g-dditr` variants with shared training and validation preparation. Each retains its own initialization, dropout RNG, optimizer, stopping, W&B run, checkpoints and predictions. It loads each physical batch once, then runs the models sequentially; model computation and device transfers remain separate. Caches are read-only. Full source validation and the100/15 recipe are unchanged.
+
+Use the separate shared-training checkout; leave the independent checkout unchanged while its launcher runs. The shared runner requires its own completed exact-code calibration, not the independent geometry/RGB profile. Local numerical checks and timing pass; the actual shared W&B smoke awaits specific approval. See [acceptance and timing](experiments/E002b-normalization-capacity/README.md) before launching.
+
+```bash
+cd /home/user20/projects/pedestrian-behavior-labeling-e002b-shared
+export PYTHONPATH="$PWD/src" OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+e002a_root="$PWD/outputs/experiments/E002a"
+group_profile="$PWD/outputs/experiments/E002b/calibration-lidar-group-extractor/profile.json"
+
+uv run --no-project --python "$e002a_root/extractor-env/bin/python" python scripts/train-e002b-lidar-group.py \
+  --source road-waymo --device cuda --profile "$group_profile"
+
+uv run --no-project --python "$e002a_root/extractor-env/bin/python" python scripts/train-e002b-lidar-group.py \
+  --source loki --device cuda --profile "$group_profile"
+```
+
+Default output directories are fresh and timestamped under `outputs/experiments/E002b/runs/`; never reuse an attempt directory. These commands run only the three LiDAR variants per source, so geometry/RGB training already underway need not be repeated. `scripts/run-e002b-all.py --help` exposes the combined per-dataset launcher for future complete nine-model runs; it needs both independent and shared calibration profiles. No resume or retry is added.
+
+To recalibrate the group and repeat the bounded shared-versus-independent timing check, choose a fresh output directory:
+
+```bash
+uv run --no-project --python "$e002a_root/extractor-env/bin/python" python scripts/calibrate-e002b-lidar-group.py \
+  --reference-profile /home/user20/projects/e002a-execution-optimizations-20261023/calibration-g-dditr-followup/profile.json \
+  --output outputs/experiments/E002b/my-fresh-group-calibration
+```
+
+This checks one complete64-track training update per model and one validation batch on each source, after warming the same input schedule. It discards weights and logs no W&B run. Timings include CPU preparation and GPU updates; source assembly, model construction and final evidence exports are outside those timings. It does not measure a complete epoch or a worst-case workload.
 
 The [DINO patch visual check](experiments/E002a-feature-feasibility/README.md#dino-patch-visual-check--2026-10-19) adds PCA/similarity panels and a corrected crop gallery from the same development sample: `scripts/check-e002a-rgb.py --help`. It reuses the completed probe and original checkpoint without a segmentation head or training.
 

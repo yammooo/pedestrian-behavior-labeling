@@ -28,7 +28,7 @@ This explicitly supersedes the shared-three-flag/zero-descriptor protocol used b
 
 ## Post-pilot geometry + D-DITR follow-up — 2026-10-24
 
-After inspection of the completed original six-run pilot, add an **optional single-arm diagnostic** for each source: `g-dditr`. It tests the user-requested geometry + LiDAR combination without RGB. This is a follow-up to the pilot, not a fourth arm in its six-attempt launcher or paired summary; it has one seed (`0`) and no results yet.
+After inspection of the completed original six-run pilot, an **optional single-arm diagnostic** was run for each source: `g-dditr`. It tests the user-requested geometry + LiDAR combination without RGB. This is a follow-up to the pilot, not a fourth arm in its six-attempt launcher or paired summary. It has one seed (`0`).
 
 | Arm | Fusion receives | Fusion projection |
 |---|---|---|
@@ -36,7 +36,35 @@ After inspection of the completed original six-run pilot, add an **optional sing
 
 The arm uses the same frozen complete-track point features, source split, seed, optimizer, dropout, effective batch and stopping rules as E002a. It requires the indexed source point cache and a current execution profile; it does **not** read or hash RGB features, RGB preparation metadata or DINO weights. The shared full D-DITR arm remains unchanged. The point-only path validates the pinned D-DITR checkpoint/configuration and uses the existing enabled-branch fusion protocol.
 
-The original six-run launcher remains `g`, `g-rgb`, and `g-rgb-dditr` for ROAD and LOKI. Use the explicit [single-run command](../../README.md#geometry--d-ditr-follow-up) for this separate diagnostic. The complete profile at `/home/user20/projects/e002a-execution-optimizations-20261023/calibration-g-dditr-followup/profile.json` was recalibrated at revision `ead210b`. The accepted limits are unchanged:4-frame spatial chunks,1,810,000 ordinary padded tokens,1,460,024 physical point tokens and524,288 tokens per frame. The ROAD ordinary boundary measured1,853,568 padded tokens with5,300,867,072 bytes peak allocated. Bounded `g-dditr` optimizer updates on one existing short fixture per source measured8.2 ms /160,621,568 allocated bytes for LOKI and7.7 ms /109,778,432 bytes for ROAD. These short fixture updates verify execution only; they do not establish full-population throughput or behavior benefit. No population run was launched and existing run folders/checkpoints are unchanged.
+The original six-run launcher remains `g`, `g-rgb`, and `g-rgb-dditr` for ROAD and LOKI. Use the explicit [single-run command](../../README.md#geometry--d-ditr-follow-up) to reproduce this separate diagnostic. The complete profile at `/home/user20/projects/e002a-execution-optimizations-20261023/calibration-g-dditr-followup/profile.json` was recalibrated at revision `ead210b`. The accepted limits are unchanged:4-frame spatial chunks,1,810,000 ordinary padded tokens,1,460,024 physical point tokens and524,288 tokens per frame. The ROAD ordinary boundary measured1,853,568 padded tokens with5,300,867,072 bytes peak allocated. Bounded `g-dditr` optimizer updates on one existing short fixture per source measured8.2 ms /160,621,568 allocated bytes for LOKI and7.7 ms /109,778,432 bytes for ROAD. These short fixture updates verify execution only; they do not establish full-population throughput or behavior benefit.
+
+### Completed source-validation runs — 2026-10-25
+
+Both new run folders report `complete`; W&B reports `finished` for the two new runs and all six original runs. The new output folders are `outputs/experiments/E002a/runs/g-dditr-road-waymo-s0` and `outputs/experiments/E002a/runs/g-dditr-loki-s0` in the canonical Aalto outputs tree. All eight runs use seed0, the same AdamW/float32/64-track/100-epoch/15-patience recipe, E001b-native geometry and the same source train/validation populations. The new run configs use no RGB cache (`rgb_cache_root: null`); their protected source-setup and E001b bbox-manifest hashes match the geometry baselines. Training/validation counts remain ROAD4,380/1,110 and LOKI8,574/1,861. The geometry-only runs record an older spatial profile, but the point/spatial limits do not affect that arm; the source, geometry normalization and fitting recipe match.
+
+The table reports the checkpoint selected by validation track-weighted macro-F1, the minimum validation CE over training, and the final epoch at patience stop. CE values are equal-track means; F1 is in [0,1]. All runs are seed0 and source-validation only; no held-out results are included.
+
+| Source | Arm / W&B run | Selected epoch | Train / val CE | Val track-weighted macro-F1 | Min val CE (epoch) | Stop epoch | Stop train / val CE |
+|---|---|---:|---:|---:|---:|---:|---:|
+| ROAD | [`g`](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/v5e4nxvh) |14|0.5651 /0.7787|0.5861|0.7715 (6)|29|0.3739 /1.0517|
+| ROAD | [`g-rgb`](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/c3fh137p) |50|0.0352 /2.1789|0.5697|0.8849 (3)|65|0.0275 /2.2705|
+| ROAD | [`g-dditr`](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/9e5nbdbz) |12|0.5227 /0.7523|**0.6257**|0.7523 (12)|27|0.2584 /1.0247|
+| ROAD | [`g-rgb-dditr`](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/3yaxj76g) |23|0.1271 /1.4194|0.5908|0.8191 (7)|38|0.0709 /1.8080|
+| LOKI | [`g`](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/sy9nl5tk) |16|0.3901 /0.5266|0.6378|0.5219 (14)|31|0.2688 /0.6624|
+| LOKI | [`g-rgb`](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/hwhjnm5h) |11|0.2877 /0.5781|0.6644|0.5426 (5)|26|0.1775 /0.8420|
+| LOKI | [`g-dditr`](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/626j7xmj) |18|0.2309 /0.4195|**0.7587**|0.4003 (12)|33|0.1237 /0.6321|
+| LOKI | [`g-rgb-dditr`](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/39cdefmz) |9|0.2969 /0.4640|0.7267|0.4640 (9)|24|0.1281 /0.6737|
+
+In this seed, `g-dditr` has the highest selected macro-F1 on both sources: ROAD+3.96 percentage points versus `g` and+3.49 versus `g-rgb-dditr`; LOKI+12.09 and+3.20 points, respectively. The selected validation CE is also lower for `g-dditr` than either of those arms on both sources. On LOKI, minimum validation CE occurs at epoch12, while F1 selection chooses epoch18.
+
+Per-class F1 deltas below are `g-dditr` minus the comparator, in MOVING / STOPPED / WAITING_TO_CROSS / CROSSING order. Supports are validation-track counts by class and can overlap.
+
+| Source | Class support | Δ F1 vs `g` | Δ F1 vs `g-rgb-dditr` |
+|---|---|---|---|
+| ROAD |658 /306 /91 /262|−0.2 /−0.1 /−0.5 /+16.6 pp|+3.0 /+6.8 /+3.4 /+0.7 pp|
+| LOKI |1,453 /181 /226 /306|+1.3 /+13.6 /+9.9 /+23.6 pp|+2.3 /+2.4 /+1.3 /+6.9 pp|
+
+The ROAD macro-F1 gain over geometry is concentrated in CROSSING; the LOKI gain is spread across classes, especially CROSSING, STOPPED and WAITING_TO_CROSS. The RGB arms' train CE falls far below validation CE, and `g-dditr` also develops a late train/validation gap by stopping. This single seed does not establish why RGB overfits, a causal modality effect, or cross-seed/cross-source generalization; the enabled descriptors and fusion parameterization also differ. No held-out evaluation was run.
 
 The earlier LR/query sweep is not the next increment. No further standalone segmentation optimization is planned before the behavior pilot.
 

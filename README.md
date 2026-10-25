@@ -576,11 +576,11 @@ point_only_profile="/home/user20/projects/e002a-execution-optimizations-20261023
 uv run --no-project --python "$probe_root/extractor-env/bin/python" python scripts/train-e002a.py \
   --source road-waymo --arm g-dditr --device cuda \
   --profile "$point_only_profile" --indexed-point-cache "$probe_root/indexed-road-waymo" \
-  --output "$probe_root/runs/g-dditr-road-waymo-s0"
+  --output "$probe_root/runs/my-g-dditr-road-waymo-s0"
 uv run --no-project --python "$probe_root/extractor-env/bin/python" python scripts/train-e002a.py \
   --source loki --arm g-dditr --device cuda \
   --profile "$point_only_profile" --indexed-point-cache "$probe_root/indexed-loki" \
-  --output "$probe_root/runs/g-dditr-loki-s0"
+  --output "$probe_root/runs/my-g-dditr-loki-s0"
 ```
 
 These are full source train/validation runs under the existing100-epoch /15-patience recipe, not a smoke or part of the original paired six-run summary. Keep each output directory fresh. See the [follow-up protocol and limits](experiments/E002a-feature-feasibility/README.md#post-pilot-geometry--d-ditr-follow-up--2026-10-24).

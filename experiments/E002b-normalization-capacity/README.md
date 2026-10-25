@@ -1,6 +1,6 @@
 # E002b — Branch normalization and model capacity
 
-**Design agreed 2026-10-25; model definitions and independent geometry/RGB launcher implemented; GPU readiness, grouped execution and training pending.** Follow-up to the [eight E002a source-validation runs](../E002a-feature-feasibility/README.md#completed-source-validation-runs--2026-10-25). This record owns the new comparison; E002a retains its original models, checkpoints and results.
+**Design agreed 2026-10-25; independent geometry/RGB launcher passes CPU/CUDA calibration and native/W&B checks. Shared LiDAR execution and full training remain pending.** Follow-up to the [eight E002a source-validation runs](../E002a-feature-feasibility/README.md#completed-source-validation-runs--2026-10-25). This record owns the new comparison; E002a retains its original models, checkpoints and results.
 
 ## Question and evidence
 
@@ -87,7 +87,7 @@ The launcher will expose one command per dataset for all nine models: geometry/R
 | `temporal-small` |411,396|526,596|635,268|
 | `branches-small` |1,591,556|1,657,540|1,662,788|
 
-All counted parameters are trainable; frozen encoders are absent from this model. Compact geometry changes total capacity little because the temporal blocks dominate. [`Model acceptance`](../../tests/test_e002b_models.py) covers all nine shapes, enabled flags, post-LayerNorm missing/padding masks with nonzero affine bias, backward propagation and exact checkpoint roundtrips. A direct comparison against the pre-change E002a implementation confirms identical seeded parameters/state keys and evaluation/dropout logits for all four original arms. The full locked CPU suite passes206 tests with12 CUDA-only skips;362 local owner links and `git diff --check` pass. GPU memory calibration and native integration remain pending; old execution profiles are not revalidated by these CPU checks.
+All counted parameters are trainable; frozen encoders are absent from this model. Compact geometry changes total capacity little because the temporal blocks dominate. [`Model acceptance`](../../tests/test_e002b_models.py) covers all nine shapes, enabled flags, post-LayerNorm missing/padding masks with nonzero affine bias, backward propagation and exact checkpoint roundtrips. A direct comparison against the pre-change E002a implementation confirms identical seeded parameters/state keys and evaluation/dropout logits for all four original arms. The full locked CPU suite passes206 tests with12 CUDA-only skips;362 local owner links and `git diff --check` pass. These CPU checks alone do not revalidate execution profiles; the later independent geometry/RGB acceptance below supplies its own CUDA/native checks.
 
 ## Before implementation and full execution
 
@@ -102,8 +102,17 @@ The user requested manual geometry/RGB training while the shared LiDAR runner is
 
 [`run-e002b-independent.py`](../../scripts/run-e002b-independent.py) runs six sequential seed0 models for one source, with optional arm selection. This launches no LiDAR model and does not change the18-model matrix. Each model retains full source validation, per-update/epoch loss logging, independent best/last checkpoints and final validation predictions/plots. Use the [manual commands](../../README.md#e002b-geometry-and-geometry--rgb) with fresh output directories;100/15 fitting and all scientific settings above remain fixed.
 
-[`calibrate-e002b.py`](../../scripts/calibrate-e002b.py) takes only packing limits from the earlier completed profile, then measures fresh CUDA CE/backward/AdamW for all six geometry/RGB configurations on both sources' development fixtures plus64×102 temporal shape bounds. Training checks completed status, E002b identity, exact model-spec coverage, execution hashes, backend and GPU. No old code hashes are rewritten and no feature cache is regenerated. GPU calibration/integration evidence is pending.
+[`calibrate-e002b.py`](../../scripts/calibrate-e002b.py) takes only packing limits from the earlier completed profile, then measures fresh CUDA CE/backward/AdamW for all six geometry/RGB configurations on both sources' development fixtures plus64×102 temporal shape bounds. Training checks completed status, E002b identity, exact model-spec coverage, execution hashes, backend and GPU. No old code hashes are rewritten and no feature cache is regenerated. The CUDA calibration completed at code revision `dbb02cf` in `outputs/experiments/E002b/calibration-independent/profile.json` (SHA-256 `6868cb53e6d84b99b5defa47d7f0ed61f8ac371d3c6c623370a34045ac4c99d7`). It covers12 real source-fixture workloads plus six64×102 shape bounds; maximum allocated VRAM is477,665,792 bytes, below the9,711,719,546-byte ceiling. These are resource checks with discarded weights, not behavior results. Both source populations fit the tested100/102-slot bounds.
+
+The full locked CPU suite passes209 tests (12 CUDA skips); the managed CUDA11.8 suite passes all209. In the separate extraction/training environment, all E002b checks pass; the full209-test suite reproduces one existing E001 CUDA padding-invariance tolerance failure (maximum difference3.99e-6 versus1e-6). No E001 code or tolerance changed. Four actual W&B smokes pass at the same code revision, recorded in `outputs/experiments/E002b/independent-integration/integration.json`. Each uses one optimizer update and one previously inspected source-validation track; smoke scores are not behavior results. All four reconstruct selected-checkpoint CE/F1 from saved predictions, export20–21 PNG/SVG pairs, preserve every protected input and make zero encoder loads/calls. No held-out output is produced. Per-case runtime is19.0–27.6 s, peak CUDA allocation79–103 MB. This validates the independent commands only, not shared LiDAR execution or population-scale runtime.
+
+| Source / arm / variant | W&B smoke |
+|---|---|
+| ROAD / `g` / `norm` |[ka4k13p4](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/ka4k13p4)|
+| ROAD / `g-rgb` / `temporal-small` |[5plawwp7](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/5plawwp7)|
+| LOKI / `g` / `branches-small` |[lk4rtxzd](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/lk4rtxzd)|
+| LOKI / `g-rgb` / `norm` |[8g5lgze6](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/8g5lgze6)|
 
 ## Results
 
-Not run. Shared-preparation performance and modality/capacity effects are unknown. This record freezes the agreed comparison, not a claim that normalization or compression will improve generalization.
+No full comparison training has run. Shared-preparation performance and modality/capacity effects are unknown. This record freezes the agreed comparison, not a claim that normalization or compression will improve generalization.

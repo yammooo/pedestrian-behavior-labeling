@@ -589,7 +589,7 @@ These are full source train/validation runs under the existing100-epoch /15-pati
 
 The independent launcher runs the three [E002b variants](experiments/E002b-normalization-capacity/README.md) for `g` and `g-rgb`: six sequential seed0 models per source,100 epochs maximum/patience15, complete source validation and no held-out evaluation. The shared LiDAR runner is separate and remains pending. Each model has its own W&B run, checkpoints and numerical evidence; the existing feature caches stay read-only.
 
-Use the isolated E002b checkout on `aalto`. The calibration below must be complete for the matching code/backend before training; changing execution code requires a fresh calibration output. Existing E002a profiles are not accepted as E002b profiles.
+Use the isolated E002b checkout on `aalto`. The accepted independent calibration is complete at the profile path below. Changing execution code requires a fresh calibration output. Existing E002a profiles are not accepted as E002b profiles.
 
 ```bash
 cd /home/user20/projects/pedestrian-behavior-labeling-e002b

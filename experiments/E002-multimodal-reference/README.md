@@ -13,7 +13,7 @@ The [E001-family review](../E001b-2d-bbox-contribution/results-review.md) motiva
 | Record | Scope | Status |
 |---|---|---|
 | [E002a — first multimodal behavior pilot](../E002a-feature-feasibility/README.md) | Original three arms plus a separate geometry + D-DITR follow-up; frozen encoders, complete tracks, indexed point supply; Utonia deferred | Eight seed0 source-validation runs complete; geometry + D-DITR best in this seed |
-| [E002b — normalization and capacity](../E002b-normalization-capacity/README.md) | Geometry / +RGB / +LiDAR; normalized reference versus smaller temporal or branch representations | Model definitions prepared; shared LiDAR execution/benchmark and GPU calibration pending; not run |
+| [E002b — normalization and capacity](../E002b-normalization-capacity/README.md) | Geometry / +RGB / +LiDAR; normalized reference versus smaller temporal or branch representations | Independent geometry/RGB commands CUDA-calibrated; shared LiDAR execution/benchmark pending; no comparison run |
 
 E002a's architecture is specific to that pilot. Later comparisons may revise it with explicit hypotheses and controls; they do not inherit its encoders, widths or readout by default. Completed PCA, alignment, semantic and resource probes remain [preparatory evidence inside E002a](../E002a-feature-feasibility/README.md#preparatory-work), with original settings and failures preserved.
 

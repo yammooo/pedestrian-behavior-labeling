@@ -9,7 +9,7 @@ Shared evaluation safeguards and comparison index. The [joint five-seed E001/E00
 | [E001c](E001c-bbox-inputs/README.md) | Native 3D/2D centers, dimensions and velocities, with matched availability flags | 30 five-seed attempts complete | Basic boxes average below E001b geometry in all directions; no systematic 2D size-velocity gain; 3D size velocities remain a redundant-input control |
 | [E002](E002-multimodal-reference/README.md) | Multimodal offline-labeling direction and shared constraints | Overview; concrete protocols owned by individual comparisons | E002a source-validation pilot complete; E002b design agreed |
 | [E002a](E002a-feature-feasibility/README.md) | First behavior pilot plus geometry + D-DITR follow-up; preparatory probes retained | Eight seed0 source-validation runs complete | Geometry + D-DITR has highest selected F1 on both sources in this seed; no held-out or transfer result |
-| [E002b](E002b-normalization-capacity/README.md) | Final branch LayerNorm, reduced shared width or reduced branch widths across geometry / +RGB / +LiDAR | Model definitions prepared; grouped execution and shared-preparation benchmark pending | Not run |
+| [E002b](E002b-normalization-capacity/README.md) | Final branch LayerNorm, reduced shared width or reduced branch widths across geometry / +RGB / +LiDAR | Independent geometry/RGB commands CUDA-calibrated; grouped LiDAR execution/benchmark pending | Not run |
 | [E003](../docs/research.md#tentative-experiment-direction) | One conditional pedestrian/full-track-conditioned scene-retrieval comparison | Tentative; depends on E002 evidence | Not run |
 | [E004](../docs/research.md#tentative-experiment-direction) | One complementary supervision source with an additional-data control | Tentative | Not run |
 

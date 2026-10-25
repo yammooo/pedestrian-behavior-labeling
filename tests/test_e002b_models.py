@@ -1,12 +1,18 @@
 """E002b frozen model variants preserve masks, shapes and checkpoint structure."""
 
 import io
+import json
+from pathlib import Path
+import tempfile
+from types import SimpleNamespace
 import unittest
 
 import torch
 
 from pedestrian_behavior.data.multimodal import collate_multimodal
 from pedestrian_behavior.experiments.e002b import ARMS, VARIANTS, build_model, model_spec
+from pedestrian_behavior.experiments.e002b_independent import attempt_command, attempts
+from pedestrian_behavior.experiments import e002b_run
 from pedestrian_behavior.models.multimodal import ARM_FLAGS, MultimodalClassifier
 
 
@@ -145,6 +151,44 @@ class E002bModelTest(unittest.TestCase):
             model_spec("g-rgb-dditr", "norm")
         with self.assertRaises(ValueError):
             model_spec("g", "custom")
+
+    def test_independent_runner_requires_current_code_and_exact_model_coverage(self):
+        with tempfile.TemporaryDirectory() as directory:
+            profile_path = Path(directory) / "profile.json"
+            row = {"status": "complete", "experiment": "E002b", "device": "cpu",
+                   "code": e002b_run.resource_code(), "torch": str(torch.__version__),
+                   "cuda": torch.version.cuda, "profile": {"max_tracks": 64, "temporal_cells": 4096,
+                       "microbatch_tokens": 100, "ordinary_tokens": 100, "frame_chunk": 1,
+                       "frame_tokens": 10},
+                   "model_specs": {"g/norm": model_spec("g", "norm")}, "model_coverage": ["g/norm"]}
+            profile_path.write_text(json.dumps(row))
+            args = SimpleNamespace(profile=profile_path, arm="g", model_variant="norm", device="cpu")
+            self.assertEqual(e002b_run._profile_for(args)["model_coverage"], ["g/norm"])
+            row["code"] = {"stale": "hash"}
+            profile_path.write_text(json.dumps(row))
+            with self.assertRaisesRegex(ValueError, "code changed"):
+                e002b_run._profile_for(args)
+
+    def test_e002b_validator_confines_outputs_to_new_experiment_root(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            args = SimpleNamespace(outputs_root=root, output=root / "experiments/E002b/runs/attempt",
+                                   rgb_cache_root=root / "experiments/E002a/rgb-cache",
+                                   point_cache_root=root / "experiments/E002a/indexed-loki")
+            e002b_run.validate_roots(args, {})
+            args.output = root / "experiments/E002a/runs/attempt"
+            with self.assertRaisesRegex(ValueError, "E002b evidence"):
+                e002b_run.validate_roots(args, {})
+
+    def test_independent_launcher_matrix_and_command_keep_lidar_grouped(self):
+        plan = attempts("road-waymo", e002b_run.ARMS, tuple(VARIANTS))
+        self.assertEqual(len(plan), 6)
+        self.assertEqual({row["arm"] for row in plan}, {"g", "g-rgb"})
+        self.assertEqual({row["variant"] for row in plan}, set(VARIANTS))
+        command = attempt_command(plan[0], Path("outputs/experiments/E002b/runs/pilot"), "cuda", ["--profile", "profile.json"])
+        self.assertIn(plan[0]["arm"], command)
+        self.assertIn(plan[0]["variant"], command)
+        self.assertIn("scripts/train-e002b.py", command)
 
 
 if __name__ == "__main__":

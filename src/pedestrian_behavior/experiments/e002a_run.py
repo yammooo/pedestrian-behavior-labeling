@@ -150,8 +150,15 @@ class FeatureDataset:
         return sample | {"flags": torch.stack(flags, -1).float(), "prediction_metadata": metadata}
 
 
-def assembly(args):
+def assembly(args, *, policy=None):
     """Open only the source train/validation archives; own resources until attempt exit."""
+    policy = policy or {}
+    experiment = policy.get("experiment", "E002a")
+    resource_identity = policy.get("resource_code", resource_code)()
+    root_validator = policy.get("validate_roots", validate_roots)
+    model_spec_for = policy.get("model_spec", lambda arm, variant: model_spec(arm))
+    model_factory = policy.get("model_factory", lambda arm, variant, profile: MultimodalClassifier(arm, profile))
+    model_variant = getattr(args, "model_variant", None)
     if args.arm in RGB_ARMS:
         config, transform = load_configuration(args.probe)
     elif args.arm in POINT_ARMS:
@@ -159,11 +166,11 @@ def assembly(args):
     else:
         config, transform = {}, None
     point_root = indexed_path(args)
-    validate_roots(argparse.Namespace(**(vars(args) | {"point_cache_root": point_root})), config)
+    root_validator(argparse.Namespace(**(vars(args) | {"point_cache_root": point_root})), config)
     profile_record = json.loads(args.profile.read_text())
     if profile_record.get("status") != "complete" or profile_record.get("device") != args.device:
         raise ValueError("Completed calibration on the requested device required")
-    if profile_record.get("code") != resource_code():
+    if profile_record.get("code") != resource_identity:
         raise ValueError("Execution code changed since resource calibration")
     if profile_record.get("torch") != str(torch.__version__) or profile_record.get("cuda") != torch.version.cuda:
         raise ValueError("PyTorch/CUDA backend differs from resource calibration")
@@ -286,8 +293,8 @@ def assembly(args):
                         if flag in track["source_flags"]}
             return c | observed, flags
 
-        return {"config": {"experiment": "E002a", "arm": args.arm, "fusion_protocol": FUSION_PROTOCOL,
-                    "model": model_spec(args.arm), "geometry": "E001b-native-geometry",
+        return {"config": {"experiment": experiment, "arm": args.arm, "fusion_protocol": FUSION_PROTOCOL,
+                    "model": model_spec_for(args.arm, model_variant), "geometry": "E001b-native-geometry",
                     "frozen_features": supply.identity if identity is None and supply is not None else identity,
                     "profile": profile, "profile_sha256": checksum(args.profile),
                     "indexed_point_cache": points.identity if points is not None else None,
@@ -300,7 +307,7 @@ def assembly(args):
                     "rgb_cache_root": str(args.rgb_cache_root.resolve()) if rgb is not None else None, "warmup_updates": warmup,
                     "held_out_tests": False, "exploratory": True},
                 "normalization": baseline["normalization"], "datasets": {args.source: baseline["datasets"][args.source]},
-                "build_model": lambda: MultimodalClassifier(args.arm, profile),
+                "build_model": lambda: model_factory(args.arm, model_variant, profile),
                 "dataset": lambda source, split: datasets[split] if source == args.source else None,
                 "batches": batches, "forward_batch": lambda m, b, device: m(b),
                 "epoch_operation": partial(train_accumulated_epoch, peak_lr=.0003, warmup_steps=warmup),
@@ -308,7 +315,8 @@ def assembly(args):
                 "conditions": conditions, "kind": "integration-smoke" if args.smoke else "exploratory-source-validation",
                 "custom_smoke": True, "smoke_limits": {"selected_tracks": sorted(selected), "max_training_updates": 2,
                     "held_out_tests": False} if selected is not None else None,
-                "run_name": f"e002a-{args.source}-{args.arm}-s0" + ("-smoke-" + args.output.name if args.smoke else ""),
+                "run_name": policy.get("run_name", f"e002a-{args.source}-{args.arm}-s0" +
+                    ("-smoke-" + args.output.name if args.smoke else "")),
                 "log_learning_rate": True, "runtime_snapshot": snapshot, "close": close}
     except BaseException:
         stack.close()

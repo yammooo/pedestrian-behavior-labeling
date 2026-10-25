@@ -1,6 +1,6 @@
 # E002b — Branch normalization and model capacity
 
-**Design agreed 2026-10-25; model definitions implemented; grouped execution and training pending.** Follow-up to the [eight E002a source-validation runs](../E002a-feature-feasibility/README.md#completed-source-validation-runs--2026-10-25). This record owns the new comparison; E002a retains its original models, checkpoints and results.
+**Design agreed 2026-10-25; model definitions and independent geometry/RGB launcher implemented; GPU readiness, grouped execution and training pending.** Follow-up to the [eight E002a source-validation runs](../E002a-feature-feasibility/README.md#completed-source-validation-runs--2026-10-25). This record owns the new comparison; E002a retains its original models, checkpoints and results.
 
 ## Question and evidence
 
@@ -95,6 +95,14 @@ All counted parameters are trainable; frozen encoders are absent from this model
 2. First implement a bounded two-LiDAR-model benchmark against independent execution using identical complete-track inputs, common packing, initial parameters and isolated RNG. Verify losses, gradients and optimizer updates, including dropout; test that model ordering/stopping does not alter the survivor. Check inputs remain unchanged. Extend to the intended three-model group before full execution.
 3. Measure preparation/read counts, group wall time versus independent total time, GPU activity, peak VRAM and host RAM. Report group time and amortized per-model time separately. Existing single-model warm timings do not establish shared-run speedup or full-epoch runtime. Accept/reject shared execution on measured benefit and correctness.
 4. Recalibrate the changed model/execution code on the4080 and verify bounded both-source integration and per-model local/W&B lifecycle. Feature caches remain read-only. Full-epoch runtime and the final execution profile are **TBD**; no new runnable command or population run is authorized by this documentation alone.
+
+## Independent geometry/RGB execution — 2026-10-25
+
+The user requested manual geometry/RGB training while the shared LiDAR runner is prepared. [`e002b_run.py`](../../src/pedestrian_behavior/experiments/e002b_run.py) reuses E002a source assembly and the existing attempt lifecycle with explicit E002b model, evidence-root and calibration policy. E002a remains the default caller; its extraction-policy file stays unchanged so existing RGB cache identities remain valid. Only `g` and `g-rgb` are accepted here.
+
+[`run-e002b-independent.py`](../../scripts/run-e002b-independent.py) runs six sequential seed0 models for one source, with optional arm selection. This launches no LiDAR model and does not change the18-model matrix. Each model retains full source validation, per-update/epoch loss logging, independent best/last checkpoints and final validation predictions/plots. Use the [manual commands](../../README.md#e002b-geometry-and-geometry--rgb) with fresh output directories;100/15 fitting and all scientific settings above remain fixed.
+
+[`calibrate-e002b.py`](../../scripts/calibrate-e002b.py) takes only packing limits from the earlier completed profile, then measures fresh CUDA CE/backward/AdamW for all six geometry/RGB configurations on both sources' development fixtures plus64×102 temporal shape bounds. Training checks completed status, E002b identity, exact model-spec coverage, execution hashes, backend and GPU. No old code hashes are rewritten and no feature cache is regenerated. GPU calibration/integration evidence is pending.
 
 ## Results
 

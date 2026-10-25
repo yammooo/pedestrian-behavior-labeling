@@ -585,6 +585,40 @@ uv run --no-project --python "$probe_root/extractor-env/bin/python" python scrip
 
 These are full source train/validation runs under the existing100-epoch /15-patience recipe, not a smoke or part of the original paired six-run summary. Keep each output directory fresh. See the [follow-up protocol and limits](experiments/E002a-feature-feasibility/README.md#post-pilot-geometry--d-ditr-follow-up--2026-10-24).
 
+### E002b geometry and geometry + RGB
+
+The independent launcher runs the three [E002b variants](experiments/E002b-normalization-capacity/README.md) for `g` and `g-rgb`: six sequential seed0 models per source,100 epochs maximum/patience15, complete source validation and no held-out evaluation. The shared LiDAR runner is separate and remains pending. Each model has its own W&B run, checkpoints and numerical evidence; the existing feature caches stay read-only.
+
+Use the isolated E002b checkout on `aalto`. The calibration below must be complete for the matching code/backend before training; changing execution code requires a fresh calibration output. Existing E002a profiles are not accepted as E002b profiles.
+
+```bash
+cd /home/user20/projects/pedestrian-behavior-labeling-e002b
+export PYTHONPATH="$PWD/src" OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+e002a_root="$PWD/outputs/experiments/E002a"
+e002b_profile="$PWD/outputs/experiments/E002b/calibration-independent/profile.json"
+
+uv run --no-project --python "$e002a_root/extractor-env/bin/python" python scripts/run-e002b-independent.py \
+  --source road-waymo --device cuda --profile "$e002b_profile" \
+  --rgb-preparation "$e002a_root/rgb-cache-preparation-03/cache.json" \
+  --output outputs/experiments/E002b/runs/road-independent-s0
+
+uv run --no-project --python "$e002a_root/extractor-env/bin/python" python scripts/run-e002b-independent.py \
+  --source loki --device cuda --profile "$e002b_profile" \
+  --rgb-preparation "$e002a_root/rgb-cache-preparation-03/cache.json" \
+  --output outputs/experiments/E002b/runs/loki-independent-s0
+```
+
+Keep each output directory fresh and do not update this checkout while its launcher is running. Add `--arms g` or `--arms g-rgb` to run only that arm's three variants. `scripts/train-e002b.py --help` exposes a single explicit arm/variant attempt. No resume, retry, cache rebuild or encoder inference is introduced.
+
+For later recalibration, choose a new output directory and point subsequent training at its `profile.json`:
+
+```bash
+uv run --no-project --python "$e002a_root/extractor-env/bin/python" python scripts/calibrate-e002b.py \
+  --device cuda \
+  --reference-profile /home/user20/projects/e002a-execution-optimizations-20261023/calibration-g-dditr-followup/profile.json \
+  --output outputs/experiments/E002b/my-fresh-calibration
+```
+
 The [DINO patch visual check](experiments/E002a-feature-feasibility/README.md#dino-patch-visual-check--2026-10-19) adds PCA/similarity panels and a corrected crop gallery from the same development sample: `scripts/check-e002a-rgb.py --help`. It reuses the completed probe and original checkpoint without a segmentation head or training.
 
 Add `--compare-crop-scales` with a fresh output directory for the [1.5×/2×/3× side-by-side diagnostic](experiments/E002a-feature-feasibility/README.md#crop-size-visual-comparison--2026-10-19); every crop remains 256×256. These earlier diagnostics retain their original scales; the E002a pilot now uses cached CLS from3× crops.

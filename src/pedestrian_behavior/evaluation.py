@@ -48,6 +48,49 @@ def confusion_metrics(confusion, supported_only=False):
             "accuracy": float(diagonal.sum()/total) if total else None}
 
 
+@torch.no_grad()
+def track_weighted_confusion_batch(logits, targets, gt_valid, padding_mask):
+    """Sum one normalized class confusion matrix per accepted-GT track.
+
+    This is for online training predictions. It returns a device tensor so callers
+    can accumulate an epoch without synchronizing scalar metrics per microbatch.
+    Call after ``track_cross_entropy`` has validated accepted targets and nonempty
+    GT for every track. E001/E002 configure four output classes; the operation
+    itself follows the model's output width.
+    """
+    if (logits.ndim != 3 or logits.shape[-1] < 1 or targets.shape != logits.shape[:2]
+            or gt_valid.shape != targets.shape or padding_mask.shape != targets.shape):
+        raise ValueError("Training F1 requires compatible batch shapes")
+    device = logits.device
+    targets = targets.to(device)
+    accepted = gt_valid.to(device=device, dtype=torch.bool) & ~padding_mask.to(device=device, dtype=torch.bool)
+    labels = torch.where(accepted, targets, torch.zeros_like(targets))
+    predicted = logits.detach().argmax(dim=-1)
+    classes = torch.arange(logits.shape[-1], device=device)
+    pair_counts = (
+        accepted.unsqueeze(-1).unsqueeze(-1)
+        & labels.unsqueeze(-1).unsqueeze(-1).eq(classes.view(1, 1, -1, 1))
+        & predicted.unsqueeze(-1).unsqueeze(-1).eq(classes.view(1, 1, 1, -1))
+    ).sum(dim=1)
+    track_counts = accepted.sum(dim=1).clamp_min(1).to(torch.float64)
+    return (pair_counts.to(torch.float64) / track_counts[:, None, None]).sum(dim=0)
+
+
+def training_track_weighted_macro_f1(confusion):
+    """Finalize one model, or a named group, with a single tiny CPU transfer."""
+    if isinstance(confusion, dict):
+        if not confusion:
+            raise ValueError("Training F1 requires at least one model confusion matrix")
+        names = list(confusion)
+        values = torch.stack([confusion[name] for name in names]).detach().cpu().numpy()
+        metrics = [confusion_metrics(matrix) for matrix in values]
+        return {name: metric["macro_f1"] for name, metric in zip(names, metrics)}
+    metrics = confusion_metrics(confusion.detach().cpu().numpy())
+    if metrics["macro_f1"] is None:
+        raise ValueError("Training F1 requires accepted GT")
+    return metrics["macro_f1"]
+
+
 def prediction_metrics(tracks, classes, memberships=None, supported_only=False):
     raw = np.zeros((classes, classes), dtype=np.float64)
     weighted = raw.copy()

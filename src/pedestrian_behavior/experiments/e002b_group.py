@@ -262,6 +262,7 @@ def run(args):
                     "selection": bests[variant], "last_completed_epoch": epoch,
                     "shared_group_seconds": row["shared_group_seconds"]})
                 runs[variant].log({"epoch": epoch, "train/loss_epoch": row["training_ce"],
+                    "train/macro_f1": row["training_f1"],
                     "val/loss": row["validation_ce"], "val/macro_f1": row["validation_f1"]})
                 statuses[variant]["last_completed_epoch"] = epoch
                 if reason:

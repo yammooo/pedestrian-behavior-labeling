@@ -8,7 +8,8 @@ import time
 import numpy as np
 import torch
 
-from .evaluation import track_cross_entropy
+from .evaluation import (track_cross_entropy, track_weighted_confusion_batch,
+                         training_track_weighted_macro_f1)
 
 
 def seed_run(seed):
@@ -53,10 +54,16 @@ def train_epoch(model, batches, optimizer, device, clip_norm, on_step=None, step
     model.train()
     started = time.monotonic()
     total_loss, tracks, steps, slots, gt_slots, padding, capacity = 0., 0, 0, 0, 0, 0, 0
+    training_confusion = None
     for batch in batches:
         optimizer.zero_grad(set_to_none=True)
         logits = model(batch["inputs"].to(device), batch["lengths"])
-        losses = track_cross_entropy(logits, batch["targets"].to(device), batch["gt_valid"].to(device), batch["padding_mask"].to(device))
+        targets = batch["targets"].to(device)
+        gt_valid = batch["gt_valid"].to(device)
+        padding_mask = batch["padding_mask"].to(device)
+        losses = track_cross_entropy(logits, targets, gt_valid, padding_mask)
+        batch_confusion = track_weighted_confusion_batch(logits, targets, gt_valid, padding_mask)
+        training_confusion = batch_confusion if training_confusion is None else training_confusion + batch_confusion
         losses.mean().backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), clip_norm, error_if_nonfinite=True)
         optimizer.step()
@@ -76,7 +83,8 @@ def train_epoch(model, batches, optimizer, device, clip_norm, on_step=None, step
         raise ValueError("Empty training split")
     if device.type == "cuda":
         torch.cuda.synchronize(device)
-    return {"training_ce": total_loss/tracks, "optimizer_steps": steps, "processed_tracks": tracks,
+    return {"training_ce": total_loss/tracks, "training_f1": training_track_weighted_macro_f1(training_confusion),
+            "optimizer_steps": steps, "processed_tracks": tracks,
             "context_slots": slots, "gt_slots": gt_slots, "padding_slots": padding,
             "batch_slots": capacity, "padding_fraction": padding/capacity, "seconds": time.monotonic()-started}
 

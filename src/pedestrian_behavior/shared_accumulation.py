@@ -6,7 +6,8 @@ import time
 import torch
 
 from .accumulation import warmup_lr
-from .evaluation import track_cross_entropy
+from .evaluation import (track_cross_entropy, track_weighted_confusion_batch,
+                         training_track_weighted_macro_f1)
 
 
 def rng_state(device):
@@ -36,6 +37,7 @@ def train_shared_accumulated_epoch(models, batches, optimizers, device, clip_nor
     on_step = on_step or {}
     models = {name: models[name] for name in order}
     total_loss = {name: 0. for name in names}
+    training_confusion = {name: None for name in names}
     processed = {name: 0 for name in names}
     steps = {name: 0 for name in names}
     common = {"context_slots": 0, "gt_slots": 0, "padding_slots": 0, "batch_slots": 0,
@@ -58,11 +60,16 @@ def train_shared_accumulated_epoch(models, batches, optimizers, device, clip_nor
 
         with closing(batches.microbatches(indices)) as microbatches:
             for batch in microbatches:
+                targets = batch["targets"].to(device)
+                gt_valid = batch["gt_valid"].to(device)
+                padding_mask = batch["padding_mask"].to(device)
                 for name, model in models.items():
                     set_rng_state(rng_states[name], device)
                     logits = model(batch)
-                    losses = track_cross_entropy(logits, batch["targets"].to(device),
-                        batch["gt_valid"].to(device), batch["padding_mask"].to(device))
+                    losses = track_cross_entropy(logits, targets, gt_valid, padding_mask)
+                    batch_confusion = track_weighted_confusion_batch(logits, targets, gt_valid, padding_mask)
+                    training_confusion[name] = (batch_confusion if training_confusion[name] is None
+                                                else training_confusion[name] + batch_confusion)
                     (losses.sum() / count).backward()
                     rng_states[name] = rng_state(device)
                     update_loss[name] += float(losses.detach().double().sum())
@@ -95,11 +102,12 @@ def train_shared_accumulated_epoch(models, batches, optimizers, device, clip_nor
     if device.type == "cuda":
         torch.cuda.synchronize(device)
     elapsed = time.monotonic() - begin
+    training_f1 = training_track_weighted_macro_f1(training_confusion)
     padding = common["padding_slots"]
     capacity = common["batch_slots"]
     rows = {}
     for name in names:
-        rows[name] = {"training_ce": total_loss[name] / processed[name],
+        rows[name] = {"training_ce": total_loss[name] / processed[name], "training_f1": training_f1[name],
             "optimizer_steps": steps[name], "processed_tracks": processed[name],
             **common, "padding_fraction": padding / capacity, "shared_group_seconds": elapsed,
             "learning_rate": optimizers[name].param_groups[0]["lr"]}

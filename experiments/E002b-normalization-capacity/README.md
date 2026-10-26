@@ -146,6 +146,40 @@ Peak process CUDA allocation is4,870,881,280 bytes (4.54 GiB), reserved10,521,41
 
 An actual ROAD smoke with three simultaneous W&B handles is prepared using `independent-integration/selection.json`, at most two selected training updates and one epoch, followed by selected-checkpoint prediction/plot checks. Automatic permission review rejected the launch because earlier approval named four independent smokes rather than these three new shared runs. Specific approval is pending; no new W&B run or full LiDAR training was started by that rejected action.
 
-## Results
+## Online training F1 — 2026-10-26
 
-Independent geometry/RGB training has been started by the user; completed E002b scientific comparisons have not been audited here. Modality/capacity effects remain unknown. This record freezes the agreed comparison, not a claim that normalization or compression will improve generalization.
+Subsequent runs record epoch `training_f1` in local `history.json` and `train/macro_f1` against `epoch` in W&B. This is the same fixed four-class track-weighted macro-F1 aggregation as validation: accepted GT only, each track contributes total weight1, padding/unlabeled slots contribute zero, and absent classes contribute zero F1. Sum confusion matrices across the entire epoch before calculating F1; do not average batch/track F1 values. Independent and grouped trainers use the same shared metric operation.
+
+The metric uses detached logits from existing training forwards, before each optimizer update, with training dropout active and weights changing across the epoch. It adds no inference pass or retained training predictions. It is an online diagnostic, like epoch training CE, rather than evaluation of a single fixed checkpoint. It never participates in selection/stopping. No per-step F1 or additional W&B tables are added.
+
+Completed runs have no historical training F1; they retain only best/last checkpoints for later evaluation. This local instrumentation does not change the running LOKI checkout. Execution-code hashes change, so old E002a/E002b calibration profiles must be refreshed before launching the updated trainer; original profiles and feature caches are preserved.
+
+Acceptance: full locked CPU discovery passes215 tests (12 CUDA-only skips); the focused39-test set passes with six CUDA skips. Checks cover the hand-calculated equal-track result, padding/unlabeled masks, absent classes, unequal final batches, no retained gradient graph or RNG/weight/gradient change, grouped/independent metric parity and epoch logging/local-history agreement. Owner links and `git diff --check` pass. No new GPU calibration, real W&B call, remote deployment or training launch was performed for this increment.
+
+## Results — ROAD-Waymo review, 2026-10-26
+
+All nine ROAD E002b attempts and the three matching E002a controls report complete status. Selected history F1/CE agree with saved final-validation metrics; fitting settings and validation denominators match across all12 models: seed0,78 groups,1,110 tracks,45,388 accepted GT frames. These are selected source-validation results, without held-out evaluation or repeat-seed uncertainty. LOKI LiDAR training is still running and was not inspected in this review.
+
+F1 below is track-weighted four-class macro-F1 in percent. Train CE is the online epoch quantity, with changing weights/dropout; it is not a matched evaluation of the selected checkpoint. Epochs are selected /final at patience stop.
+
+| Arm | Model | Val F1 (%) | Selected train /val CE | Epochs |
+|---|---|---:|---:|---:|
+|g|E002a|58.61|0.565 /0.779|14 /29|
+|g|norm|56.30|0.536 /0.833|9 /24|
+|g|temporal-small|54.00|0.303 /1.160|26 /41|
+|g|branches-small|54.77|0.570 /0.838|9 /24|
+|g-rgb|E002a|56.97|0.035 /2.179|50 /65|
+|g-rgb|norm|62.71|0.070 /1.423|28 /43|
+|g-rgb|temporal-small|62.29|0.385 /0.801|9 /24|
+|g-rgb|branches-small|60.11|0.313 /0.997|9 /24|
+|g-dditr|E002a|62.57|0.523 /0.752|12 /27|
+|g-dditr|norm|63.31|0.475 /0.758|11 /26|
+|g-dditr|temporal-small|66.05|0.397 /0.719|17 /32|
+|g-dditr|branches-small|61.05|0.549 /0.759|9 /24|
+
+- **Geometry:** every E002b model is below E002a (58.61%). Normalization gives56.30%; temporal-small54.00%; branches-small54.77%. The largest class loss is WAITING_TO_CROSS (−11.8 to−15.7 pp versus E002a), supported by91 validation tracks. Normalization is not a universal improvement.
+- **Geometry + RGB:** norm62.71% and temporal-small62.29% improve over E002a56.97%; branches-small reaches60.11%. Temporal-small is only0.42 pp below norm while selected validation CE is0.801 versus1.423 (E002a2.179). Its minimum validation CE is0.757 at epoch5. This makes temporal-small the more promising RGB confirmation candidate, but neither architecture eliminates late overfitting.
+- **Geometry + LiDAR:** temporal-small is highest at66.05%, +3.48 pp over E002a62.57% and+2.75 over norm63.31%; branches-small falls to61.05%. Selected CE also improves to0.719 from0.752. Gains versus E002a are MOVING+3.1, STOPPED+0.8, WAITING_TO_CROSS+0.4 and CROSSING+9.6 pp. CROSSING F1 is65.93%, with262 supporting tracks.
+- **Overfitting remains:** final train /validation CE is0.105 /1.350 for RGB temporal-small and0.185 /1.069 for LiDAR temporal-small. A smaller temporal representation helps these scene arms in this seed, but does not establish capacity as the sole cause. Branch compression is below norm for all three arms. Keep the original geometry control; wait for LOKI before selecting a cross-source recipe or adding further changes.
+
+Evidence: [local numerical audit](../../outputs/experiments/E002b/road-comparison-audit.json), including exact remote paths, configuration hashes, selected/final/minimum-loss rows and per-class metrics. Remote canonical root: `/home/user20/projects/pedestrian-behavior-labeling/outputs/experiments/`; E002b geometry/RGB lives in `E002b/runs/independent-20261025-125024-264808/`, LiDAR in `E002b/runs/shared-lidar-20261025-175839-542708/`. [E002a controls](../E002a-feature-feasibility/README.md#completed-source-validation-runs--2026-10-25) retain their original evidence. This review read JSON artifacts only; it did not rerun inference or audit W&B panels, checkpoints or individual predictions.

@@ -10,6 +10,7 @@ from pedestrian_behavior.data.preparation import checksum
 from pedestrian_behavior.models import multimodal
 from pedestrian_behavior.data import multimodal as loading, prepared_rgb
 from pedestrian_behavior import accumulation, evaluation, training
+from . import run as shared_run
 from . import e002a_features, e002a_run, e002b
 from .run import run_attempt as execute_attempt
 
@@ -20,7 +21,7 @@ SETTINGS = e002a_run.SETTINGS
 
 def resource_code():
     from pedestrian_behavior.experiments import e002a_run as assembly
-    modules = (multimodal, loading, prepared_rgb, accumulation, evaluation, training,
+    modules = (multimodal, loading, prepared_rgb, accumulation, evaluation, training, shared_run,
                e002a_features, assembly, e002b)
     return {module.__name__: checksum(module.__file__) for module in modules} | {__name__: checksum(__file__)}
 

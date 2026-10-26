@@ -19,7 +19,9 @@ import wandb
 
 from pedestrian_behavior.data.loading import collate_tracks
 from pedestrian_behavior.evaluation import (load_predictions, prediction_metrics, save_predictions,
-                                            stratified_metrics, track_cross_entropy)
+                                            stratified_metrics, track_cross_entropy,
+                                            track_weighted_confusion_batch,
+                                            training_track_weighted_macro_f1)
 from pedestrian_behavior.experiments.e001 import STRATA, build_model, observation_conditions
 from pedestrian_behavior.experiments.e001_run import configure_logging, log_final, plots, run_attempt
 from pedestrian_behavior.training import (fit, reload_checkpoint, save_checkpoint, seed_run, select_epoch, train_epoch)
@@ -75,6 +77,11 @@ class E001TrainingTest(unittest.TestCase):
         logits[1] = torch.from_numpy(tracks[1]["logits"])
         logits.requires_grad_()
         losses = track_cross_entropy(logits, batch["targets"], batch["gt_valid"], batch["padding_mask"])
+        online_confusion = track_weighted_confusion_batch(logits, batch["targets"], batch["gt_valid"], batch["padding_mask"])
+        self.close("online equal-track macro-F1 matches validation masking", score["track_weighted"]["macro_f1"],
+                   training_track_weighted_macro_f1(online_confusion))
+        self.check("unsupported accepted-GT classes retain validation zero-F1 semantics", [0., 0.],
+                   score["track_weighted"]["f1"][2:])
         self.close("per-track CE, NaN padding excluded", [math.log(2), math.log(4)], losses.detach().numpy())
         losses.mean().backward()
         self.check("padding zero loss gradient", True, bool((logits.grad[0, 1:] == 0).all()))
@@ -84,6 +91,9 @@ class E001TrainingTest(unittest.TestCase):
         b = collate_tracks([self.sample([0, -100])])
         z = torch.from_numpy(context["logits"]).unsqueeze(0).requires_grad_()
         track_cross_entropy(z, b["targets"], b["gt_valid"], b["padding_mask"]).mean().backward()
+        context_confusion = track_weighted_confusion_batch(z, b["targets"], b["gt_valid"], b["padding_mask"])
+        self.close("unlabeled context excluded from online F1", prediction_metrics([context], 4)["track_weighted"]["macro_f1"],
+                   training_track_weighted_macro_f1(context_confusion))
         self.check("unlabeled zero loss gradient", [0.]*4, z.grad[0, 1])
         for invalid in ("empty", "nonfinite", "target"):
             bad = deepcopy(context)
@@ -100,6 +110,23 @@ class E001TrainingTest(unittest.TestCase):
                                     torch.from_numpy(bad["gt_valid"])[None], torch.zeros((1, 2), dtype=torch.bool))
         self.check("empty GT, nonfinite unlabeled logits and out-of-range GT fail", True, True)
 
+    def test_metric_observation_does_not_change_rng_weights_or_gradients(self):
+        model = build_model("K", "A").train()
+        batch = collate_tracks([self.sample([0, 1, 2], "metric")])
+        logits = model(batch["inputs"], batch["lengths"])
+        track_cross_entropy(logits, batch["targets"], batch["gt_valid"], batch["padding_mask"]).mean().backward()
+        rng = torch.get_rng_state().clone()
+        weights = [parameter.detach().clone() for parameter in model.parameters()]
+        gradients = [parameter.grad.detach().clone() for parameter in model.parameters()]
+        confusion = track_weighted_confusion_batch(logits, batch["targets"], batch["gt_valid"], batch["padding_mask"])
+        score = training_track_weighted_macro_f1(confusion)
+        self.assertFalse(confusion.requires_grad)
+        self.assertTrue(0. <= score <= 1.)
+        self.assertTrue(torch.equal(rng, torch.get_rng_state()))
+        for parameter, weight, gradient in zip(model.parameters(), weights, gradients):
+            self.assertTrue(torch.equal(parameter, weight))
+            self.assertTrue(torch.equal(parameter.grad, gradient))
+
     def test_unequal_final_batch_and_nonfinite_training(self):
         model = build_model("K", "A").eval()
         samples = [self.sample([0], "a"), self.sample([1]*3, "b"), self.sample([3], "c")]
@@ -109,10 +136,18 @@ class E001TrainingTest(unittest.TestCase):
             if isinstance(module, torch.nn.Dropout):
                 module.p = 0
         expected = []
+        expected_tracks = []
         for b in batches:
-            expected.extend(track_cross_entropy(model(b["inputs"], b["lengths"]), b["targets"], b["gt_valid"], b["padding_mask"]).detach().tolist())
+            logits = model(b["inputs"], b["lengths"])
+            expected.extend(track_cross_entropy(logits, b["targets"], b["gt_valid"], b["padding_mask"]).detach().tolist())
+            for index, length in enumerate(b["lengths"].tolist()):
+                expected_tracks.append({"logits": logits[index, :length].detach().numpy(),
+                    "targets": b["targets"][index, :length].numpy(),
+                    "gt_valid": b["gt_valid"][index, :length].numpy(), "group": str(len(expected_tracks))})
         row = train_epoch(model, batches, torch.optim.AdamW(model.parameters(), lr=0, weight_decay=0), torch.device("cpu"), 1.)
         self.close("2+1 batch epoch CE uses all three tracks", float(np.mean(expected)), row["training_ce"])
+        self.close("unequal final batch keeps each training track equally weighted",
+                   prediction_metrics(expected_tracks, 4)["track_weighted"]["macro_f1"], row["training_f1"])
         self.check("partial batch exposure and padding", [2, 3, 5, 5, 2, 7],
                    [row[k] for k in ("optimizer_steps", "processed_tracks", "context_slots", "gt_slots", "padding_slots", "batch_slots")])
         with torch.no_grad():
@@ -140,8 +175,8 @@ class E001TrainingTest(unittest.TestCase):
                    [r["training_ce"] for r in result["history"]])
         definitions = {}
         configure_logging(SimpleNamespace(define_metric=lambda name, **kwargs: definitions.update({name: kwargs})))
-        self.check("native curves use optimizer step or epoch", ["optimizer_step", "epoch", "epoch"],
-                   [definitions[k]["step_metric"] for k in ("train/loss_step", "train/loss_epoch", "val/*")])
+        self.check("native curves use optimizer step or epoch", ["optimizer_step", "epoch", "epoch", "epoch"],
+                   [definitions[k]["step_metric"] for k in ("train/loss_step", "train/loss_epoch", "train/macro_f1", "val/*")])
         self.check("counter axes and detail panels hidden from auto plots", [True]*3,
                    [definitions[k]["hidden"] for k in ("optimizer_step", "epoch", "details/*")])
 
@@ -362,7 +397,7 @@ class E001TrainingTest(unittest.TestCase):
                 self.check("exactly one epoch and one step record", [1, 1],
                            [sum("epoch" in v for v in events), sum("train/loss_step" in v for v in events)])
                 epoch = next(v for v in events if "epoch" in v)
-                self.check("epoch history exposes only the agreed curves and axis", ["epoch", "train/loss_epoch", "val/loss", "val/macro_f1"], sorted(epoch))
+                self.check("epoch history exposes the agreed training and validation curves", ["epoch", "train/loss_epoch", "train/macro_f1", "val/loss", "val/macro_f1"], sorted(epoch))
             with self.assertRaises(FileExistsError):
                 run_attempt("loki", "K", "A", output, "cpu")
 

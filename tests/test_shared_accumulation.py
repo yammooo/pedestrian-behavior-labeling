@@ -164,6 +164,8 @@ class SharedAccumulationTest(unittest.TestCase):
                 _assert_state_equal(self, expected[name], models[name].state_dict())
                 torch.testing.assert_close(torch.tensor(rows[name]["training_ce"]),
                     torch.tensor(references[name][2]["training_ce"]), rtol=0, atol=1e-7)
+                torch.testing.assert_close(torch.tensor(rows[name]["training_f1"]),
+                    torch.tensor(references[name][2]["training_f1"]), rtol=0, atol=0)
                 torch.testing.assert_close(states[name][0], references[name][3][0], rtol=0, atol=0)
                 _assert_optimizer_equal(self, references[name][1], optimizers[name])
                 for expected_grad, actual_grad in zip(references[name][1].last_gradients,
@@ -332,12 +334,14 @@ class SharedAccumulationTest(unittest.TestCase):
             def __init__(self, index):
                 self.finish_codes = []
                 self.id, self.url = f"fake-{index}", "https://example.invalid/"
+                self.logs = []
+                self.definitions = []
 
-            def define_metric(self, *_args, **_kwargs):
-                pass
+            def define_metric(self, *args, **kwargs):
+                self.definitions.append((args, kwargs))
 
-            def log(self, *_args, **_kwargs):
-                pass
+            def log(self, payload, **_kwargs):
+                self.logs.append(payload)
 
             def finish(self, exit_code=0):
                 self.finish_codes.append(exit_code)
@@ -384,6 +388,13 @@ class SharedAccumulationTest(unittest.TestCase):
                     e002b_group.run(args)
             self.assertEqual(len(runs), 3)
             self.assertTrue(all(run.finish_codes == [1] for run in runs))
+            for variant, run in zip(e002b_group.VARIANTS, runs):
+                epoch_logs = [payload for payload in run.logs if "epoch" in payload]
+                self.assertEqual(len(epoch_logs), 1)
+                history = json.loads((evidence / variant / "history.json").read_text())
+                self.assertIn("training_f1", history[0])
+                self.assertEqual(epoch_logs[0]["train/macro_f1"], history[0]["training_f1"])
+                self.assertIn((("train/macro_f1",), {"step_metric": "epoch", "step_sync": False}), run.definitions)
             for variant in e002b_group.VARIANTS:
                 attempt = evidence / variant
                 self.assertEqual(json.loads((attempt / "status.json").read_text())["status"], "failed")

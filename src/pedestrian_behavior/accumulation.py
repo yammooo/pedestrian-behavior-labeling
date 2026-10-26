@@ -5,7 +5,7 @@ import time
 
 import torch
 
-from .evaluation import track_cross_entropy
+from .evaluation import track_cross_entropy, track_weighted_confusion_batch, training_track_weighted_macro_f1
 
 
 def warmup_lr(peak, step, warmup_steps):
@@ -18,6 +18,7 @@ def train_accumulated_epoch(model, batches, optimizer, device, clip_norm, on_ste
     model.train()
     begin = time.monotonic()
     total_loss, tracks, steps, slots, gt, padding, capacity, physical, tokens = 0., 0, 0, 0, 0, 0, 0, 0, 0
+    training_confusion = None
     for indices in batches:
         count, update_loss, seen = len(indices), 0., 0
         optimizer.zero_grad(set_to_none=True)
@@ -26,7 +27,12 @@ def train_accumulated_epoch(model, batches, optimizer, device, clip_norm, on_ste
         with closing(batches.microbatches(indices)) as microbatches:
             for batch in microbatches:
                 logits = model(batch)
-                losses = track_cross_entropy(logits, batch["targets"].to(device), batch["gt_valid"].to(device), batch["padding_mask"].to(device))
+                targets = batch["targets"].to(device)
+                gt_valid = batch["gt_valid"].to(device)
+                padding_mask = batch["padding_mask"].to(device)
+                losses = track_cross_entropy(logits, targets, gt_valid, padding_mask)
+                batch_confusion = track_weighted_confusion_batch(logits, targets, gt_valid, padding_mask)
+                training_confusion = batch_confusion if training_confusion is None else training_confusion + batch_confusion
                 (losses.sum() / count).backward()
                 value = float(losses.detach().double().sum())
                 update_loss += value
@@ -53,7 +59,8 @@ def train_accumulated_epoch(model, batches, optimizer, device, clip_norm, on_ste
         raise ValueError("Empty training split")
     if device.type == "cuda":
         torch.cuda.synchronize(device)
-    return {"training_ce": total_loss / tracks, "optimizer_steps": steps, "processed_tracks": tracks,
+    return {"training_ce": total_loss / tracks, "training_f1": training_track_weighted_macro_f1(training_confusion),
+            "optimizer_steps": steps, "processed_tracks": tracks,
             "context_slots": slots, "gt_slots": gt, "padding_slots": padding, "batch_slots": capacity,
             "padding_fraction": padding / capacity, "physical_microbatches": physical,
             "point_tokens": tokens, "seconds": time.monotonic() - begin,

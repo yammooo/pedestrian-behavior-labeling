@@ -106,6 +106,7 @@ def configure_logging(run):
     run.define_metric("train/loss_step", step_metric="optimizer_step", step_sync=False, summary="none")
     run.define_metric("train/learning_rate", step_metric="optimizer_step", step_sync=False, summary="none")
     run.define_metric("train/loss_epoch", step_metric="epoch", step_sync=False)
+    run.define_metric("train/macro_f1", step_metric="epoch", step_sync=False)
     run.define_metric("val/*", step_metric="epoch", step_sync=False)
     run.define_metric("details/*", hidden=True)
 
@@ -233,6 +234,7 @@ def run_attempt(source, configuration, variant, output, device, smoke=False, *, 
                 provenance["runtime"] = prepared["runtime_snapshot"]()
             write_json(output/"provenance.json", provenance)
             run.log({"epoch": row["epoch"], "train/loss_epoch": row["training_ce"],
+                     "train/macro_f1": row["training_f1"],
                      "val/loss": row["validation_ce"], "val/macro_f1": row["validation_f1"]})
         optimizer = torch.optim.AdamW((p for p in model.parameters() if p.requires_grad), **settings["optimizer"])
         fitted = fit(model, SmokeBatches() if smoke and not prepared.get("custom_smoke") else training,

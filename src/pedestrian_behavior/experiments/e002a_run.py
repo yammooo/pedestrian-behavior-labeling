@@ -57,9 +57,12 @@ def model_spec(arm):
 def resource_code():
     from pedestrian_behavior.models import multimodal
     from pedestrian_behavior.data import multimodal as loading
-    from pedestrian_behavior import accumulation
+    from pedestrian_behavior import accumulation, evaluation, training
     from pedestrian_behavior.data import indexed_points, prepared_points, prepared_rgb
-    return {m.__name__: checksum(m.__file__) for m in (multimodal, loading, accumulation, indexed_points, prepared_points, prepared_rgb)}
+    from . import run as shared_run
+    return {m.__name__: checksum(m.__file__) for m in
+            (multimodal, loading, accumulation, evaluation, training, shared_run,
+             indexed_points, prepared_points, prepared_rgb)}
 
 
 class PreparedSupply:

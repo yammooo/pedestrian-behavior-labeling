@@ -158,6 +158,8 @@ Acceptance: full locked CPU discovery passes215 tests (12 CUDA-only skips); the 
 
 ## Results — ROAD-Waymo review, 2026-10-26
 
+The [shared prediction viewer](../../README.md#inspect-model-predictions) can compare each E002a reference with its three completed E002b variants on **source validation**. It reads selected-checkpoint predictions without inference, keeps test/validation scopes distinct and supports the saved observation conditions. Incomplete grouped attempts remain absent until their parent group completes.
+
 All nine ROAD E002b attempts and the three matching E002a controls report complete status. Selected history F1/CE agree with saved final-validation metrics; fitting settings and validation denominators match across all12 models: seed0,78 groups,1,110 tracks,45,388 accepted GT frames. These are selected source-validation results, without held-out evaluation or repeat-seed uncertainty. LOKI LiDAR training is still running and was not inspected in this review.
 
 F1 below is track-weighted four-class macro-F1 in percent. Train CE is the online epoch quantity, with changing weights/dropout; it is not a matched evaluation of the selected checkpoint. Epochs are selected /final at patience stop.

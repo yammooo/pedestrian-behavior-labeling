@@ -15,7 +15,7 @@ async function api(path, params={}, body=null) {
   if(!response.ok)throw new Error(value.error || response.statusText);
   return value;
 }
-function label(run) {const arms={g:'Geometry', 'g-rgb':'Geometry + RGB', 'g-dditr':'Geometry + LiDAR'};const config=arms[run.configuration]?`${arms[run.configuration]} (${run.configuration})`:run.configuration;const variant=run.variant_label?` · ${run.variant_label}`:'';const selected=run.selected_epoch?` · selected e${run.selected_epoch}`:'';return `${run.experiment} · ${run.source} · ${run.architecture} · ${config}${variant} · seed${run.seed} · ${run.epochs}/${run.patience}${selected} · ${run.attempt}`;}
+function label(run) {const arms={g:'Geometry', 'g-rgb':'Geometry + RGB', 'g-dditr':'Geometry + LiDAR'};const config=arms[run.configuration]?`${arms[run.configuration]} (${run.configuration})`:run.configuration;const design=run.variant_label?`${run.variant_label} (${run.model_variant})`:run.architecture;const architecture=run.variant_label?` · ${run.architecture}`:'';const selected=run.selected_epoch?` · selected e${run.selected_epoch}`:'';return `${run.experiment} · ${design} · ${config} · ${run.source}${architecture} · max${run.epochs}/pat${run.patience} · seed${run.seed}${selected} · ${run.attempt}`;}
 function options(select, values, selected) {
   select.replaceChildren();
   values.forEach(([value,text])=>{const option=node('option',text); option.value=value;select.append(option);});
@@ -195,10 +195,10 @@ function drawTrajectory() {
 }
 function updateLink() {history.replaceState(null,'','#'+encodeURIComponent(JSON.stringify(state)));}
 async function reviews() {
-  try{const cases=await api('/api/reviews');$('reviews').replaceChildren();cases.slice().reverse().forEach(record=>{const item=node('div',undefined,'review'),button=node('button',record.reason||record.state.locator);button.onclick=async()=>{pause();Object.assign(state,record.state);state.split=record.state.split||record.split||'test';syncControls();await refresh();state.axis=record.state.axis||'';await query(record);$('note').value=record.note;$('reason').value=record.reason;};item.append(button,node('small',` ${record.split||'test'} · ${record.saved_utc}`),node('p',record.note));$('reviews').append(item);});}catch(e){error(e.message);}
+  try{const cases=await api('/api/reviews');$('reviews').replaceChildren();cases.slice().reverse().forEach(record=>{const item=node('div',undefined,'review'),button=node('button',record.reason||record.state.locator);button.onclick=async()=>{pause();queryGeneration++;clearTrack();Object.assign(state,record.state);state.split=record.state.split||record.split||'test';syncControls();if(!await refresh())return;state.axis=record.state.axis||'';await query(record);$('note').value=record.note;$('reason').value=record.reason;};item.append(button,node('small',` ${record.split||'test'} · ${record.saved_utc}`),node('p',record.note));$('reviews').append(item);});}catch(e){error(e.message);}
 }
-async function refresh() {try{const data=await api('/api/runs',{split:state.split});catalog=data.runs;modelSelectors();if(data.warnings.length)error(data.warnings.join('\n'));if(!catalog.length)$('scope-info').textContent=`No completed ${state.split} predictions found under the configured outputs root.`;}catch(e){error(e.message);}}
-$('split').onchange=async()=>{state.split=$('split').value;state.runs='';state.axis='';state.value='0';state.locator='';state.page=0;modelSelectors();sortOptions();await refresh();await query();};
+async function refresh() {const requestedSplit=state.split;try{const data=await api('/api/runs',{split:requestedSplit});if(state.split!==requestedSplit)return false;catalog=data.runs;modelSelectors();if(data.warnings.length)error(data.warnings.join('\n'));if(!catalog.length)$('scope-info').textContent=`No completed ${requestedSplit} predictions found under the configured outputs root.`;return true;}catch(e){if(state.split===requestedSplit)error(e.message);return false;}}
+$('split').onchange=async()=>{queryGeneration++;clearTrack();$('track-table').tBodies[0].replaceChildren();$('track-count').textContent='';$('page').textContent='';state.split=$('split').value;state.runs='';state.axis='';state.value='0';state.locator='';state.page=0;modelSelectors();sortOptions();const requestedSplit=state.split;if(await refresh()&&state.split===requestedSplit)await query();};
 ['dataset','metric','focus','axis','value','scope','sort','descending','minimum'].forEach(id=>$(id).onchange=async()=>{
   pause();state[id]=$(id).value;state.page=0;
   if(id==='dataset'){state.runs='';state.axis='';state.value='0';state.locator='';modelSelectors();sortOptions();}
@@ -211,7 +211,7 @@ $('split').onchange=async()=>{state.split=$('split').value;state.runs='';state.a
 $('run-search').oninput=modelSelectors;
 $('apply').onclick=()=>{state.search=$('search').value;state.minimum=$('minimum').value;state.page=0;query();};
 $('search').onkeydown=e=>{if(e.key==='Enter')$('apply').click();};
-$('refresh').onclick=async()=>{await refresh();if(selectedRuns().length)await query();};
+$('refresh').onclick=async()=>{const requestedSplit=state.split;if(await refresh()&&state.split===requestedSplit&&selectedRuns().length)await query();};
 $('previous-page').onclick=()=>{state.page--;query();};$('next-page').onclick=()=>{state.page++;query();};
 $('frame').oninput=()=>{pause();setFrame(+$('frame').value);};
 $('step-back').onclick=()=>{pause();setFrame(state.frame-1);};$('step-next').onclick=()=>{pause();setFrame(state.frame+1);};
@@ -223,5 +223,5 @@ function tick(){if(!track)return;if(state.frame>=track.targets.length-1){pause()
 $('play').onclick=()=>{if(timer!==null){pause();return;}if(state.frame===track.targets.length-1)setFrame(0);$('play').textContent='Pause';timer=setTimeout(tick,200/+$('speed').value);};
 $('save').onclick=async()=>{try{const record=await api('/api/reviews',{}, {state:{...state},hashes:track.models.map(m=>m.sha256),reason:$('reason').value,note:$('note').value});$('saved-status').textContent='Saved '+record.saved_utc;await reviews();}catch(e){error(e.message);}};
 $('reload-reviews').onclick=reviews;
-window.addEventListener('hashchange',async()=>{try{clearTrack();const restored=JSON.parse(decodeURIComponent(location.hash.slice(1)));Object.assign(state,restored);state.split=restored.split||'test';syncControls();await refresh();await query();}catch(e){error('Could not restore viewer link: '+e.message);}});
-(async()=>{try{if(location.hash){const restored=JSON.parse(decodeURIComponent(location.hash.slice(1)));Object.assign(state,restored);state.split=restored.split||'test';}syncControls();await refresh();await reviews();if(selectedRuns().length)await query();}catch(e){error('Could not restore viewer state: '+e.message);}})();
+window.addEventListener('hashchange',async()=>{try{queryGeneration++;clearTrack();const restored=JSON.parse(decodeURIComponent(location.hash.slice(1)));Object.assign(state,restored);state.split=restored.split||'test';syncControls();if(!await refresh())return;await query();}catch(e){error('Could not restore viewer link: '+e.message);}});
+(async()=>{try{if(location.hash){const restored=JSON.parse(decodeURIComponent(location.hash.slice(1)));Object.assign(state,restored);state.split=restored.split||'test';}syncControls();if(!await refresh())return;await reviews();if(selectedRuns().length)await query();}catch(e){error('Could not restore viewer state: '+e.message);}})();

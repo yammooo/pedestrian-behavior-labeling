@@ -3,7 +3,7 @@ const $ = id => document.getElementById(id);
 const letters = ['A', 'B', 'C', 'D'];
 const colors = ['#73c5a6', '#7eaff0', '#efbf67', '#ce9be8'];
 const shortClass = name => ({MOVING:'Moving',STOPPED:'Stopped',WAITING_TO_CROSS:'Waiting',CROSSING:'Crossing'}[name]||name);
-const state = {dataset:'loki', runs:'', metric:'accuracy', focus:'', axis:'', value:'0', scope:'matching', sort:'0', descending:'false', search:'', minimum:'0', page:0, locator:'', frame:0, active:0};
+const state = {dataset:'loki', split:'test', runs:'', metric:'accuracy', focus:'', axis:'', value:'0', scope:'matching', sort:'0', descending:'false', search:'', minimum:'0', page:0, locator:'', frame:0, active:0};
 let catalog = [], result = null, track = null, selectedRow = null, context = null;
 let generation = 0, queryGeneration = 0, mediaGeneration = 0, timer = null;
 const selectedRuns = () => state.runs.split(',').filter(Boolean);
@@ -15,7 +15,7 @@ async function api(path, params={}, body=null) {
   if(!response.ok)throw new Error(value.error || response.statusText);
   return value;
 }
-function label(run) {return `${run.experiment} · ${run.source} · ${run.architecture} · ${run.configuration} · seed${run.seed} · ${run.epochs}/${run.patience} · ${run.attempt}`;}
+function label(run) {const arms={g:'Geometry', 'g-rgb':'Geometry + RGB', 'g-dditr':'Geometry + LiDAR'};const config=arms[run.configuration]?`${arms[run.configuration]} (${run.configuration})`:run.configuration;const variant=run.variant_label?` · ${run.variant_label}`:'';const selected=run.selected_epoch?` · selected e${run.selected_epoch}`:'';return `${run.experiment} · ${run.source} · ${run.architecture} · ${config}${variant} · seed${run.seed} · ${run.epochs}/${run.patience}${selected} · ${run.attempt}`;}
 function options(select, values, selected) {
   select.replaceChildren();
   values.forEach(([value,text])=>{const option=node('option',text); option.value=value;select.append(option);});
@@ -26,7 +26,7 @@ function modelSelectors() {
   $('models').replaceChildren();
   letters.forEach((letter,i)=>{
     const wrap=node('label',`Model ${letter}${i?' (optional)':''}`), select=node('select');select.id='model-'+i;select.setAttribute('aria-label','Model '+letter);
-    const matching=catalog.filter(r=>r.datasets.includes(state.dataset) && (r.id===runs[i] || terms.every(t=>label(r).toLowerCase().includes(t))));
+    const matching=catalog.filter(r=>r.split===state.split && r.datasets.includes(state.dataset) && (r.id===runs[i] || terms.every(t=>label(r).toLowerCase().includes(t))));
     options(select,[['','Select a completed run'],...matching.map(r=>[r.id,label(r)])],runs[i]||'');
     [...select.options].forEach(o=>o.disabled=!!o.value && runs.includes(o.value) && o.value!==runs[i]);
     select.onchange=()=>{const values=letters.map((_,j)=>$('model-'+j).value).filter(Boolean); state.runs=values.join(',');state.locator='';state.sort='0';state.axis='';state.value='0';state.page=0;modelSelectors();sortOptions();query();};
@@ -40,7 +40,7 @@ function sortOptions() {
   state.sort=$('sort').value;
 }
 function syncControls() {
-  ['dataset','metric','focus','scope','sort','descending','search','minimum'].forEach(id=>$(id).value=state[id]);
+  ['dataset','split','metric','focus','scope','sort','descending','search','minimum'].forEach(id=>$(id).value=state[id]);
   modelSelectors();sortOptions();
 }
 function conditionOptions(axes) {
@@ -75,7 +75,7 @@ async function query(restore=null) {
     const data=await api('/api/tracks',state);if(version!==queryGeneration)return;
     if(restore && JSON.stringify(restore.hashes)!==JSON.stringify(data.hashes))throw new Error('Saved predictions changed. This case was not reopened.');
     result=data;conditionOptions(data.axes);focusOptions(data.classes);
-    $('scope-info').textContent=`Scores: ${state.axis && state.scope==='matching'?'accepted GT in matching frames':'accepted GT over the whole track'}. ${state.axis?'Filter: '+state.axis+' = '+data.axes[state.axis][+state.value]+'. ':''}${state.metric==='macro_f1'?'F1 averages GT-supported classes per track; not the four-class experiment score. ':''}Shared tracks: ${data.common}; missing from the intersection A–D: ${data.missing.join(' / ')}.`;
+    $('scope-info').textContent=`${state.split} split · Scores: ${state.axis && state.scope==='matching'?'accepted GT in matching frames':'accepted GT over the whole track'}. ${state.axis?'Filter: '+state.axis+' = '+data.axes[state.axis][+state.value]+'. ':''}${state.metric==='macro_f1'?'F1 averages GT-supported classes per track; not the four-class experiment score. ':''}Shared tracks: ${data.common}; missing from the intersection A–D: ${data.missing.join(' / ')}.`;
     renderPicker();
     if(restore){await openTrack(restore.state.locator,+restore.state.frame||0);}
     else if(data.rows.length){const row=data.rows.find(r=>r.locator===state.locator);if(row && track){selectedRow=row;renderScores();renderFrame();}else await openTrack((row||data.rows[0]).locator,row?state.frame:0);}
@@ -106,7 +106,7 @@ async function openTrack(locator, frame=0) {
   selectedRow=result.rows.find(r=>r.locator===locator)||null;
   $('track-title').textContent=locator;$('media-status').textContent='Loading track predictions…';
   try {
-    const data=await api('/api/track',{runs:state.runs,dataset:state.dataset,locator});if(version!==generation)return;
+    const data=await api('/api/track',{runs:state.runs,dataset:state.dataset,split:state.split,locator});if(version!==generation)return;
     track=data;state.active=Math.min(state.active,data.models.length-1);
     $('model-labels').replaceChildren();selectedRuns().forEach((id,i)=>{$('model-labels').append(node('div',letters[i]+': '+label(catalog.find(r=>r.id===id))));});
     $('frame').max=track.targets.length-1;state.frame=Math.max(0,Math.min(state.frame,track.targets.length-1));
@@ -115,7 +115,7 @@ async function openTrack(locator, frame=0) {
     $('road-overlay').disabled=state.dataset!=='road-waymo';
     renderScores();renderFrame();renderPicker();updateLink();
     $('media-status').textContent='Preparing same-frame context… Metrics and timelines are ready.';
-    const job=await api('/api/media',{run:selectedRuns()[0],dataset:state.dataset,locator});
+    const job=await api('/api/media',{run:selectedRuns()[0],dataset:state.dataset,split:state.split,locator});
     if(version===generation)poll(job.job,version);
   } catch(e){if(version===generation)error(e.message);}
 }
@@ -145,13 +145,14 @@ async function showMedia(i) {
   $('media-frame-status').textContent=`Loading synchronized context for frame ${i+1}…`;
   try {
     const loaded=await Promise.all(['rgb','bev','crop'].map(name=>new Promise((resolve,reject)=>{
-      const variant=name==='rgb'&&$('road-overlay').checked?'rgb-road':name,image=new Image();
+      const variant=name==='rgb'&&$('road-overlay').checked?'rgb-road':name==='crop'&&!$('tight-crop').checked?'crop-3x':name,image=new Image();
       image.onload=()=>resolve([name,image.src]);image.onerror=()=>reject(new Error('Could not load '+name));
       image.src='/media?'+new URLSearchParams({key,image:String(i).padStart(4,'0')+'-'+variant+'.jpg'});
     })));
     if(version!==mediaGeneration)return;
     loaded.forEach(([name,src])=>{$(name).src=src;$(name+'-placeholder').hidden=true;});
-    $('media-frame-status').textContent=`Context frame ${i+1}/${track.targets.length} · selected source ${track.source_times_us[i]??'missing'} µs`;
+    const centerNote=context.frames[i].pedestrian_centered_bev_radius_m?` · ${context.frames[i].pedestrian_centered_bev_radius_m} m context radius centered on native 3D target`:' · no native 3D target center; radius outline omitted';
+    $('media-frame-status').textContent=`${state.split} · context frame ${i+1}/${track.targets.length} · selected source ${track.source_times_us[i]??'missing'} µs${centerNote}`;
   } catch(e){if(version===mediaGeneration)$('media-frame-status').textContent='Context unavailable: '+e.message;}
 }
 function renderFrame() {
@@ -160,7 +161,7 @@ function renderFrame() {
   $('slot-info').textContent=`Frame ${i+1}/${track.targets.length} · nominal grid +${requested.toFixed(1)} s · source ${track.source_times_us[i]??'missing'} µs · GT ${track.gt_valid[i]?track.classes[track.targets[i]]:'unlabeled (unscored)'}${state.axis?' · '+(match(i)?'matches condition':'outside condition'):''}`;
   $('active-model').textContent='Inspecting '+letters[state.active];
   if(context){showMedia(i);
-    const info=context.frames[i];$('availability').textContent=JSON.stringify({native:info,source_flags:Object.fromEntries(Object.entries(track.source_flags||{}).map(([k,v])=>[k,v[i]])),conditions:Object.fromEntries(Object.entries(track.conditions).map(([k,v])=>[k,result.axes[k]?.[v[i]]??v[i]]))},null,2);drawTrajectory();}
+    const info=context.frames[i];$('availability').textContent=JSON.stringify({split:state.split,native:info,source_flags:Object.fromEntries(Object.entries(track.source_flags||{}).map(([k,v])=>[k,v[i]])),conditions:Object.fromEntries(Object.entries(track.conditions).map(([k,v])=>[k,result.axes[k]?.[v[i]]??v[i]]))},null,2);drawTrajectory();}
   drawTimeline();renderConfusion();
   const scores=track.models[state.active].probabilities[i];$('probabilities').replaceChildren();scores.forEach((p,j)=>{const item=node('div',`${track.classes[j]}: ${(100*p).toFixed(1)}%`);item.style.borderLeft=`8px solid ${colors[j%colors.length]}`;item.style.padding='3px 8px';$('probabilities').append(item);});
 }
@@ -194,9 +195,10 @@ function drawTrajectory() {
 }
 function updateLink() {history.replaceState(null,'','#'+encodeURIComponent(JSON.stringify(state)));}
 async function reviews() {
-  try{const cases=await api('/api/reviews');$('reviews').replaceChildren();cases.slice().reverse().forEach(record=>{const item=node('div',undefined,'review'),button=node('button',record.reason||record.state.locator);button.onclick=async()=>{pause();Object.assign(state,record.state);syncControls();state.axis=record.state.axis;await query(record);$('note').value=record.note;$('reason').value=record.reason;};item.append(button,node('small',' '+record.saved_utc),node('p',record.note));$('reviews').append(item);});}catch(e){error(e.message);}
+  try{const cases=await api('/api/reviews');$('reviews').replaceChildren();cases.slice().reverse().forEach(record=>{const item=node('div',undefined,'review'),button=node('button',record.reason||record.state.locator);button.onclick=async()=>{pause();Object.assign(state,record.state);state.split=record.state.split||record.split||'test';syncControls();await refresh();state.axis=record.state.axis||'';await query(record);$('note').value=record.note;$('reason').value=record.reason;};item.append(button,node('small',` ${record.split||'test'} · ${record.saved_utc}`),node('p',record.note));$('reviews').append(item);});}catch(e){error(e.message);}
 }
-async function refresh() {try{const data=await api('/api/runs');catalog=data.runs;modelSelectors();if(data.warnings.length)error(data.warnings.join('\n'));if(!catalog.length)$('scope-info').textContent='No completed test predictions found under the configured outputs root.';}catch(e){error(e.message);}}
+async function refresh() {try{const data=await api('/api/runs',{split:state.split});catalog=data.runs;modelSelectors();if(data.warnings.length)error(data.warnings.join('\n'));if(!catalog.length)$('scope-info').textContent=`No completed ${state.split} predictions found under the configured outputs root.`;}catch(e){error(e.message);}}
+$('split').onchange=async()=>{state.split=$('split').value;state.runs='';state.axis='';state.value='0';state.locator='';state.page=0;modelSelectors();sortOptions();await refresh();await query();};
 ['dataset','metric','focus','axis','value','scope','sort','descending','minimum'].forEach(id=>$(id).onchange=async()=>{
   pause();state[id]=$(id).value;state.page=0;
   if(id==='dataset'){state.runs='';state.axis='';state.value='0';state.locator='';modelSelectors();sortOptions();}
@@ -215,10 +217,11 @@ $('frame').oninput=()=>{pause();setFrame(+$('frame').value);};
 $('step-back').onclick=()=>{pause();setFrame(state.frame-1);};$('step-next').onclick=()=>{pause();setFrame(state.frame+1);};
 $('previous-error').onclick=()=>navigateError(-1);$('next-error').onclick=()=>navigateError(1);
 $('road-overlay').onchange=renderFrame;
+$('tight-crop').onchange=renderFrame;
 $('timeline').onclick=e=>{if(!track)return;pause();const rect=e.target.getBoundingClientRect(),x=(e.clientX-rect.left)*e.target.width/rect.width,y=(e.clientY-rect.top)*e.target.height/rect.height,row=Math.floor((y-24)/34);if(row>=1&&row<=track.models.length)state.active=row-1;setFrame(Math.floor((x-170)/(e.target.width-180)*track.targets.length));};
 function tick(){if(!track)return;if(state.frame>=track.targets.length-1){pause();return;}setFrame(state.frame+1);timer=setTimeout(tick,200/+$('speed').value);}
 $('play').onclick=()=>{if(timer!==null){pause();return;}if(state.frame===track.targets.length-1)setFrame(0);$('play').textContent='Pause';timer=setTimeout(tick,200/+$('speed').value);};
 $('save').onclick=async()=>{try{const record=await api('/api/reviews',{}, {state:{...state},hashes:track.models.map(m=>m.sha256),reason:$('reason').value,note:$('note').value});$('saved-status').textContent='Saved '+record.saved_utc;await reviews();}catch(e){error(e.message);}};
 $('reload-reviews').onclick=reviews;
-window.addEventListener('hashchange',async()=>{try{clearTrack();Object.assign(state,JSON.parse(decodeURIComponent(location.hash.slice(1))));syncControls();await query();}catch(e){error('Could not restore viewer link: '+e.message);}});
-(async()=>{try{if(location.hash)Object.assign(state,JSON.parse(decodeURIComponent(location.hash.slice(1))));syncControls();await refresh();await reviews();if(selectedRuns().length)await query();}catch(e){error('Could not restore viewer state: '+e.message);}})();
+window.addEventListener('hashchange',async()=>{try{clearTrack();const restored=JSON.parse(decodeURIComponent(location.hash.slice(1)));Object.assign(state,restored);state.split=restored.split||'test';syncControls();await refresh();await query();}catch(e){error('Could not restore viewer link: '+e.message);}});
+(async()=>{try{if(location.hash){const restored=JSON.parse(decodeURIComponent(location.hash.slice(1)));Object.assign(state,restored);state.split=restored.split||'test';}syncControls();await refresh();await reviews();if(selectedRuns().length)await query();}catch(e){error('Could not restore viewer state: '+e.message);}})();

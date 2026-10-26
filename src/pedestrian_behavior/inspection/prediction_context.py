@@ -15,7 +15,8 @@ from pedestrian_behavior.data.preparation import source_times
 from pedestrian_behavior.datasets import loki, road_waymo as road
 from pedestrian_behavior.datasets.bbox import read_road_boxes
 from pedestrian_behavior.inspection.prepared_tracks import json_safe, preview
-from pedestrian_behavior.inspection.render import read_points
+from pedestrian_behavior.inspection.render import BEV_SIZE, BEV_SPAN, read_points
+from pedestrian_behavior.inspection.feature_probe import square_crop
 from pedestrian_behavior.inspection.road_waymo import aligned_frames
 from .prediction_index import write_json
 
@@ -104,6 +105,20 @@ def valid_box(box):
     return box is not None and len(box) == 4 and np.isfinite(box).all() and box[2] > box[0] and box[3] > box[1]
 
 
+def valid_box3d(box):
+    try:
+        values = np.asarray([box[key] for key in ("pos_x", "pos_y", "dim_x", "dim_y", "yaw")], dtype=np.float64)
+    except (TypeError, KeyError, ValueError):
+        return False
+    return np.isfinite(values).all() and (values[2:4] > 0).all()
+
+
+def bev_radius_pixels(radius_m=20.0, size=BEV_SIZE, span_m=BEV_SPAN):
+    if not np.isfinite(radius_m) or radius_m <= 0 or size <= 0 or span_m <= 0:
+        raise ValueError("BEV radius, size, and span must be positive")
+    return size * radius_m / span_m
+
+
 def render_context_frame(frame, folder, number):
     image, points, box, box3d, road_box, issues = frame
     box = box if valid_box(box) else None
@@ -112,7 +127,14 @@ def render_context_frame(frame, folder, number):
     with Image.open(combined_path) as combined:
         rgb = combined.crop((0, 100, 640, 503))
         rgb.save(folder/f"{number:04d}-rgb.jpg")
-        combined.crop((640, 0, 1244, 604)).save(folder/f"{number:04d}-bev.jpg")
+        bev = combined.crop((640, 0, 1244, 604))
+        centered_on_pedestrian = valid_box3d(box3d)
+        if centered_on_pedestrian:
+            radius = bev_radius_pixels()
+            center = BEV_SIZE / 2
+            ImageDraw.Draw(bev).ellipse((center-radius, center-radius, center+radius, center+radius),
+                                        outline="#6de1ff", width=2)
+        bev.save(folder/f"{number:04d}-bev.jpg")
     combined_path.unlink()
     crop = Image.new("RGB", (256, 320), "#111")
     if image is not None and box is not None:
@@ -123,6 +145,16 @@ def render_context_frame(frame, folder, number):
     else:
         ImageDraw.Draw(crop).text((8, 12), "No native target crop", fill="white")
     crop.save(folder/f"{number:04d}-crop.jpg")
+    crop3x = Image.new("RGB", (256, 256), "#111")
+    crop3x_valid = False
+    if image is not None and box is not None:
+        pixels, crop_info = square_crop(image, box, expansion=3.0, output_size=256)
+        if crop_info["valid"]:
+            crop3x = Image.fromarray(np.clip(pixels*255, 0, 255).astype(np.uint8), "RGB")
+            crop3x_valid = True
+    if not crop3x_valid:
+        ImageDraw.Draw(crop3x).text((8, 12), "No native target crop", fill="white")
+    crop3x.save(folder/f"{number:04d}-crop-3x.jpg")
     if image is not None and valid_box(road_box):
         fitted = ImageOps.contain(image, rgb.size)
         ox, oy = (rgb.width-fitted.width)//2, (rgb.height-fitted.height)//2
@@ -131,6 +163,8 @@ def render_context_frame(frame, folder, number):
                                       ox+x2*fitted.width, oy+y2*fitted.height), outline="cyan", width=2)
     rgb.save(folder/f"{number:04d}-rgb-road.jpg")
     return {"rgb": image is not None, "lidar": points is not None, "native_box2d": box is not None,
+            "crop_3x": crop3x_valid,
+            "pedestrian_centered_bev_radius_m": 20 if centered_on_pedestrian else None,
             "road_box2d": valid_box(road_box), "issues": issues}
 
 
@@ -186,6 +220,7 @@ class ContextCache:
         evidence = {"archive_sha256": checksum(archive), "manifest_sha256": checksum(manifest_path),
                     "source_files": stamps, "renderer": {p.name: checksum(p) for p in
                     (Path(__file__), Path(__file__).with_name("prepared_tracks.py"), Path(__file__).with_name("render.py"),
+                     Path(__file__).with_name("feature_probe.py"),
                      Path(loki.__file__), Path(road.__file__), Path(loki.__file__).with_name("bbox.py"))}}
         key = hashlib.sha256(json.dumps(evidence, sort_keys=True).encode()).hexdigest()
         destination = self.cache/"context"/key

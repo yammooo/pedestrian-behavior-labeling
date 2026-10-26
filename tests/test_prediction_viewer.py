@@ -16,7 +16,8 @@ from PIL import Image
 
 from pedestrian_behavior.data.preparation import checksum, load_track, prepare_collection
 from pedestrian_behavior.evaluation import load_predictions, prediction_metrics, save_predictions
-from pedestrian_behavior.inspection.prediction_context import ContextCache, native_frames, render_context_frame
+from pedestrian_behavior.inspection.prediction_context import (ContextCache, bev_radius_pixels, native_frames,
+                                                                render_context_frame)
 from pedestrian_behavior.inspection.prediction_index import PredictionIndex, prepare_track, track_scores, write_json
 from pedestrian_behavior.inspection.predictions import Viewer, handler
 from test_track_preparation import native_readers, pose
@@ -36,7 +37,9 @@ def prediction(name="p", correct=False):
             "targets": targets, "gt_valid": targets >= 0,
             "source_times_us": [i*200000 for i in range(11)], "grid_times_us": [i*200000 for i in range(11)],
             "conditions": {"position": np.array([0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0]),
-                           "transition": np.array([0]*10+[2])}, "source_flags": {"native_3d": np.ones(11, bool)}}
+                           "transition": np.array([0]*10+[2]),
+                           "rgb-observed": np.array([1]*11), "lidar-observed": np.array([0, 1]*5+[0])},
+            "source_flags": {"native_3d": np.ones(11, bool)}}
 
 
 def run_fixture(root, count=4):
@@ -45,9 +48,49 @@ def run_fixture(root, count=4):
         directory = outputs/"experiments"/(["E001", "E001b", "E001c"][i%3])/"runs"/f"run{i}"
         write_json(directory/"config.json", {"source": "loki", "configuration": "test", "variant": "B",
                    "classes": CLASSES, "kind": "comparison", "settings": {"seed": i, "epochs": 75, "patience": 8}})
-        write_json(directory/"status.json", {"status": "complete"})
+        write_json(directory/"status.json", {"status": "complete", "kind": "comparison"})
         target = directory/"loki-test"; target.mkdir()
         save_predictions(target/"predictions.npz", [prediction("p", correct=i%2 == 1), prediction("q", correct=i%2 == 1)])
+    return outputs
+
+
+def e002_fixture(root):
+    outputs = root/"outputs"
+    settings = {"seed": 0, "epochs": 100, "patience": 15}
+
+    def write_run(directory, experiment, arm, *, variant=None, grouped=False, kind="exploratory-source-validation",
+                  complete=True, predictions=None):
+        model_variant = variant if experiment == "E002b" else None
+        config = {"experiment": experiment, "source": "loki", "arm": arm, "configuration": arm,
+                  "variant": "Transformer" if experiment == "E002a" else model_variant,
+                  "classes": CLASSES, "settings": settings, "kind": kind, "smoke": False,
+                  "held_out_tests": False}
+        if model_variant is not None:
+            config["model_variant"] = model_variant
+        status = {"status": "complete" if complete else "incomplete", "kind": kind}
+        if grouped:
+            config.pop("kind")  # The actual grouped E002b child config relies on its status kind.
+            config["execution"] = "shared-g-dditr"
+            config["shared_execution_id"] = directory.parent.name
+            write_json(directory.parent/"status.json", {"status": "complete", "execution": "shared-g-dditr",
+                                                        "held_out_tests": False})
+        write_json(directory/"config.json", config)
+        write_json(directory/"status.json", status)
+        write_json(directory/"provenance.json", {"selected_checkpoint_epoch": 3, "selection": {"epoch": 3}})
+        result = directory/"loki-validation"; result.mkdir(parents=True)
+        save_predictions(result/"predictions.npz", predictions or [prediction("p"), prediction("q", True)])
+
+    write_run(outputs/"experiments/E002a/runs/road-g-rgb", "E002a", "g-rgb")
+    write_run(outputs/"experiments/E002b/runs/loki-g-dditr", "E002b", "g-dditr", variant="norm")
+    for variant in ("norm", "temporal-small", "branches-small"):
+        write_run(outputs/f"experiments/E002b/runs/shared-loki/{variant}", "E002b", "g-dditr",
+                  variant=variant, grouped=True)
+    # Complete smoke and incomplete records must stay out of the viewer.
+    write_run(outputs/"experiments/E002a/runs/road-g-smoke", "E002a", "g",
+              kind="integration-smoke")
+    write_json(outputs/"experiments/E002a/runs/road-g-smoke/config.json",
+               json.loads((outputs/"experiments/E002a/runs/road-g-smoke/config.json").read_text()) | {"smoke": True})
+    write_run(outputs/"experiments/E002a/runs/road-g-incomplete", "E002a", "g", complete=False)
     return outputs
 
 
@@ -113,6 +156,86 @@ class PredictionViewerTest(unittest.TestCase):
         changed = index.load(catalog[0]["id"], "loki")
         self.assertNotEqual(changed["sha256"], loaded["sha256"])
         self.assertEqual(len(changed["tracks"]), 1)
+
+    def test_e002_validation_catalog_shared_group_split_and_modality_axes(self):
+        outputs = run_fixture(self.root)
+        e002_fixture(self.root)
+        axes = AXES | {"rgb-observed": ["missing", "valid"], "lidar-observed": ["missing", "valid"]}
+        index = PredictionIndex(outputs, self.root/"cache", axes)
+        test_runs = index.catalog()["runs"]
+        validation = index.catalog("validation")["runs"]
+        self.assertEqual(len(test_runs), 4)
+        self.assertEqual({run["experiment"] for run in test_runs}, {"E001", "E001b", "E001c"})
+        self.assertEqual(len(validation), 5)  # E002a, independent E002b, and three nested group variants.
+        self.assertTrue(all(run["split"] == "validation" for run in validation))
+        self.assertFalse(any("smoke" in run["relative"] or "incomplete" in run["relative"] for run in validation))
+        transformer = next(run for run in validation if run["experiment"] == "E002a")
+        self.assertEqual((transformer["architecture"], transformer["configuration"], transformer["selected_epoch"]),
+                         ("Transformer", "g-rgb", 3))
+        shared = next(run for run in validation if run.get("model_variant") == "temporal-small")
+        self.assertEqual((shared["architecture"], shared["variant_label"]), ("Transformer", "Temporal small"))
+        selected = [transformer["id"], shared["id"]]
+        query = index.query(selected, "loki", split="validation")
+        self.assertEqual((query["split"], query["common"]), ("validation", 2))
+        self.assertEqual(query["axes"]["rgb-observed"], ["missing", "valid"])
+        detail = index.detail(selected, "loki", query["rows"][0]["locator"], "validation")
+        self.assertEqual(detail["split"], "validation")
+        self.assertEqual(detail["source_times_us"], [0, 200000, 400000, 600000, 800000, 1000000,
+                                                       1200000, 1400000, 1600000, 1800000, 2000000])
+        with self.assertRaisesRegex(ValueError, "Unknown run, split"):
+            index.query([test_runs[0]["id"]], "loki", split="validation")
+        test_loaded = index.load(test_runs[0]["id"], "loki", "test")
+        val_loaded = index.load(transformer["id"], "loki", "validation")
+        test_cache = self.root/"cache/indices"/(__import__("hashlib").sha256(
+            f"test:{test_loaded['sha256']}".encode()).hexdigest()+"-v2.json")
+        val_cache = self.root/"cache/indices"/(__import__("hashlib").sha256(
+            f"validation:{val_loaded['sha256']}".encode()).hexdigest()+"-v2.json")
+        self.assertTrue(test_cache.is_file() and val_cache.is_file())
+        self.assertNotEqual(test_cache, val_cache)
+
+        # An axis disappears when a selected model does not carry the same saved condition.
+        path = Path(shared["path"])/"loki-validation/predictions.npz"
+        altered = [prediction("p"), prediction("q", True)]
+        for track in altered:
+            track["conditions"].pop("rgb-observed")
+        save_predictions(path, altered)
+        mismatch = index.query(selected, "loki", split="validation")
+        self.assertNotIn("rgb-observed", mismatch["axes"])
+        self.assertIn("lidar-observed", mismatch["axes"])
+
+        altered[0]["targets"][0] = 1
+        altered[0]["gt_valid"][0] = True
+        save_predictions(path, altered)
+        with self.assertRaisesRegex(ValueError, "Incompatible targets"):
+            index.query(selected, "loki", split="validation")
+
+    def test_review_split_persistence_and_legacy_default(self):
+        outputs = run_fixture(self.root)
+        e002_fixture(self.root)
+        viewer = Viewer(outputs, self.root/"cache", AXES)
+        self.addCleanup(viewer.close)
+        tests = viewer.index.catalog()["runs"]
+        test_runs = [run["id"] for run in tests[:2]]
+        test_query = viewer.index.query(test_runs, "loki")
+        locator = test_query["rows"][0]["locator"]
+        legacy = {"runs": ",".join(test_runs), "dataset": "loki", "locator": locator, "frame": 2}
+        old_record = viewer.save_case({"state": legacy, "hashes": test_query["hashes"], "note": "old test case"})
+        self.assertEqual(old_record["split"], "test")
+        self.assertEqual(old_record["state"]["split"], "test")
+        self.assertEqual(viewer.notes()[0]["split"], "test")
+
+        validation = viewer.index.catalog("validation")["runs"]
+        val_runs = [next(run["id"] for run in validation if run["experiment"] == "E002a"),
+                    next(run["id"] for run in validation if run.get("model_variant") == "norm")]
+        val_query = viewer.index.query(val_runs, "loki", split="validation")
+        val_state = {"runs": ",".join(val_runs), "dataset": "loki", "split": "validation",
+                     "locator": val_query["rows"][0]["locator"], "frame": 3}
+        val_record = viewer.save_case({"state": val_state, "hashes": val_query["hashes"], "note": "source validation"})
+        self.assertEqual(val_record["split"], "validation")
+        self.assertEqual(viewer.notes()[0]["split"], "test")
+        self.assertEqual(viewer.notes()[1]["state"]["split"], "validation")
+        with self.assertRaisesRegex(ValueError, "Unknown run, split"):
+            viewer.index.detail(test_runs, "loki", locator, "validation")
 
     def test_alignment_common_population_and_condition_mismatch(self):
         outputs=run_fixture(self.root, 2);index=PredictionIndex(outputs,self.root/"cache",AXES)
@@ -181,10 +304,25 @@ class PredictionViewerTest(unittest.TestCase):
         self.assertIsNone(frames[1][0])
         info=render_context_frame(frames[0],self.root,0)
         self.assertFalse(info['native_box2d']);self.assertFalse(info['rgb']);self.assertFalse(info['lidar'])
+        self.assertFalse(info["crop_3x"])
         image=Image.new('RGB',(100,100),'white')
         info=render_context_frame((image,None,[.1,.1,.3,.5],None,[.5,.5,.9,.9],[]),self.root,1)
         self.assertTrue(info['native_box2d']);self.assertTrue(info['road_box2d'])
         self.assertNotEqual((self.root/'0001-rgb.jpg').read_bytes(),(self.root/'0001-rgb-road.jpg').read_bytes())
+        self.assertTrue(info["crop_3x"])
+        self.assertIsNone(info["pedestrian_centered_bev_radius_m"])
+        self.assertEqual(bev_radius_pixels(), 302)
+        image = Image.new('RGB', (100,100), 'white')
+        info = render_context_frame((image,None,[.4,.4,.6,.6],
+                                     {"pos_x":1.,"pos_y":2.,"dim_x":.5,"dim_y":.5,"yaw":0.},None,[]),
+                                    self.root, 2)
+        self.assertTrue(info["crop_3x"])
+        self.assertEqual(info["pedestrian_centered_bev_radius_m"], 20)
+        with Image.open(self.root/"0002-crop-3x.jpg") as crop:
+            self.assertEqual(crop.size, (256,256))
+        from pedestrian_behavior.inspection.feature_probe import square_crop
+        _, crop_info = square_crop(image, [.4,.4,.6,.6], expansion=3., output_size=256)
+        np.testing.assert_allclose(crop_info["bounds_pixels"], [20,20,80,80])
 
     def test_media_worker_reuses_context_across_models_and_manual_retry(self):
         viewer=Viewer(run_fixture(self.root,2),self.root/'cache',AXES);self.addCleanup(viewer.close)

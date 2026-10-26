@@ -18,6 +18,7 @@ from .prediction_index import PredictionIndex, write_json
 
 def arguments(params):
     return {"runs": params.get("runs", "").split(","), "dataset": params.get("dataset", "loki"),
+            "split": params.get("split", "test"),
             "metric": params.get("metric", "accuracy"), "axis": params.get("axis", ""),
             "value": int(params.get("value", 0)), "scope": params.get("scope", "matching"),
             "confusion": params["focus"].split(",") if params.get("focus") else None,
@@ -40,9 +41,9 @@ class Viewer:
     def close(self):
         self.executor.shutdown(wait=True, cancel_futures=True)
 
-    def media(self, run, dataset, locator):
-        track = self.index.load(run, dataset)["tracks"][locator]
-        key = hashlib.sha256(json.dumps([dataset, locator, track["archive"]]).encode()).hexdigest()
+    def media(self, run, dataset, locator, split="test"):
+        track = self.index.load(run, dataset, split)["tracks"][locator]
+        key = hashlib.sha256(json.dumps([split, dataset, locator, track["archive"]]).encode()).hexdigest()
         with self.lock:
             if key not in self.jobs or self.jobs[key]["status"] in ("cancelled", "unavailable"):
                 for old, future in self.futures.items():
@@ -50,7 +51,7 @@ class Viewer:
                         self.jobs[old] = {"status": "cancelled"}
                 self.jobs[key] = {"status": "queued", "done": 0, "total": len(track["targets"])}
                 self.futures[key] = self.executor.submit(self._prepare, key, dataset, track)
-            return {"job": key, **self.jobs[key]}
+            return {"job": key, "split": split, **self.jobs[key]}
 
     def _prepare(self, key, dataset, track):
         def progress(done, total):
@@ -68,11 +69,14 @@ class Viewer:
 
     def notes(self):
         with self.lock:
-            return json.loads(self.notes_path.read_text()) if self.notes_path.exists() else []
+            records = json.loads(self.notes_path.read_text()) if self.notes_path.exists() else []
+            return [record | {"split": record.get("split", record.get("state", {}).get("split", "test"))}
+                    for record in records]
 
     def save_case(self, body):
-        state = body["state"]
-        selected = self.index.detail(state["runs"].split(","), state["dataset"], state["locator"])
+        state = dict(body["state"])
+        split = state.setdefault("split", "test")
+        selected = self.index.detail(state["runs"].split(","), state["dataset"], state["locator"], split)
         if body["hashes"] != [m["sha256"] for m in selected["models"]]:
             raise ValueError("Predictions changed; reload the track before saving")
         frame = int(state["frame"])
@@ -82,7 +86,7 @@ class Viewer:
         note = str(body.get("note", ""))
         if len(note) > 4000:
             raise ValueError("Review note exceeds 4000 characters")
-        record = {"id": uuid.uuid4().hex, "saved_utc": datetime.now(timezone.utc).isoformat(),
+        record = {"id": uuid.uuid4().hex, "saved_utc": datetime.now(timezone.utc).isoformat(), "split": split,
                   "state": state, "hashes": body["hashes"], "source_time_us": selected["source_times_us"][frame],
                   "grid_time_us": selected["grid_times_us"][frame], "reason": body.get("reason", ""), "note": note}
         with self.lock:
@@ -113,16 +117,18 @@ def handler(viewer):
                 elif parsed.path == "/viewer.js":
                     self.send(200, Path(__file__).with_name("predictions.js").read_bytes(), "text/javascript; charset=utf-8")
                 elif parsed.path == "/api/runs":
-                    self.send(200, viewer.index.catalog())
+                    self.send(200, viewer.index.catalog(params.get("split", "test")))
                 elif parsed.path == "/api/tracks":
                     with viewer.index.lock:
                         self.send(200, viewer.index.query(**arguments(params)))
                 elif parsed.path == "/api/track":
                     with viewer.index.lock:
-                        self.send(200, viewer.index.detail(params["runs"].split(","), params["dataset"], params["locator"]))
+                        self.send(200, viewer.index.detail(params["runs"].split(","), params["dataset"],
+                                                           params["locator"], params.get("split", "test")))
                 elif parsed.path == "/api/media":
                     with viewer.index.lock:
-                        self.send(200, viewer.media(params["run"], params["dataset"], params["locator"]))
+                        self.send(200, viewer.media(params["run"], params["dataset"], params["locator"],
+                                                    params.get("split", "test")))
                 elif parsed.path == "/api/job":
                     with viewer.lock:
                         self.send(200, viewer.jobs[params["id"]])
@@ -130,7 +136,7 @@ def handler(viewer):
                     self.send(200, viewer.notes())
                 elif parsed.path == "/media":
                     key, image = params["key"], params["image"]
-                    if not re.fullmatch(r"[a-f0-9]{64}", key) or not re.fullmatch(r"\d{4,}-(rgb|rgb-road|bev|crop)\.jpg", image):
+                    if not re.fullmatch(r"[a-f0-9]{64}", key) or not re.fullmatch(r"\d{4,}-(rgb|rgb-road|bev|crop|crop-3x)\.jpg", image):
                         raise ValueError("Invalid media address")
                     self.send(200, (viewer.cache/"context"/key/image).read_bytes(), "image/jpeg")
                 else:
@@ -172,9 +178,10 @@ def main():
     parser.add_argument("--road-index", type=Path)
     parser.add_argument("--waymo-root", type=Path)
     args = parser.parse_args()
-    # Experiment policy is wired here; the index and renderer receive ordinary data.
-    from pedestrian_behavior.experiments.e001b_run import STRATA
-    viewer = Viewer(args.outputs_root, args.cache, STRATA, loki_root=args.loki_root,
+    # Experiment condition labels are wired here; the index stays policy-free.
+    from pedestrian_behavior.experiments.e001b_run import STRATA as E001_STRATA
+    from pedestrian_behavior.experiments.e002a_run import STRATA as E002_STRATA
+    viewer = Viewer(args.outputs_root, args.cache, E001_STRATA | E002_STRATA, loki_root=args.loki_root,
                     road_index=args.road_index, waymo_root=args.waymo_root)
     if viewer.cache.is_relative_to(viewer.index.outputs/"experiments"):
         parser.error("Keep viewer caches/notes outside experiment directories")

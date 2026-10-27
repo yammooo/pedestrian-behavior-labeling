@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 
 import numpy as np
 
@@ -36,6 +37,7 @@ class E002ABResultsTests(unittest.TestCase):
             "source_flags": {"rgb_valid": np.array([True, False])},
         }
         same_track = base_track | {
+            "archive": str(Path("scene.npz").resolve()),
             "targets": np.array([1, 2]), "gt_valid": np.array([True, True]),
             "conditions": {"duration": np.array([0, 0]), "rgb-observed": np.array([1, 0])},
             "source_flags": {"rgb_valid": np.array([True, False]), "lidar_valid": np.array([True, True])},
@@ -47,6 +49,7 @@ class E002ABResultsTests(unittest.TestCase):
             "source_flags": {"rgb_valid": np.array([False, False])},
         }
         same_second_track = second_track | {
+            "archive": str(Path("scene.npz").resolve()),
             "conditions": {"duration": np.array([1, 1]), "rgb-observed": np.array([0, 0])},
             "source_flags": {"rgb_valid": np.array([False, False]), "lidar_valid": np.array([True, False])},
         }

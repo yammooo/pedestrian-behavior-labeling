@@ -273,6 +273,9 @@ def _prediction_signature(tracks):
     signatures = []
     for track in tracks:
         metadata = {key: track.get(key) for key in ALIGNMENT_FIELDS if key in track}
+        for field in ("archive", "bbox_archive"):
+            if metadata.get(field):
+                metadata[field] = str(Path(metadata[field]).expanduser().resolve(strict=False))
         signatures.append({
             "metadata": metadata,
             "targets": _array_hash(track["targets"]),

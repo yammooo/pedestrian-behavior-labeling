@@ -291,36 +291,49 @@ def _verify_alignment(records, signatures_by_record):
     for source, rows in by_source.items():
         baseline = signatures_by_record[rows[0]["run_path"]]
         baseline_locators = [item["metadata"].get("locator") for item in baseline]
+        if len(set(baseline_locators)) != len(baseline_locators):
+            raise ValueError(f"{source}: duplicate locator in {rows[0]['run_path']}")
+        baseline_by_locator = dict(zip(baseline_locators, baseline))
+        by_run = {rows[0]["run_path"]: baseline_by_locator}
+        orders_equal = True
+        for row in rows[1:]:
+            candidate = signatures_by_record[row["run_path"]]
+            candidate_locators = [item["metadata"].get("locator") for item in candidate]
+            if len(candidate_locators) != len(set(candidate_locators)):
+                raise ValueError(f"{source}: duplicate locator in {row['run_path']}")
+            candidate_by_locator = dict(zip(candidate_locators, candidate))
+            if set(candidate_by_locator) != set(baseline_by_locator):
+                raise ValueError(f"{source}: prediction population/locators differ in {row['run_path']}")
+            orders_equal &= candidate_locators == baseline_locators
+            by_run[row["run_path"]] = candidate_by_locator
         shared_conditions = set.intersection(*(set(signatures_by_record[r["run_path"]][0]["conditions"]) for r in rows))
         all_conditions = set.union(*(set(signatures_by_record[r["run_path"]][0]["conditions"]) for r in rows))
         all_flags = set.union(*(set(signatures_by_record[r["run_path"]][0]["source_flags"]) for r in rows))
         for row in rows[1:]:
-            candidate = signatures_by_record[row["run_path"]]
-            if len(candidate) != len(baseline):
-                raise ValueError(f"{source}: prediction track count differs across runs")
-            if [item["metadata"].get("locator") for item in candidate] != baseline_locators:
-                raise ValueError(f"{source}: prediction order/locators differ in {row['run_path']}")
-            for index, (reference, actual) in enumerate(zip(baseline, candidate)):
+            candidate_by_locator = by_run[row["run_path"]]
+            for locator, reference in baseline_by_locator.items():
+                actual = candidate_by_locator[locator]
                 for field in ALIGNMENT_FIELDS:
                     if reference["metadata"].get(field) != actual["metadata"].get(field):
-                        raise ValueError(f"{source}: {field} misalignment at track {index} in {row['run_path']}")
+                        raise ValueError(f"{source}: {field} misalignment for locator {locator} in {row['run_path']}")
                 for field in ("targets", "gt_valid"):
                     if reference[field] != actual[field]:
-                        raise ValueError(f"{source}: accepted-GT {field} misalignment at track {index} in {row['run_path']}")
-        for index in range(len(baseline)):
+                        raise ValueError(f"{source}: accepted-GT {field} misalignment for locator {locator} in {row['run_path']}")
+        for locator in baseline_locators:
             for family, label in (("conditions", "condition"), ("source_flags", "modality flag")):
-                keys = set.union(*(set(signatures_by_record[r["run_path"]][index][family]) for r in rows))
+                signatures = [by_run[r["run_path"]][locator][family] for r in rows]
+                keys = set.union(*(set(value) for value in signatures))
                 for key in keys:
-                    values = {signatures_by_record[r["run_path"]][index][family][key]
-                              for r in rows if key in signatures_by_record[r["run_path"]][index][family]}
+                    values = {value[key] for value in signatures if key in value}
                     if len(values) > 1:
-                        raise ValueError(f"{source}: {label} {key} differs at track {index}")
+                        raise ValueError(f"{source}: {label} {key} differs for locator {locator}")
         integrity[source] = {
             "models": len(rows), "tracks": len(baseline),
             "common_strata_axes": sorted(shared_conditions),
             "available_strata_axes": sorted(all_conditions),
             "available_modality_flags": sorted(all_flags),
-            "ordered_locator_sha256": _canonical_hash(baseline_locators),
+            "locator_set_sha256": _canonical_hash(sorted(baseline_locators)),
+            "prediction_order_identical": orders_equal,
             "target_gt_times_alignment": "exact across all completed models",
             "condition_alignment": "exact on shared axes; absent axes are not compared",
             "modality_flags": "exact wherever the flag is present in both models",

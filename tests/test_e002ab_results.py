@@ -40,34 +40,49 @@ class E002ABResultsTests(unittest.TestCase):
             "conditions": {"duration": np.array([0, 0]), "rgb-observed": np.array([1, 0])},
             "source_flags": {"rgb_valid": np.array([True, False]), "lidar_valid": np.array([True, True])},
         }
+        second_track = base_track | {
+            "locator": "track-b", "archive": "scene.npz", "grid_times_us": [200000, 400000],
+            "source_times_us": [200000, 400000], "targets": np.array([0, 3]),
+            "gt_valid": np.array([True, False]), "conditions": {"duration": np.array([1, 1])},
+            "source_flags": {"rgb_valid": np.array([False, False])},
+        }
+        same_second_track = second_track | {
+            "conditions": {"duration": np.array([1, 1]), "rgb-observed": np.array([0, 0])},
+            "source_flags": {"rgb_valid": np.array([False, False]), "lidar_valid": np.array([True, False])},
+        }
         rows = [
             {"source": "loki", "run_path": "model-a"},
             {"source": "loki", "run_path": "model-b"},
         ]
         signatures = {
-            "model-a": _prediction_signature([base_track]),
-            "model-b": _prediction_signature([same_track]),
+            "model-a": _prediction_signature([base_track, second_track]),
+            "model-b": _prediction_signature([same_second_track, same_track]),
         }
         result = _verify_alignment(rows, signatures)["loki"]
-        self.assertEqual(result["tracks"], 1)
+        self.assertEqual(result["tracks"], 2)
+        self.assertFalse(result["prediction_order_identical"])
         self.assertIn("duration", result["common_strata_axes"])
         self.assertEqual(result["available_modality_flags"], ["lidar_valid", "rgb_valid"])
 
         changed_time = same_track | {"grid_times_us": [0, 400000]}
-        signatures["model-b"] = _prediction_signature([changed_time])
+        signatures["model-b"] = _prediction_signature([same_second_track, changed_time])
         with self.assertRaisesRegex(ValueError, "grid_times_us"):
             _verify_alignment(rows, signatures)
 
         changed_gt = same_track | {"targets": np.array([1, 3])}
-        signatures["model-b"] = _prediction_signature([changed_gt])
+        signatures["model-b"] = _prediction_signature([same_second_track, changed_gt])
         with self.assertRaisesRegex(ValueError, "targets misalignment"):
             _verify_alignment(rows, signatures)
 
         changed_rgb = same_track | {
             "source_flags": {"rgb_valid": np.array([False, False]), "lidar_valid": np.array([True, True])},
         }
-        signatures["model-b"] = _prediction_signature([changed_rgb])
+        signatures["model-b"] = _prediction_signature([same_second_track, changed_rgb])
         with self.assertRaisesRegex(ValueError, "modality flag rgb_valid"):
+            _verify_alignment(rows, signatures)
+
+        signatures["model-b"] = _prediction_signature([same_track, same_track])
+        with self.assertRaisesRegex(ValueError, "duplicate locator"):
             _verify_alignment(rows, signatures)
 
 

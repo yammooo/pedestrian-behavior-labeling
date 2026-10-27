@@ -146,6 +146,20 @@ Peak process CUDA allocation is4,870,881,280 bytes (4.54 GiB), reserved10,521,41
 
 An actual ROAD smoke with three simultaneous W&B handles is prepared using `independent-integration/selection.json`, at most two selected training updates and one epoch, followed by selected-checkpoint prediction/plot checks. Automatic permission review rejected the launch because earlier approval named four independent smokes rather than these three new shared runs. Specific approval is pending; no new W&B run or full LiDAR training was started by that rejected action.
 
+## LOKI LiDAR interruption — 2026-10-27
+
+Read-only W&B inspection reports all three shared LOKI LiDAR runs as `crashed`, with23 completed epoch records each. The laptop was initially unavailable; subsequent SSH inspection verified all six local checkpoints as described below. The original interruption cause remains unknown. No attempt was restarted. These are best-so-far source-validation results from interrupted seed0 attempts, not completed100/15-budget comparisons.
+
+| Variant / W&B run | Best logged epoch | Best val track-weighted F1 | CE at selection | Epoch23 F1 /CE |
+|---|---:|---:|---:|---:|
+|[norm](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/174hbyxs)|11|74.27%|0.4258|68.36% /0.6205|
+|[temporal-small](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/kl8tx60k)|12|76.41%|0.3764|73.02% /0.5073|
+|[branches-small](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/lv4h365e)|17|73.11%|0.4573|72.59% /0.5504|
+
+The trainer atomically replaces each selected `best.pt`, then `last.pt` and local history before its W&B epoch log. Published epoch evidence therefore follows successful local saves; weights remain local and cannot be recovered from W&B alone. Keep the interruption status and shortened budget explicit; do not relabel these as normal patience stops. [Cloud audit](../../outputs/experiments/E002b/loki-interruption-wandb-audit.json) retains exact values. Deterioration after the best epochs supports preserving these development checkpoints, but does not prove later training could never improve F1.
+
+**SSH verification,27 October:** all six `best.pt`/`last.pt` files load using `torch.load(weights_only=True, map_location="cpu")`, strictly match their declared model, and contain finite weights. Best epochs11/12/17 and all epoch23 last checkpoints match local histories and selection. No forward pass or training was run. Group/child statuses remain `incomplete`, with empty failure lists and no recorded Python traceback/normal exit. W&B internal logs show successful uploads until26 October17:03 local, reconnect attempts27 October11:36 and network timeouts11:39. No training process is active; `who -b` reports a new boot at11:42. This is consistent with an external interruption/resume/reboot, but does not establish its original cause. Kernel/system logs are unavailable to the unprivileged account; noninteractive sudo requires authentication. [Local audit](../../outputs/experiments/E002b/loki-interruption-local-audit.json) records the checks and limits. Separate validation-only exports from these verified best checkpoints are possible without retraining; none were generated in this diagnosis.
+
 ## Online training F1 — 2026-10-26
 
 Subsequent runs record epoch `training_f1` in local `history.json` and `train/macro_f1` against `epoch` in W&B. This is the same fixed four-class track-weighted macro-F1 aggregation as validation: accepted GT only, each track contributes total weight1, padding/unlabeled slots contribute zero, and absent classes contribute zero F1. Sum confusion matrices across the entire epoch before calculating F1; do not average batch/track F1 values. Independent and grouped trainers use the same shared metric operation.

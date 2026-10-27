@@ -652,6 +652,22 @@ uv run --no-project --python "$e002a_root/extractor-env/bin/python" python scrip
 
 This checks one complete64-track training update per model and one validation batch on each source, after warming the same input schedule. It discards weights and logs no W&B run. Timings include CPU preparation and GPU updates; source assembly, model construction and final evidence exports are outside those timings. It does not measure a complete epoch or a worst-case workload.
 
+### E002b interrupted-checkpoint evaluation
+
+The [LOKI checkpoint recovery](experiments/E002b-normalization-capacity/README.md#evaluation-only-checkpoint-exports--approved2026-10-27) exports the three selected best models from the interrupted23-epoch LiDAR group. This is a separate validation-only command; it does not restart training or change the original attempts. Use the dedicated evaluation checkout and original CUDA12.6 extractor environment:
+
+```bash
+cd /home/user20/projects/pedestrian-behavior-labeling-e002b-evaluation
+export PYTHONPATH="$PWD/src" OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+
+uv run --no-project --python "$PWD/outputs/experiments/E002a/extractor-env/bin/python" \
+  python scripts/evaluate-e002b-loki-dditr-checkpoints.py
+```
+
+Defaults pin the verified original group and saved inference limits, then choose a fresh timestamped evaluation directory under `outputs/experiments/E002b/runs/`. `--original-run`, `--profile`, `--outputs-root` and `--output` expose their explicit paths. The command requires CUDA, validates checkpoint/frozen-input identities and reproduced validation metrics, and saves full predictions, strata and PNG/SVG plots before creating three linked W&B evaluation-only records. Checkpoints/full predictions remain local. Original training histories/statuses/W&B runs are untouched; stale training profiles are neither rewritten nor accepted as a new training calibration. Each invocation creates a new export and three new W&B records, so it is unnecessary for ordinary viewer refreshes. In the viewer choose **Source validation (E002a/b)** and look for the evaluation-only labels.
+
+### E002a feature diagnostics
+
 The [DINO patch visual check](experiments/E002a-feature-feasibility/README.md#dino-patch-visual-check--2026-10-19) adds PCA/similarity panels and a corrected crop gallery from the same development sample: `scripts/check-e002a-rgb.py --help`. It reuses the completed probe and original checkpoint without a segmentation head or training.
 
 Add `--compare-crop-scales` with a fresh output directory for the [1.5×/2×/3× side-by-side diagnostic](experiments/E002a-feature-feasibility/README.md#crop-size-visual-comparison--2026-10-19); every crop remains 256×256. These earlier diagnostics retain their original scales; the E002a pilot now uses cached CLS from3× crops.

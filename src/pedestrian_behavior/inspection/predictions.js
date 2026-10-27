@@ -15,7 +15,7 @@ async function api(path, params={}, body=null) {
   if(!response.ok)throw new Error(value.error || response.statusText);
   return value;
 }
-function label(run) {const arms={g:'Geometry', 'g-rgb':'Geometry + RGB', 'g-dditr':'Geometry + LiDAR'};const config=arms[run.configuration]?`${arms[run.configuration]} (${run.configuration})`:run.configuration;const design=run.variant_label?`${run.variant_label} (${run.model_variant})`:run.architecture;const architecture=run.variant_label?` · ${run.architecture}`:'';const selected=run.selected_epoch?` · selected e${run.selected_epoch}`:'';return `${run.experiment} · ${design} · ${config} · ${run.source}${architecture} · max${run.epochs}/pat${run.patience} · seed${run.seed}${selected} · ${run.attempt}`;}
+function label(run) {const arms={g:'Geometry', 'g-rgb':'Geometry + RGB', 'g-dditr':'Geometry + LiDAR'};const config=arms[run.configuration]?`${arms[run.configuration]} (${run.configuration})`:run.configuration;const design=run.variant_label?`${run.variant_label} (${run.model_variant})`:run.architecture;const architecture=run.variant_label?` · ${run.architecture}`:'';const selected=run.selected_epoch?` · selected e${run.selected_epoch}`:'';const evaluation=run.evaluation_label?` · ${run.evaluation_label}`:'';return `${run.experiment} · ${design} · ${config} · ${run.source}${architecture} · max${run.epochs}/pat${run.patience} · seed${run.seed}${selected}${evaluation} · ${run.attempt}`;}
 function options(select, values, selected) {
   select.replaceChildren();
   values.forEach(([value,text])=>{const option=node('option',text); option.value=value;select.append(option);});

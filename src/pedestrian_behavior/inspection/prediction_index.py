@@ -102,12 +102,46 @@ class PredictionIndex:
                     result_split = "test"
                 elif experiment in ("E002a", "E002b"):
                     group_child = config.get("execution") == "shared-g-dditr" or bool(config.get("shared_execution_id"))
-                    valid_configuration = (config.get("kind") == "exploratory-source-validation"
-                                           if not group_child else status.get("kind") == "exploratory-source-validation")
-                    if (not valid_configuration or status.get("kind") not in (None, "exploratory-source-validation")
-                            or config.get("held_out_tests") is True):
-                        continue
                     result_split = "validation"
+                    variant = config.get("model_variant")
+                    origin = config.get("origin_training_run", {})
+                    completed = config.get("training_completed_epochs")
+                    selected = config.get("selected_checkpoint_epoch")
+                    checkpoint_evaluation = (config.get("kind") == "checkpoint-evaluation"
+                        and config.get("evaluation_only") is True and config.get("training_state") == "interrupted"
+                        and config.get("execution") == "checkpoint-evaluation"
+                        and config.get("origin_execution") == "shared-g-dditr"
+                        and config.get("held_out_tests") is False
+                        and config.get("evaluation_group_id") == directory.parent.name
+                        and type(completed) is int and completed > 0
+                        and type(selected) is int and 1 <= selected <= completed
+                        and experiment == "E002b" and config.get("arm") in ("g-dditr", "g-rgb-dditr")
+                        and isinstance(variant, str) and variant
+                        and origin.get("run_id") and origin.get("run_url")
+                        and origin.get("selected_epoch") == selected
+                        and origin.get("completed_training_epochs") == completed
+                        and status.get("kind") == "checkpoint-evaluation"
+                        and status.get("evaluation_only") is True and status.get("training_state") == "interrupted"
+                        and status.get("training_completed_epochs") == completed
+                        and status.get("selected_checkpoint_epoch") == selected)
+                    if checkpoint_evaluation:
+                        parent_status = json.loads((directory.parent/"status.json").read_text())
+                        if (parent_status.get("status") != "complete"
+                                or parent_status.get("kind") != "checkpoint-evaluation"
+                                or parent_status.get("evaluation_only") is not True
+                                or parent_status.get("training_state") != "interrupted"
+                                or parent_status.get("training_completed_epochs") != completed
+                                or parent_status.get("execution") != "checkpoint-evaluation"
+                                or parent_status.get("origin_execution") != "shared-g-dditr"
+                                or parent_status.get("held_out_tests") is not False
+                                or variant not in parent_status.get("variants", ())):
+                            continue
+                    else:
+                        valid_configuration = (config.get("kind") == "exploratory-source-validation"
+                            if not group_child else status.get("kind") == "exploratory-source-validation")
+                        if (not valid_configuration or status.get("kind") not in (None, "exploratory-source-validation")
+                                or config.get("held_out_tests") is True):
+                            continue
                     if group_child:
                         parent_status = json.loads((directory.parent/"status.json").read_text())
                         if (parent_status.get("status") != "complete" or parent_status.get("smoke")
@@ -136,7 +170,14 @@ class PredictionIndex:
                                       "branches-small": "Branches small"}.get(model_variant, model_variant),
                     "seed": settings["seed"], "epochs": settings["epochs"], "patience": settings["patience"],
                     "classes": config["classes"], "datasets": datasets, "split": result_split,
-                    "selected_epoch": provenance.get("selected_checkpoint_epoch", selection.get("epoch")),
+                    "selected_epoch": config.get("selected_checkpoint_epoch",
+                        provenance.get("selected_checkpoint_epoch", selection.get("epoch"))),
+                    "evaluation_only": config.get("evaluation_only", False),
+                    "evaluation_label": (f"Evaluation only · interrupted after {config['training_completed_epochs']} epochs"
+                                         if config.get("kind") == "checkpoint-evaluation" else None),
+                    "training_state": config.get("training_state"),
+                    "training_completed_epochs": config.get("training_completed_epochs"),
+                    "origin_training_run": config.get("origin_training_run"),
                     "attempt": directory.name}
             except (OSError, ValueError, KeyError, TypeError) as error:
                 warnings.append(f"{directory.name}: {error}")

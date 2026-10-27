@@ -209,6 +209,58 @@ class PredictionViewerTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Incompatible targets"):
             index.query(selected, "loki", split="validation")
 
+    def test_checkpoint_evaluation_catalog_requires_complete_evaluation_parent(self):
+        outputs = run_fixture(self.root)
+        e002_fixture(self.root)
+        epochs = {"norm": 11, "temporal-small": 12, "branches-small": 17}
+        run_root = outputs/"experiments/E002b/runs/checkpoint-eval-loki-g-dditr-test"
+        write_json(run_root/"status.json", {"status": "complete", "kind": "checkpoint-evaluation",
+            "execution": "checkpoint-evaluation", "origin_execution": "shared-g-dditr",
+            "evaluation_only": True, "training_state": "interrupted",
+            "training_completed_epochs": 23, "held_out_tests": False, "variants": list(epochs)})
+        for variant, epoch in epochs.items():
+            child = run_root/variant
+            write_json(child/"config.json", {"experiment": "E002b", "source": "loki", "arm": "g-dditr",
+                "configuration": "g-dditr", "model_variant": variant, "classes": CLASSES,
+                "settings": {"seed": 0, "epochs": 100, "patience": 15},
+                "execution": "checkpoint-evaluation", "origin_execution": "shared-g-dditr",
+                "evaluation_group_id": run_root.name, "kind": "checkpoint-evaluation", "evaluation_only": True,
+                "training_state": "interrupted", "training_completed_epochs": 23,
+                "selected_checkpoint_epoch": epoch, "held_out_tests": False,
+                "origin_training_run": {"run_id": "original-"+variant, "run_url": "https://wandb.ai/original",
+                    "selected_epoch": epoch, "completed_training_epochs": 23}})
+            write_json(child/"status.json", {"status": "complete", "kind": "checkpoint-evaluation",
+                "evaluation_only": True, "training_state": "interrupted", "training_completed_epochs": 23,
+                "selected_checkpoint_epoch": epoch})
+            write_json(child/"provenance.json", {"selection": {"epoch": epoch}})
+            prediction_dir = child/"loki-validation"
+            prediction_dir.mkdir(parents=True)
+            save_predictions(prediction_dir/"predictions.npz", [prediction("p"), prediction("q", True)])
+
+        incomplete = outputs/"experiments/E002b/runs/shared-loki-incomplete"
+        write_json(incomplete/"status.json", {"status": "incomplete", "execution": "shared-g-dditr",
+                                                "held_out_tests": False})
+        child = incomplete/"norm"
+        write_json(child/"config.json", {"experiment": "E002b", "source": "loki", "arm": "g-dditr",
+            "model_variant": "norm", "classes": CLASSES, "settings": {"seed": 0, "epochs": 100, "patience": 15},
+            "execution": "shared-g-dditr", "held_out_tests": False})
+        write_json(child/"status.json", {"status": "complete", "kind": "exploratory-source-validation"})
+        prediction_dir = child/"loki-validation"
+        prediction_dir.mkdir(parents=True)
+        save_predictions(prediction_dir/"predictions.npz", [prediction("p"), prediction("q", True)])
+
+        index = PredictionIndex(outputs, self.root/"cache", AXES)
+        validation = index.catalog("validation")["runs"]
+        evaluated = [run for run in validation if run.get("evaluation_only")]
+        self.assertEqual(len(evaluated), 3)
+        self.assertEqual({run["model_variant"] for run in evaluated}, set(epochs))
+        self.assertTrue(all(run["evaluation_label"] == "Evaluation only · interrupted after 23 epochs"
+                            and run["training_state"] == "interrupted"
+                            and run["training_completed_epochs"] == 23
+                            and run["origin_training_run"]["run_id"].startswith("original-")
+                            for run in evaluated))
+        self.assertFalse(any("shared-loki-incomplete" in run["relative"] for run in validation))
+
     def test_review_split_persistence_and_legacy_default(self):
         outputs = run_fixture(self.root)
         e002_fixture(self.root)

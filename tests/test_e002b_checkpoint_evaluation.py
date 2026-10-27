@@ -15,6 +15,17 @@ from pedestrian_behavior.experiments.e002b_group import AXES
 
 
 class CheckpointEvaluationTest(unittest.TestCase):
+    def test_profiled_singleton_may_exceed_total_tokens_but_not_shape_bounds(self):
+        profile = {"max_tracks": 64, "temporal_cells": 665856,
+                   "microbatch_tokens": 1460024, "frame_tokens": 524288}
+        self.assertTrue(evaluation._validate_packed_shape(1, 101**2, 1499487, 15856, profile))
+        with self.assertRaisesRegex(ValueError, "resource bounds"):
+            evaluation._validate_packed_shape(2, 2*101**2, 1499487, 15856, profile)
+        with self.assertRaisesRegex(ValueError, "resource bounds"):
+            evaluation._validate_packed_shape(1, profile["temporal_cells"] + 1, 100, 10, profile)
+        with self.assertRaisesRegex(ValueError, "resource bounds"):
+            evaluation._validate_packed_shape(1, 101**2, 100, profile["frame_tokens"] + 1, profile)
+
     def test_checkpoint_metrics_require_full_confusion_and_loss_parity(self):
         metrics = {
             "track_ce": .75,

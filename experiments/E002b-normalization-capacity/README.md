@@ -170,6 +170,8 @@ Fresh evaluation-only directories own float32 unpadded predictions, GT/masks/tim
 
 This command has its own inference-only identity/resource checks. It does not rewrite or relax stale training-calibration profiles. Implementation, execution and acceptance evidence follow when complete.
 
+The first export attempt at `outputs/experiments/E002b/runs/checkpoint-eval-loki-g-dditr-20261027-f82e35f` failed before inference/W&B because the new preflight incorrectly treated the grouping-token budget as a whole-track ceiling. Original validation packing evidence at line1694 contains a complete101-slot singleton with1,499,487 total point tokens, above the1,460,024 grouping budget, but only15,856 tokens/frame and10,201 temporal cells. The existing packer intentionally retains oversized single tracks and spatially chunks their frames. The corrected check follows that existing rule, preserves all tracks/points, and still enforces multi-track, temporal and per-frame bounds. The failed output remains as evidence; no original artifact or calibration profile changed. CPU222 tests pass (12 CUDA skips), including the regression and evaluation logging-failure preservation.
+
 ## Online training F1 — 2026-10-26
 
 Subsequent runs record epoch `training_f1` in local `history.json` and `train/macro_f1` against `epoch` in W&B. This is the same fixed four-class track-weighted macro-F1 aggregation as validation: accepted GT only, each track contributes total weight1, padding/unlabeled slots contribute zero, and absent classes contribute zero F1. Sum confusion matrices across the entire epoch before calculating F1; do not average batch/track F1 values. Independent and grouped trainers use the same shared metric operation.

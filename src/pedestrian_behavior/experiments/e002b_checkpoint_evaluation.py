@@ -280,7 +280,7 @@ def _packing_summary(dataset, profile):
     lengths = {i: dataset.entries[i]["slots"] for i in range(len(dataset))}
     costs = {i: dataset.cost(i) for i in range(len(dataset))}
     max_cells = max_tokens = max_tracks = max_frame_tokens = 0
-    physical_batches = 0
+    physical_batches = oversized_singletons = max_oversized_tokens = 0
     for start in range(0, len(dataset), 64):
         logical = list(range(start, min(start + 64, len(dataset))))
         groups = pack_tracks(logical, lengths, costs, profile)
@@ -290,16 +290,28 @@ def _packing_summary(dataset, profile):
             tokens = sum(costs[i] for i in group)
             frame_tokens = max(int(dataset.supply.points.counts[dataset.entries[i]["locator"]].max(initial=0))
                                for i in group)
-            if (n > profile["max_tracks"] or padded_cells > profile["temporal_cells"]
-                    or tokens > profile["microbatch_tokens"] or frame_tokens > profile["frame_tokens"]):
-                raise ValueError("Validation packing exceeds the saved track/token/frame resource bounds")
+            oversized = _validate_packed_shape(n, padded_cells, tokens, frame_tokens, profile)
             max_tracks, max_cells, max_tokens = max(max_tracks, n), max(max_cells, padded_cells), max(max_tokens, tokens)
             max_frame_tokens = max(max_frame_tokens, frame_tokens)
+            oversized_singletons += oversized
+            if oversized:
+                max_oversized_tokens = max(max_oversized_tokens, tokens)
             physical_batches += 1
     return {"logical_batch_size": 64, "physical_batches": physical_batches,
             "max_physical_tracks": max_tracks, "max_padded_temporal_cells": max_cells,
             "max_physical_point_tokens": max_tokens, "max_frame_tokens": max_frame_tokens,
+            "oversized_singleton_batches": oversized_singletons,
+            "max_oversized_singleton_point_tokens": max_oversized_tokens,
             "profile": profile}
+
+
+def _validate_packed_shape(tracks, temporal_cells, point_tokens, max_frame_tokens, profile):
+    oversized_singleton = tracks == 1 and point_tokens > profile["microbatch_tokens"]
+    if (tracks > profile["max_tracks"] or temporal_cells > profile["temporal_cells"]
+            or max_frame_tokens > profile["frame_tokens"]
+            or point_tokens > profile["microbatch_tokens"] and not oversized_singleton):
+        raise ValueError("Validation packing exceeds the saved track/token/frame resource bounds")
+    return oversized_singleton
 
 
 def _conditions_from_checkpoint(checkpoint):

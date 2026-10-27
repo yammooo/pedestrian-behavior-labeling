@@ -94,11 +94,21 @@ def _checkpoint_identity(run, experiment, config, provenance):
         digest = provenance.get("checkpoint_sha256") or original.get("best_checkpoint_sha256")
         if not digest:
             raise ValueError(f"Missing original selected checkpoint hash for {run}")
-        return digest, original
+        if original.get("best_checkpoint_sha256") != digest:
+            raise ValueError(f"Recovered selected-checkpoint hash differs from its original training record: {run}")
+        original_group = provenance.get("original_training_group")
+        variant = config.get("model_variant")
+        original_checkpoint = Path(original_group) / variant / "best.pt" if original_group and variant else None
+        verified_path = None
+        if original_checkpoint is not None and original_checkpoint.is_file():
+            if _file_hash(original_checkpoint) != digest:
+                raise ValueError(f"Recovered checkpoint lineage hash differs from accessible original file: {original_checkpoint}")
+            verified_path = str(original_checkpoint)
+        return digest, original | {"accessible_original_checkpoint_path": verified_path}
     checkpoint = run / "best.pt"
     if not checkpoint.is_file():
         raise ValueError(f"Missing selected checkpoint file: {checkpoint}")
-    return _file_hash(checkpoint), {}
+    return _file_hash(checkpoint), {"checkpoint_file_path": str(checkpoint)}
 
 
 def _dataset_identity(source, provenance):
@@ -142,7 +152,7 @@ def _run_record(experiment, config_path):
     if not all(path.is_file() for path in (metrics_path, predictions_path, history_path, provenance_path)):
         raise ValueError(f"Incomplete completed result files: {run}")
     metrics, history, provenance = (_read_json(metrics_path), _read_json(history_path), _read_json(provenance_path))
-    if metrics.get("split") != split:
+    if metrics.get("split") != "validation":
         raise ValueError(f"Wrong evaluation split in {metrics_path}: {metrics.get('split')!r}")
     if not isinstance(history, list) or not history:
         raise ValueError(f"Missing epoch history: {history_path}")
@@ -182,7 +192,8 @@ def _run_record(experiment, config_path):
     row = {
         "experiment": experiment, "source": source, "arm": arm, "variant": variant,
         "label": ARM_LABELS[arm] + (f" / {variant}" if experiment == "E002b" else ""),
-        "run_path": str(run), "split": split, "status": status.get("status"),
+        "run_path": str(run), "split": "validation", "source_split_directory": split,
+        "status": status.get("status"),
         "kind": status.get("kind"), "seed": provenance.get("seed", settings.get("seed")),
         "fusion_protocol": config.get("fusion_protocol"),
         "availability": model.get("availability", []),
@@ -228,6 +239,29 @@ def _run_record(experiment, config_path):
         "classes": config.get("classes", list(CLASS_LABELS)),
     }
     return row
+
+
+def _input_paths(records):
+    paths = set()
+    for row in records:
+        run = Path(row["run_path"])
+        paths.update((run / "config.json", run / "status.json", run / "history.json", run / "provenance.json",
+                      Path(row["metrics_path"]), Path(row["predictions_path"])))
+        if row["checkpoint_lineage"].get("accessible_original_checkpoint_path"):
+            group = Path(row["checkpoint_lineage"]["accessible_original_checkpoint_path"]).parent.parent
+            paths.update((group / "status.json", group / "provenance.json"))
+            origin_child = Path(row["checkpoint_lineage"]["accessible_original_checkpoint_path"]).parent
+            paths.update(origin_child / name for name in ("config.json", "status.json", "history.json", "provenance.json"))
+        if row["kind"] == "checkpoint-evaluation":
+            paths.update((run.parent / "status.json", run.parent / "provenance.json"))
+    missing = [str(path) for path in paths if not path.is_file()]
+    if missing:
+        raise ValueError(f"A result input disappeared during audit: {missing[0]}")
+    return sorted(paths)
+
+
+def _input_hash_snapshot(paths):
+    return {path.as_posix(): {"sha256": _file_hash(path), "bytes": path.stat().st_size} for path in paths}
 
 
 def _array_hash(array):
@@ -503,56 +537,168 @@ def _plot_per_class(output, records):
     plt.close(fig)
 
 
+def _model_order(row):
+    return (row["experiment"], ARMS.index(row["arm"]),
+            ("base", "norm", "temporal-small", "branches-small").index(row["variant"]))
+
+
+def _plot_validation_f1_curves(output, records):
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    fig, axes = plt.subplots(2, 4, figsize=(17, 8), sharex="col", sharey="row")
+    palette = {"base": "#30343b", "norm": "#4063d8", "temporal-small": "#df8544", "branches-small": "#379b6b"}
+    arms = ARMS
+    for row_index, source in enumerate(SOURCES):
+        for column_index, arm in enumerate(arms):
+            ax = axes[row_index, column_index]
+            subset = [r for r in records if r["source"] == source and r["arm"] == arm]
+            subset.sort(key=_model_order)
+            for record in subset:
+                history = record["history"]
+                epochs = [item["epoch"] for item in history]
+                color = palette[record["variant"]]
+                label = record["experiment"] + (f"/{record['variant']}" if record["experiment"] == "E002b" else "")
+                selected_history = next(item for item in history if item["epoch"] == record["selection_epoch"])
+                ax.plot(epochs, [item.get("validation_f1") for item in history], color=color,
+                        linestyle="-", alpha=.9, linewidth=1.8, label=label)
+                ax.scatter([record["selection_epoch"]], [selected_history["validation_f1"]], color=color,
+                           marker="o", edgecolor="black", linewidth=.45, s=30, zorder=4)
+                ax.scatter([epochs[-1]], [history[-1].get("validation_f1")], color=color,
+                           marker="x", linewidth=.9, s=24, zorder=4)
+            ax.set_title(f"{source} · {arm}")
+            ax.set_xlabel("Epoch")
+            ax.set_ylabel("Track-weighted macro-F1")
+            ax.set_ylim(0, 1)
+            ax.grid(alpha=.2)
+            if subset:
+                handles, labels = ax.get_legend_handles_labels()
+                unique = dict(zip(labels, handles))
+                ax.legend(unique.values(), unique.keys(), fontsize=7, frameon=False)
+    fig.suptitle("Validation learning curves · circle = selected checkpoint, × = final recorded epoch")
+    fig.tight_layout()
+    for ext in ("png", "svg"):
+        fig.savefig(output / f"validation-f1-curves.{ext}", dpi=160)
+    plt.close(fig)
+
+
 def _plot_loss_curves(output, records):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    fig, axes = plt.subplots(2, 2, figsize=(15, 9), sharex="col", sharey="row")
-    palette = {"g": "#4063d8", "g-rgb": "#df8544", "g-dditr": "#379b6b", "g-rgb-dditr": "#9c5ba5"}
-    styles = {"base": "-", "norm": "-", "temporal-small": "--", "branches-small": ":"}
+    fig, axes = plt.subplots(2, 4, figsize=(17, 8), sharex="col", sharey="row")
+    palette = {"base": "#30343b", "norm": "#4063d8", "temporal-small": "#df8544", "branches-small": "#379b6b"}
     for row_index, source in enumerate(SOURCES):
-        for column_index, experiment in enumerate(("E002a", "E002b")):
+        for column_index, arm in enumerate(ARMS):
             ax = axes[row_index, column_index]
-            subset = [r for r in records if r["source"] == source and r["experiment"] == experiment]
+            subset = sorted((r for r in records if r["source"] == source and r["arm"] == arm), key=_model_order)
             for record in subset:
                 history = record["history"]
                 epochs = [item["epoch"] for item in history]
-                color, style = palette[record["arm"]], styles[record["variant"]]
-                model_label = record["arm"] + (f"/{record['variant']}" if experiment == "E002b" else "")
+                color = palette[record["variant"]]
+                label = record["experiment"] + (f"/{record['variant']}" if record["experiment"] == "E002b" else "")
                 ax.plot(epochs, [item.get("training_ce") for item in history], color=color,
-                        linestyle=style, alpha=.32, linewidth=1.1)
+                        linestyle="--", alpha=.35, linewidth=1.1)
                 ax.plot(epochs, [item.get("validation_ce") for item in history], color=color,
-                        linestyle=style, alpha=.9, linewidth=1.7, label=model_label)
-                ax.scatter([record["selection_epoch"]], [record["selection_ce"]], color=color,
-                           marker="o", edgecolor="black", linewidth=.35, s=20, zorder=3)
-            ax.set_title(f"{source} · {experiment}")
+                        linestyle="-", alpha=.92, linewidth=1.7, label=label)
+                selected_history = next(item for item in history if item["epoch"] == record["selection_epoch"])
+                ax.scatter([record["selection_epoch"]], [selected_history["validation_ce"]], color=color,
+                           marker="o", edgecolor="black", linewidth=.35, s=23, zorder=3)
+            ax.set_title(f"{source} · {arm}")
             ax.set_xlabel("Epoch")
             ax.set_ylabel("Equal-track cross-entropy")
             ax.grid(alpha=.2)
             if subset:
                 handles, labels = ax.get_legend_handles_labels()
                 unique = dict(zip(labels, handles))
-                ax.legend(unique.values(), unique.keys(), fontsize=7, ncol=2, frameon=False)
-    fig.suptitle("Training CE (faint) and validation CE (solid/colored), selected validation checkpoint marked")
+                ax.legend(unique.values(), unique.keys(), fontsize=7, frameon=False)
+    fig.suptitle("Train CE (dashed/faint) and validation CE (solid); circle = selected checkpoint")
     fig.tight_layout()
     for ext in ("png", "svg"):
         fig.savefig(output / f"loss-curves.{ext}", dpi=160)
     plt.close(fig)
 
 
+def _plot_common_strata(output, records):
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    selected = []
+    for source in SOURCES:
+        chosen = [
+            next(r for r in records if r["source"] == source and r["experiment"] == "E002a" and r["arm"] == "g"),
+            next(r for r in records if r["source"] == source and r["experiment"] == "E002a" and r["arm"] == "g-dditr"),
+            next(r for r in records if r["source"] == source and r["experiment"] == "E002b" and
+                 r["arm"] == "g-dditr" and r["variant"] == "temporal-small"),
+        ]
+        if any("gt-count" not in row["strata"] for row in chosen):
+            raise ValueError(f"gt-count is not recorded for the selected common comparison: {source}")
+        bins = [label for label in chosen[0]["strata"]["gt-count"]
+                if all(label in row["strata"]["gt-count"] for row in chosen[1:])]
+        if not bins:
+            raise ValueError(f"No common gt-count bins for selected models: {source}")
+        for label in bins:
+            denominator = chosen[0]["strata"]["gt-count"][label]["denominators"]["gt_frames"]
+            supported = chosen[0]["strata"]["gt-count"][label]["track_weighted"]["supported_classes"]
+            for row in chosen[1:]:
+                item = row["strata"]["gt-count"][label]
+                if item["denominators"]["gt_frames"] != denominator:
+                    raise ValueError(f"gt-count support differs across selected models: {source}/{label}")
+                if item["track_weighted"]["supported_classes"] != supported:
+                    raise ValueError(f"supported classes differ across selected models: {source}/{label}")
+        selected.append((source, chosen, bins))
+    fig, axes = plt.subplots(1, 2, figsize=(13, 5), sharey=True)
+    colors = ("#586ba4", "#379b6b", "#df8544")
+    for ax, (source, rows, bins) in zip(axes, selected):
+        x = np.arange(len(bins))
+        width = .24
+        for offset, (row, color) in enumerate(zip(rows, colors)):
+            values = [row["strata"]["gt-count"][label]["track_weighted"]["macro_f1"] for label in bins]
+            ax.bar(x + (offset - 1) * width, values, width=width, color=color,
+                   label=f"{row['experiment']} {row['label']}")
+        first = rows[0]
+        labels = []
+        for label in bins:
+            item = first["strata"]["gt-count"][label]
+            gt_frames = item["denominators"]["gt_frames"]
+            supported = item["track_weighted"]["supported_classes"]
+            class_ids = ",".join(str(index) for index in supported) or "none"
+            labels.append(f"{label}\nGT={gt_frames}\nclasses={class_ids}")
+        ax.set_xticks(x, labels, fontsize=8)
+        ax.set_title(source)
+        ax.set_ylim(0, 1)
+        ax.grid(axis="y", alpha=.2)
+        ax.legend(fontsize=7, frameon=False)
+    fig.supylabel("Track-weighted macro-F1")
+    fig.suptitle("Common GT-count strata · E002a geometry, E002a LiDAR, E002b LiDAR temporal-small")
+    fig.tight_layout()
+    for ext in ("png", "svg"):
+        fig.savefig(output / f"common-gt-count-strata.{ext}", dpi=160)
+    plt.close(fig)
+
+
 def summarize(outputs_root, output):
     outputs_root, output = Path(outputs_root), Path(output)
+    if output.exists():
+        raise FileExistsError(f"Refusing to overwrite existing review artifacts: {output}")
     records = collect(outputs_root)
+    input_paths = _input_paths(records)
+    input_hashes_before = _input_hash_snapshot(input_paths)
     signatures = _verify_and_recompute(records)
     alignment = _verify_alignment(records, signatures)
     contracts = _verify_source_contracts(records)
-    if output.exists():
-        raise FileExistsError(f"Refusing to overwrite existing review artifacts: {output}")
     output.mkdir(parents=True)
     _write_tables(output, records)
     _plot_primary(output, records)
     _plot_per_class(output, records)
+    _plot_validation_f1_curves(output, records)
     _plot_loss_curves(output, records)
+    _plot_common_strata(output, records)
+    input_hashes_after = _input_hash_snapshot(input_paths)
+    if input_hashes_before != input_hashes_after:
+        changed = [path for path in input_hashes_before
+                   if input_hashes_before[path] != input_hashes_after.get(path)]
+        raise ValueError(f"One or more input JSON/NPZ files changed during aggregation: {changed[:3]}")
     summary = {
         "schema": "e002ab-results-review-v1",
         "scope": "26 unique, selected source-validation checkpoints; no held-out evaluation or inference",
@@ -564,6 +710,17 @@ def summarize(outputs_root, output):
         "source_split_integrity": contracts,
         "prediction_alignment_integrity": alignment,
         "normalization_sha256_by_source": {source: sorted({r["normalization_sha256"] for r in records if r["source"] == source and r["normalization_sha256"]}) for source in SOURCES},
+        "input_json_npz_hashes_before_after": {
+            path: {"before": input_hashes_before[path]["sha256"],
+                   "after": input_hashes_after[path]["sha256"],
+                   "bytes_before": input_hashes_before[path]["bytes"],
+                   "bytes_after": input_hashes_after[path]["bytes"],
+                   "unchanged": input_hashes_before[path] == input_hashes_after[path]}
+            for path in input_hashes_before},
+        "input_json_npz_hashes_unchanged": True,
+        "figures": ["primary-macro-f1.png/svg", "per-class-f1.png/svg",
+                    "validation-f1-curves.png/svg", "loss-curves.png/svg",
+                    "common-gt-count-strata.png/svg"],
         "results": records,
     }
     (output / "results.json").write_text(json.dumps(summary, indent=2, sort_keys=True, allow_nan=False) + "\n")

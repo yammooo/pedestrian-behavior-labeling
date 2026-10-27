@@ -530,7 +530,7 @@ def _plot_per_class(output, records):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    fig, axes = plt.subplots(1, 2, figsize=(14, 8), sharex=True, sharey=True)
+    fig, axes = plt.subplots(1, 2, figsize=(14, 8), sharex=True, sharey=True, constrained_layout=True)
     for ax, source in zip(axes, SOURCES):
         rows = [r for r in records if r["source"] == source]
         rows.sort(key=lambda r: (r["experiment"], ARMS.index(r["arm"]),
@@ -545,9 +545,8 @@ def _plot_per_class(output, records):
             for j in range(4):
                 ax.text(j, i, f"{values[i, j]:.2f}", ha="center", va="center",
                         color="white" if values[i, j] < .55 else "black", fontsize=7)
-    fig.colorbar(image, ax=axes, label="Validation track-weighted class F1", shrink=.82)
+    fig.colorbar(image, ax=axes, label="Validation track-weighted class F1", shrink=.82, pad=.04)
     fig.suptitle("Selected checkpoints · all four supported classes")
-    fig.tight_layout()
     for ext in ("png", "svg"):
         fig.savefig(output / f"per-class-f1.{ext}", dpi=160)
     plt.close(fig)

@@ -168,9 +168,21 @@ Load the saved model/configuration and frozen source normalization, then evaluat
 
 Fresh evaluation-only directories own float32 unpadded predictions, GT/masks/times/conditions, full metrics/denominators, all applicable observation strata, PNG/SVG plots and explicit origin/checkpoint hashes. Training-curve exports reference the original23-epoch histories. New W&B records use `job_type=checkpoint-evaluation` and link to their original attempts; they log configuration/provenance, aggregate metrics/tables and PNG plots, while checkpoints/full predictions stay local. Local numerical evidence precedes external logging; failures propagate without fallback/retry. The viewer must identify these as completed evaluations of interrupted training, separately from completed training attempts.
 
-This command has its own inference-only identity/resource checks. It does not rewrite or relax stale training-calibration profiles. Implementation, execution and acceptance evidence follow when complete.
+This command has its own inference-only identity/resource checks. It does not rewrite or relax stale training-calibration profiles. Implementation, execution and acceptance evidence follow below.
 
 The first export attempt at `outputs/experiments/E002b/runs/checkpoint-eval-loki-g-dditr-20261027-f82e35f` failed before inference/W&B because the new preflight incorrectly treated the grouping-token budget as a whole-track ceiling. Original validation packing evidence at line1694 contains a complete101-slot singleton with1,499,487 total point tokens, above the1,460,024 grouping budget, but only15,856 tokens/frame and10,201 temporal cells. The existing packer intentionally retains oversized single tracks and spatially chunks their frames. The corrected check follows that existing rule, preserves all tracks/points, and still enforces multi-track, temporal and per-frame bounds. The failed output remains as evidence; no original artifact or calibration profile changed. CPU222 tests pass (12 CUDA skips), including the regression and evaluation logging-failure preservation.
+
+**Completed export:** `outputs/experiments/E002b/runs/checkpoint-eval-loki-g-dditr-20261027-bc718f0` in the canonical Aalto outputs tree, executed from `/home/user20/projects/pedestrian-behavior-labeling-e002b-evaluation` at revision `bc718f0f1a186cc7ef58ad3eb1f53344d83a1772` with the original CUDA12.6 extractor environment. The parent and all three child evaluation statuses are complete; original training statuses remain interrupted/incomplete after23 epochs.
+
+| Variant / evaluation-only W&B record | Selected epoch | Recovered track CE | Recovered track-weighted macro-F1 |
+|---|---:|---:|---:|
+|[norm](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/kzit2eqi)|11|0.42578|74.27%|
+|[temporal-small](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/fbqzw2dr)|12|0.37639|76.41%|
+|[branches-small](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/t6fbkaox)|17|0.45725|73.11%|
+
+Each model covers1,861 tracks /61,900 context frames /60,231 accepted GT frames. Recomputed checkpoint metrics and confusion matrices match at declared `rtol=1e-6`, `atol=1e-8`; saved float32 prediction roundtrips also reproduce metrics. Each export includes14 observation axes,21 PNG and21 SVG plots. Point-cache access is read-only, encoder loads/calls are zero, and all17 audited original/source-manifest files remain hash-identical. W&B readback reports all three records `finished`,21 PNGs and46 aggregate table artifacts per record; no NPZ/PT/PTH or model/prediction artifacts were uploaded. Numerical evidence stays under each export's `metrics.json`, `evaluation-evidence.json` and `provenance.json`.
+
+The [viewer acceptance](../../outputs/inspection/prediction-viewer/acceptance/checkpoint-evaluation-20261027/verification.json) discovers26 completed validation records without warnings, compares the E002a reference and all three recovered checkpoints on1,861 common tracks with14 matching axes, and identifies them as evaluation-only results from interrupted23-epoch training. No training, updates to original local/W&B attempts, encoder inference, held-out or opposite-dataset evaluation occurred.
 
 ## Online training F1 — 2026-10-26
 

@@ -1,6 +1,6 @@
 # E002b — Branch normalization and model capacity
 
-**Updated 2026-10-27: all 18 selected models have complete source-validation artifacts. Fifteen trainings stopped normally; the three LOKI LiDAR trainings were interrupted after 23 epochs and evaluated separately from their saved best checkpoints.** The [joint E002a/E002b results review](results-review.md) compares all 26 models, including class, loss and observation-condition diagnostics. Design agreed 2026-10-25; execution and historical acceptance evidence remain below.
+**Updated 2026-10-28: all 18 selected models have complete source-validation artifacts. Fifteen trainings stopped normally; the three LOKI LiDAR trainings were interrupted after 23 epochs and evaluated separately from their saved best checkpoints.** The [joint E002a/E002b results review](results-review.md) compares all 26 original models, including class, loss and observation-condition diagnostics. The later dropout diagnostic is owned by [E002c](../E002c-rgb-regularization/README.md). Design agreed 2026-10-25; execution and historical acceptance evidence remain below.
 
 ## Question and evidence
 
@@ -186,9 +186,9 @@ The [viewer acceptance](../../outputs/inspection/prediction-viewer/acceptance/ch
 
 ## RGB dropout probe — prepared 2026-10-28
 
-Exploratory overfitting check: retain `g-rgb`, seed0, frozen source populations/features, 100 epochs/15 patience, optimizer, source-validation selection and all E002b architecture settings. Cross `norm` (256-wide temporal) and `temporal-small` (128-wide) with temporal dropout 0.3 and 0.5 on ROAD-Waymo and LOKI: eight new attempts. Existing 0.1 runs are controls. Apply the new probability at all four temporal-block dropout sites: attention probabilities, attention output, FFN hidden activation and FFN output. No LiDAR block is present; geometry/RGB projections receive no dropout. The effective model spec and distinct W&B/run-directory names include the probability. Compare validation F1 and CE against the controls and online training F1/CE with its changing-weight, training-mode limitation. Stop short of held-out tests while choosing the next model.
+The later dropout comparison began under the E002b runner and output root. It is now recorded as the distinct [E002c RGB regularization diagnostic](../E002c-rgb-regularization/README.md), with its eight completed runs and original names/paths preserved. E002b's original 18-model normalization/capacity matrix and seed0 review remain unchanged.
 
-The [manual command](../../README.md#e002b-rgb-dropout-probe) uses the completed RTX 4080 calibration at `outputs/experiments/E002b/calibration-rgb-dropout-d6babbd/profile.json`: code revision `d6babbd`, 18/18 bounded workloads complete, maximum 477,665,792 CUDA bytes allocated. It uses 0.1 dropout for the same tensor shapes; it does not measure regularization or exact runtime at 0.3/0.5. Results and W&B links are **TBD**.
+The [manual command](../../README.md#e002c-rgb-temporal-dropout) used the completed RTX 4080 calibration at `outputs/experiments/E002b/calibration-rgb-dropout-d6babbd/profile.json`: code revision `d6babbd`, 18/18 bounded workloads complete, maximum 477,665,792 CUDA bytes allocated. It used 0.1 dropout for the same tensor shapes; it did not measure regularization or exact runtime at 0.3/0.5. E002c owns the results and W&B links.
 
 ## Online training F1 — 2026-10-26
 

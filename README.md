@@ -649,9 +649,9 @@ uv run --no-project --python "$e002a_root/extractor-env/bin/python" python scrip
   --output outputs/experiments/E002b/my-fresh-calibration
 ```
 
-### E002b RGB dropout probe
+### E002c RGB temporal dropout
 
-This exploratory follow-up runs `g-rgb` with `norm` and `temporal-small`, each at temporal dropout 0.3 and 0.5, on both sources. The old 0.1 runs are controls. Use the E002b evaluation checkout on `aalto` at revision `d6babbd` or newer, with matching code calibration; keep each output fresh. The completed calibration below measured the changed E002b code at 0.1 dropout, which has the same tensor shapes as 0.3/0.5.
+The [completed E002c diagnostic](experiments/E002c-rgb-regularization/README.md) ran `g-rgb` with `norm` and `temporal-small`, each at temporal dropout 0.3 and 0.5, on both sources. The old 0.1 E002b runs are controls. These are the original reproducibility commands: the E002b runner and output paths remain unchanged. The completed calibration measured the changed code at 0.1 dropout, which has the same tensor shapes as 0.3/0.5.
 
 ```bash
 cd /home/user20/projects/pedestrian-behavior-labeling-e002b-evaluation
@@ -668,7 +668,7 @@ for source in road-waymo loki; do
 done
 ```
 
-Each source launches four sequential attempts with distinct W&B names and local evidence. No held-out test is opened.
+Each source launches four sequential attempts with distinct W&B names and local evidence. The completed runs used revision `ca46415` and fresh output identifier `dropout-20261028-114606`. No held-out test was opened.
 
 ### E002b shared LiDAR training
 

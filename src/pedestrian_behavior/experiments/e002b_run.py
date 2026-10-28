@@ -66,13 +66,15 @@ def _profile_for(args):
 
 def assembly(args):
     _profile_for(args)
+    dropout = args.dropout
     policy = {
         "experiment": "E002b",
         "resource_code": resource_code,
         "validate_roots": validate_roots,
-        "model_spec": e002b.model_spec,
-        "model_factory": lambda arm, variant, profile: e002b.build_model(arm, variant, profile),
-        "run_name": f"e002b-{args.source}-{args.arm}-{args.model_variant}-s0"
+        "model_spec": lambda arm, variant: e002b.model_spec(arm, variant, dropout),
+        "model_factory": lambda arm, variant, profile: e002b.build_model(arm, variant, profile, dropout),
+        "run_name": f"e002b-{args.source}-{args.arm}-{args.model_variant}"
+        + (f"-d{int(dropout * 100):02d}" if dropout != .1 else "") + "-s0"
         + ("-smoke-" + args.output.name if args.smoke else ""),
     }
     return e002a_run.assembly(args, policy=policy)
@@ -85,6 +87,10 @@ def run(args):
         raise ValueError("g-rgb requires matching completed --rgb-preparation metadata")
     if args.smoke and args.smoke_selection is None:
         raise ValueError("Smoke requires an explicit bounded source train/validation selection")
+    if args.dropout not in (.1, .3, .5):
+        raise ValueError("E002b dropout must be 0.1, 0.3 or 0.5")
+    if args.dropout != .1 and (args.arm != "g-rgb" or args.model_variant not in ("norm", "temporal-small")):
+        raise ValueError("Higher dropout is scoped to the g-rgb norm/temporal-small comparison")
     _profile_for(args)
     torch.set_num_threads(2)
     axes = {key: value for key, value in e002a_run.STRATA.items()
@@ -98,6 +104,7 @@ def add_arguments(parser):
     parser.add_argument("--source", choices=("road-waymo", "loki"), required=True)
     parser.add_argument("--arm", choices=ARMS, required=True)
     parser.add_argument("--variant", dest="model_variant", choices=tuple(e002b.VARIANTS), required=True)
+    parser.add_argument("--dropout", type=float, choices=(.1, .3, .5), default=.1)
     parser.add_argument("--device", choices=("cpu", "cuda"), required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--profile", type=Path, required=True)

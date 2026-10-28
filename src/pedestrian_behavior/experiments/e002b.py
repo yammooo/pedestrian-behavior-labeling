@@ -14,7 +14,7 @@ VARIANTS = {
 }
 
 
-def model_spec(arm, variant):
+def model_spec(arm, variant, dropout=.1):
     if arm not in ARMS:
         raise ValueError("E002b supports only g, g-rgb and g-dditr arms")
     if variant not in VARIANTS:
@@ -35,7 +35,7 @@ def model_spec(arm, variant):
                      "ffn": settings["temporal_ffn"], "attention_bias": True,
                      "rope_base": 10000, "slot_seconds": .2, "bidirectional": True},
         "classifier": [settings["temporal_width"], 4],
-        "activation": "GELU", "dropout": .1, "layer_norm_eps": 1e-5,
+        "activation": "GELU", "dropout": dropout, "layer_norm_eps": 1e-5,
         "trainable_precision": "float32", "attention_backend": "torch-SDPA-math",
     }
     if "rgb_valid" in flags:
@@ -48,7 +48,7 @@ def model_spec(arm, variant):
     return spec
 
 
-def build_model(arm, variant, profile):
+def build_model(arm, variant, profile, dropout=.1):
     """Construct one frozen E002b model; execution and fitting stay with callers."""
-    model_spec(arm, variant)
-    return MultimodalClassifier(arm, profile, **VARIANTS[variant])
+    model_spec(arm, variant, dropout)
+    return MultimodalClassifier(arm, profile, temporal_dropout=dropout, **VARIANTS[variant])

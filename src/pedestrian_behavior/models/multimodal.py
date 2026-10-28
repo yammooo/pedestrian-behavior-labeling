@@ -29,7 +29,7 @@ def rotary(x):
 
 
 class TemporalBlock(nn.Module):
-    def __init__(self, width=256, ffn_width=1024):
+    def __init__(self, width=256, ffn_width=1024, dropout=.1):
         super().__init__()
         if width % 4:
             raise ValueError("Temporal width must divide evenly across four heads")
@@ -37,8 +37,8 @@ class TemporalBlock(nn.Module):
         self.qkv = nn.Linear(width, width * 3)
         self.out = nn.Linear(width, width)
         self.norm_ffn = nn.LayerNorm(width)
-        self.ffn = nn.Sequential(nn.Linear(width, ffn_width), nn.GELU(), nn.Dropout(.1), nn.Linear(ffn_width, width))
-        self.dropout = nn.Dropout(.1)
+        self.ffn = nn.Sequential(nn.Linear(width, ffn_width), nn.GELU(), nn.Dropout(dropout), nn.Linear(ffn_width, width))
+        self.dropout = nn.Dropout(dropout)
 
     def forward(self, x, valid):
         b, t, _ = x.shape
@@ -47,7 +47,7 @@ class TemporalBlock(nn.Module):
         # FP32 math avoids fused-backend mask-alignment limits on irregular track lengths.
         with sdpa_kernel(SDPBackend.MATH):
             y = F.scaled_dot_product_attention(rotary(q), rotary(k), v, attn_mask=valid[:, None, None, :],
-                                               dropout_p=.1 if self.training else 0.)
+                                               dropout_p=self.dropout.p if self.training else 0.)
         x = x + self.dropout(self.out(y.transpose(1, 2).reshape(b, t, width)))
         return x + self.dropout(self.ffn(self.norm_ffn(x)))
 
@@ -106,7 +106,7 @@ class MultimodalClassifier(nn.Module):
     """Frozen-feature readout; defaults preserve E002a's 64/128/128 -> 256 model."""
 
     def __init__(self, arm, profile, *, geometry_width=64, rgb_width=128, spatial_width=128,
-                 temporal_width=256, temporal_ffn=1024, normalize_branches=False):
+                 temporal_width=256, temporal_ffn=1024, normalize_branches=False, temporal_dropout=.1):
         super().__init__()
         if arm not in ARM_FLAGS:
             raise ValueError("Unknown multimodal arm")
@@ -119,8 +119,8 @@ class MultimodalClassifier(nn.Module):
         self.spatial_norm = nn.LayerNorm(spatial_width) if normalize_branches and self.spatial is not None else None
         fusion_width = geometry_width + rgb_width * int(self.rgb is not None) + spatial_width * int(self.spatial is not None)
         self.fusion = nn.Linear(fusion_width + len(ARM_FLAGS[arm]), temporal_width)
-        self.temporal = nn.ModuleList([TemporalBlock(temporal_width, temporal_ffn),
-                                       TemporalBlock(temporal_width, temporal_ffn)])
+        self.temporal = nn.ModuleList([TemporalBlock(temporal_width, temporal_ffn, temporal_dropout),
+                                       TemporalBlock(temporal_width, temporal_ffn, temporal_dropout)])
         self.final_norm = nn.LayerNorm(temporal_width)
         self.head = nn.Linear(temporal_width, 4)
         self.arm, self.profile = arm, dict(profile)

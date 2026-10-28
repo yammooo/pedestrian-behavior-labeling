@@ -11,7 +11,7 @@ Updated **2026-10-28**. We are developing a reliable **offline, given-track pede
 
 ## Next work
 
-1. Run the targeted [E002a RGB seeds 1–4 repeat](../experiments/E002a-feature-feasibility/README.md#geometry--rgb-repeat--seeds-14-prepared-2026-10-28) on both sources to inspect seed variation and online train/validation classification curves. Then discuss the [E002a/E002b shortlist](../experiments/E002b-normalization-capacity/results-review.md#what-this-supports-next) before any wider confirmation. Keep original geometry controls; validation-guided development is not final generalization evidence.
+1. Run the targeted [E002a RGB seeds 1–4 repeat](../experiments/E002a-feature-feasibility/README.md#geometry--rgb-repeat--seeds-14-prepared-2026-10-28) and the [E002b RGB dropout probe](../experiments/E002b-normalization-capacity/README.md#rgb-dropout-probe--prepared-2026-10-28) on both sources to inspect seed variation, regularization and train/validation curves. Then discuss the [E002a/E002b shortlist](../experiments/E002b-normalization-capacity/results-review.md#what-this-supports-next). Keep original geometry controls; validation-guided development is not final generalization evidence.
 2. Arrange a separate backup for valuable checkpoints/predictions; external storage is **TBD**. Original interrupted attempts and all earlier evidence remain preserved.
 3. Choose at most one substantial follow-up using measured error/cost evidence and the [schedule](research.md#schedule). Broader ontology, heterogeneous supervision and reliability experiments remain hypotheses.
 

@@ -152,6 +152,16 @@ class E002bModelTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             model_spec("g", "custom")
 
+    def test_rgb_regularization_changes_only_temporal_dropout(self):
+        for variant in ("norm", "temporal-small"):
+            for dropout in (.3, .5):
+                model = build_model("g-rgb", variant, PROFILE, dropout)
+                self.assertEqual(model_spec("g-rgb", variant, dropout)["dropout"], dropout)
+                self.assertTrue(all(block.dropout.p == block.ffn[2].p == dropout
+                                    for block in model.temporal))
+                self.assertIsNone(model.spatial)
+                self.assertEqual(tuple(model(batch_for("g-rgb")).shape), (2, 3, 4))
+
     def test_independent_runner_requires_current_code_and_exact_model_coverage(self):
         with tempfile.TemporaryDirectory() as directory:
             profile_path = Path(directory) / "profile.json"
@@ -189,6 +199,12 @@ class E002bModelTest(unittest.TestCase):
         self.assertIn(plan[0]["arm"], command)
         self.assertIn(plan[0]["variant"], command)
         self.assertIn("scripts/train-e002b.py", command)
+        regularization = attempts("loki", ["g-rgb"], ["norm", "temporal-small"], (.3, .5))
+        self.assertEqual(len(regularization), 4)
+        self.assertEqual(len({row["name"] for row in regularization}), 4)
+        self.assertEqual({row["dropout"] for row in regularization}, {.3, .5})
+        self.assertIn("0.5", attempt_command(regularization[-1], Path("outputs/experiments/E002b/runs/probe"),
+                                               "cuda", []))
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 # E002b — Branch normalization and model capacity
 
-**Design agreed 2026-10-25; shared LiDAR execution is implemented and passes CPU/CUDA equivalence and bounded timing checks. Its actual three-run W&B smoke awaits specific approval; independent geometry/RGB training is user-started.** Follow-up to the [eight E002a source-validation runs](../E002a-feature-feasibility/README.md#completed-source-validation-runs--2026-10-25). This record owns the new comparison; E002a retains its original models, checkpoints and results.
+**Updated 2026-10-27: all 18 selected models have complete source-validation artifacts. Fifteen trainings stopped normally; the three LOKI LiDAR trainings were interrupted after 23 epochs and evaluated separately from their saved best checkpoints.** The [joint E002a/E002b results review](results-review.md) compares all 26 models, including class, loss and observation-condition diagnostics. Design agreed 2026-10-25; execution and historical acceptance evidence remain below.
 
 ## Question and evidence
 
@@ -172,7 +172,7 @@ This command has its own inference-only identity/resource checks. It does not re
 
 The first export attempt at `outputs/experiments/E002b/runs/checkpoint-eval-loki-g-dditr-20261027-f82e35f` failed before inference/W&B because the new preflight incorrectly treated the grouping-token budget as a whole-track ceiling. Original validation packing evidence at line1694 contains a complete101-slot singleton with1,499,487 total point tokens, above the1,460,024 grouping budget, but only15,856 tokens/frame and10,201 temporal cells. The existing packer intentionally retains oversized single tracks and spatially chunks their frames. The corrected check follows that existing rule, preserves all tracks/points, and still enforces multi-track, temporal and per-frame bounds. The failed output remains as evidence; no original artifact or calibration profile changed. CPU222 tests pass (12 CUDA skips), including the regression and evaluation logging-failure preservation.
 
-**Completed export:** `outputs/experiments/E002b/runs/checkpoint-eval-loki-g-dditr-20261027-bc718f0` in the canonical Aalto outputs tree, executed from `/home/user20/projects/pedestrian-behavior-labeling-e002b-evaluation` at revision `bc718f0f1a186cc7ef58ad3eb1f53344d83a1772` with the original CUDA12.6 extractor environment. The parent and all three child evaluation statuses are complete; original training statuses remain interrupted/incomplete after23 epochs.
+**Completed export:** `outputs/experiments/E002b/runs/checkpoint-eval-loki-g-dditr-20261027-bc718f0` in the canonical Aalto outputs tree, executed from `/home/user20/projects/pedestrian-behavior-labeling-e002b-evaluation` at revision `bc718f0f1a186cc7ef58ad3eb1f53344d83a1772` with the original CUDA12.6 extractor environment. The parent and all three child evaluation statuses are complete; original training statuses remain interrupted/incomplete after 23 epochs.
 
 | Variant / evaluation-only W&B record | Selected epoch | Recovered track CE | Recovered track-weighted macro-F1 |
 |---|---:|---:|---:|

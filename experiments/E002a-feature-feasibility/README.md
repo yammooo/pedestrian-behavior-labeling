@@ -1,5 +1,7 @@
 # E002a — First multimodal behavior pilot
 
+**Results update, 2026-10-27:** the [joint E002a/E002b review](../E002b-normalization-capacity/results-review.md) compares all eight completed E002a controls with all 18 selected E002b models on source validation. Original preparation, runs and results remain unchanged.
+
 **Agreed pilot specification, updated 2026-10-22.** First behavior pilot within [E002](../E002-multimodal-reference/README.md). Scope, branch/tensor interfaces, dropout, fitting, batching policy and450 GB point-cache budget are settled below. The [model, trainer and manual commands](#model-and-training-acceptance--2026-10-21) are implemented, with bounded GPU operational checks; full RGB preparation and all-entry readback are complete. Modality benefit and final research architecture remain hypotheses. At the2026-10-22 snapshot, build6050233's first full ROAD geometry attempt was active; the [population-scale throughput check](#full-population-throughput-check--2026-10-22) reveals an input-pipeline problem. No full attempt had completed at that snapshot. Completed extraction/resource/semantic probes are [preparatory evidence](#preparatory-work), not separate behavior experiments. Later E002 comparisons may use different architectures.
 
 The existing directory name is retained for stable commands, artifact references and links. This record owns the pilot specification, preparation, fitting settings and eventual behavior results.

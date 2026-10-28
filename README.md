@@ -666,6 +666,17 @@ uv run --no-project --python "$PWD/outputs/experiments/E002a/extractor-env/bin/p
 
 Defaults pin the verified original group and saved inference limits, then choose a fresh timestamped evaluation directory under `outputs/experiments/E002b/runs/`. `--original-run`, `--profile`, `--outputs-root` and `--output` expose their explicit paths. The command requires CUDA, validates checkpoint/frozen-input identities and reproduced validation metrics, and saves full predictions, strata and PNG/SVG plots before creating three linked W&B evaluation-only records. Checkpoints/full predictions remain local. Original training histories/statuses/W&B runs are untouched; stale training profiles are neither rewritten nor accepted as a new training calibration. Each invocation creates a new export and three new W&B records, so it is unnecessary for ordinary viewer refreshes. In the viewer choose **Source validation (E002a/b)** and look for the evaluation-only labels.
 
+### E002a/E002b saved-results comparison
+
+The [26-model review](experiments/E002b-normalization-capacity/results-review.md) can be regenerated from the existing local run artifacts, without inference, GPU use or W&B logging:
+
+```bash
+uv run --locked --extra cpu python scripts/summarize-e002ab.py \
+  outputs outputs/experiments/E002b/my-fresh-results-review
+```
+
+Run from a checkout with the canonical outputs tree attached. On `aalto`, use `--extra cu118` instead of `--extra cpu`. The command verifies the frozen eight E002a /18 E002b checkpoint matrix, reconstructs metrics from saved predictions and checks common GT/times/conditions before writing JSON, CSV and PNG/SVG comparisons. It rejects missing/duplicate models and an existing destination; use a fresh destination when rerunning. Original attempts and feature caches remain unchanged. The three recovered LOKI exports count as their original interrupted models, not new replicates.
+
 ### E002a feature diagnostics
 
 The [DINO patch visual check](experiments/E002a-feature-feasibility/README.md#dino-patch-visual-check--2026-10-19) adds PCA/similarity panels and a corrected crop gallery from the same development sample: `scripts/check-e002a-rgb.py --help`. It reuses the completed probe and original checkpoint without a segmentation head or training.

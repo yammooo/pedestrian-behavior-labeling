@@ -639,7 +639,7 @@ uv run --no-project --python "$e002a_root/extractor-env/bin/python" python scrip
 
 ### E002b RGB dropout probe
 
-This exploratory follow-up runs `g-rgb` with `norm` and `temporal-small`, each at temporal dropout 0.3 and 0.5, on both sources. The old 0.1 runs are controls. Use the E002b evaluation checkout on `aalto` after pulling the updated branch; keep each output fresh. Calibration reuses E002a packing limits and measures the changed E002b code at the original 0.1 dropout, which has the same tensor shapes as 0.3/0.5.
+This exploratory follow-up runs `g-rgb` with `norm` and `temporal-small`, each at temporal dropout 0.3 and 0.5, on both sources. The old 0.1 runs are controls. Use the E002b evaluation checkout on `aalto` at revision `d6babbd` or newer, with matching code calibration; keep each output fresh. The completed calibration below measured the changed E002b code at 0.1 dropout, which has the same tensor shapes as 0.3/0.5.
 
 ```bash
 cd /home/user20/projects/pedestrian-behavior-labeling-e002b-evaluation
@@ -647,13 +647,10 @@ export PYTHONPATH="$PWD/src" OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_TH
 e002a_root="$PWD/outputs/experiments/E002a"
 e002b_root="$PWD/outputs/experiments/E002b"
 probe_id="dropout-$(date -u +%Y%m%d-%H%M%S)"
-uv run --no-project --python "$e002a_root/extractor-env/bin/python" python scripts/calibrate-e002b.py \
-  --device cuda --reference-profile "$e002a_root/calibration-train-f1-seeds-20261028/profile.json" \
-  --output "$e002b_root/calibration-$probe_id"
 for source in road-waymo loki; do
   uv run --no-project --python "$e002a_root/extractor-env/bin/python" python scripts/run-e002b-independent.py \
     --source "$source" --arms g-rgb --variants norm temporal-small --dropouts 0.3 0.5 \
-    --device cuda --profile "$e002b_root/calibration-$probe_id/profile.json" \
+    --device cuda --profile "$e002b_root/calibration-rgb-dropout-d6babbd/profile.json" \
     --rgb-preparation "$e002a_root/rgb-cache-preparation-03/cache.json" \
     --output "$e002b_root/runs/$probe_id-$source" || break
 done

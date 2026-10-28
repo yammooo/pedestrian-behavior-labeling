@@ -188,7 +188,7 @@ The [viewer acceptance](../../outputs/inspection/prediction-viewer/acceptance/ch
 
 Exploratory overfitting check: retain `g-rgb`, seed0, frozen source populations/features, 100 epochs/15 patience, optimizer, source-validation selection and all E002b architecture settings. Cross `norm` (256-wide temporal) and `temporal-small` (128-wide) with temporal dropout 0.3 and 0.5 on ROAD-Waymo and LOKI: eight new attempts. Existing 0.1 runs are controls. Apply the new probability at all four temporal-block dropout sites: attention probabilities, attention output, FFN hidden activation and FFN output. No LiDAR block is present; geometry/RGB projections receive no dropout. The effective model spec and distinct W&B/run-directory names include the probability. Compare validation F1 and CE against the controls and online training F1/CE with its changing-weight, training-mode limitation. Stop short of held-out tests while choosing the next model.
 
-The [manual command](../../README.md#e002b-rgb-dropout-probe) recalibrates the changed code on the 4080 before the eight runs. The resource calibration uses 0.1 dropout for the same tensor shapes; it does not claim to measure regularization or exact runtime at 0.3/0.5. Results and W&B links are **TBD**.
+The [manual command](../../README.md#e002b-rgb-dropout-probe) uses the completed RTX 4080 calibration at `outputs/experiments/E002b/calibration-rgb-dropout-d6babbd/profile.json`: code revision `d6babbd`, 18/18 bounded workloads complete, maximum 477,665,792 CUDA bytes allocated. It uses 0.1 dropout for the same tensor shapes; it does not measure regularization or exact runtime at 0.3/0.5. Results and W&B links are **TBD**.
 
 ## Online training F1 — 2026-10-26
 

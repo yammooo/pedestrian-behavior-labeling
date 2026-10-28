@@ -687,7 +687,7 @@ for source in road-waymo loki; do
       --rgb-branch-dropout "$rgb_dropout" --device cuda \
       --profile "$e002c_profile" \
       --rgb-preparation "$e002a_root/rgb-cache-preparation-03/cache.json" \
-      --output "outputs/experiments/E002c/runs/$attempt_id-$source-rgbdrop${rgb_dropout#0.}0" || exit 1
+      --output "outputs/experiments/E002c/runs/$attempt_id-$source-rgbdrop${rgb_dropout#0.}0" || break 2
   done
 done
 ```

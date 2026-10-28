@@ -1,6 +1,6 @@
 # E002a and E002b — source-validation comparison
 
-Reviewed **27 October 2026**. This report compares **26 selected checkpoints: eight E002a controls and 18 E002b models**, 13 per dataset. All use **seed 0 and source validation**. Fifteen E002b trainings stopped normally; three LOKI LiDAR trainings were interrupted after 23 epochs. Their saved best checkpoints now have complete evaluation-only exports, without retraining. These exports are not additional training replicates.
+Reviewed **27 October 2026**, with an E002a RGB seed-repeat update on **28 October**. The main comparison covers **26 selected checkpoints: eight E002a controls and 18 E002b models**, 13 per dataset, all using **seed 0 and source validation**. The separate RGB update adds seeds1–4 for each source; it does not turn the E002b comparisons into repeated-seed results. Fifteen E002b trainings stopped normally; three LOKI LiDAR trainings were interrupted after 23 epochs. Their saved best checkpoints now have complete evaluation-only exports, without retraining. These exports are not additional training replicates.
 
 Designs and historical execution evidence: [E002a](../E002a-feature-feasibility/README.md), [E002b](README.md). The [E001-family report](../E001b-2d-bbox-contribution/results-review.md) concerns five-seed **held-out tests**; those scores are not directly comparable to this validation table.
 
@@ -10,7 +10,7 @@ Designs and historical execution evidence: [E002a](../E002a-feature-feasibility/
 - **LayerNorm is not a universal fix.** It improves ROAD RGB substantially, but lowers geometry F1 on both sources and lowers LOKI LiDAR F1. The compact-branch variants offer no consistent improvement.
 - **RGB's F1 and loss trade-offs depend on source.** On ROAD, temporal-small nearly matches normalized RGB F1 with much lower CE. On LOKI, its slightly higher F1 comes with worse CE than the other RGB controls. Smaller capacity does not uniformly solve overfitting.
 - **LiDAR is more useful than RGB in these selected runs.** E002a's geometry + RGB + LiDAR is below geometry + LiDAR on both sources. There is no E002b three-modality arm, so this does not establish that RGB can never help a better combined model.
-- **Late training still reduces online train CE while validation CE worsens.** Historical train F1 was not logged. We cannot determine from these curves alone how much is better training classification versus confidence sharpening, or identify the shortcut responsible.
+- **The new E002a RGB repeats show a classification gap as well as worsening validation CE.** Online train F1 ends at94–99% ROAD /88–91% LOKI, while validation F1 ends at54–58% /64–66%. Historical seed0 models lack train F1, and these changing-weight, dropout-active traces are not fixed-checkpoint train scores; the cause of the gap remains unknown.
 
 ## Comparison contract
 
@@ -69,7 +69,7 @@ Class-supporting track counts overlap when a track changes state. All 13 models 
 
 ## Loss behavior and capacity
 
-The epoch training CE uses changing weights and active dropout. Validation CE evaluates a fixed epoch model in evaluation mode. Their difference is a useful diagnostic, not a matched train/test evaluation or direct calibration measure. No historical training-F1 curve can be recovered without another inference pass; [future online logging](README.md#online-training-f1--2026-10-26) is implemented separately.
+The epoch training CE uses changing weights and active dropout. Validation CE evaluates a fixed epoch model in evaluation mode. Their difference is a useful diagnostic, not a matched train/test evaluation or direct calibration measure. The original seed0 models have no train-F1 curve; the [new RGB repeat](../E002a-feature-feasibility/README.md#selected-rgb-checkpoints-across-five-seeds) records online train F1 for seeds1–4.
 
 On ROAD RGB, E002a selects epoch 50 with **train CE 0.035 /validation CE 2.179** despite reaching its minimum validation CE much earlier. The normalized model improves F1 but still selects CE 1.423. Temporal-small reaches almost the same F1 at CE **0.801**. This is a useful F1/loss compromise, not proof that RGB recording shortcuts or a particular layer caused the failure.
 
@@ -93,6 +93,12 @@ The geometry control prevents a blanket capacity conclusion: every ROAD E002b ge
 ![Training and validation CE](../../outputs/experiments/E002b/results-review-20261027-final/loss-curves.png)
 
 [CE curves SVG](../../outputs/experiments/E002b/results-review-20261027-final/loss-curves.svg) · [Validation F1 PNG](../../outputs/experiments/E002b/results-review-20261027-final/validation-f1-curves.png) /[SVG](../../outputs/experiments/E002b/results-review-20261027-final/validation-f1-curves.svg). Circles mark selected epochs; LOKI E002b LiDAR histories end at the interruption.
+
+### E002a RGB repeat: seed variation and classification gap
+
+The [five-seed table with per-run W&B links](../E002a-feature-feasibility/README.md#selected-rgb-checkpoints-across-five-seeds) reports E002a `g-rgb` selected source-validation F1 as **58.12% ±0.90 pp ROAD** and **66.74% ±0.50 pp LOKI** (mean ± sample SD). Seeds1–4 alone give58.40% ±0.72 pp and66.81% ±0.54 pp. The repeat's ROAD selected epochs span8–42 and CE0.876–1.881; LOKI spans6–22 and CE0.545–0.717. Seed0 remains in the five-seed F1 summary but lacks online training F1.
+
+The [ROAD CE/F1 plot](../../outputs/experiments/E002a/rgb-seed-curves-20261028/figures/road-waymo-g-rgb-seed-curves.png) ([SVG](../../outputs/experiments/E002a/rgb-seed-curves-20261028/figures/road-waymo-g-rgb-seed-curves.svg)) and [LOKI plot](../../outputs/experiments/E002a/rgb-seed-curves-20261028/figures/loki-g-rgb-seed-curves.png) ([SVG](../../outputs/experiments/E002a/rgb-seed-curves-20261028/figures/loki-g-rgb-seed-curves.svg)) put train/validation CE over train/validation F1 for each repeat seed; dotted lines show selected epochs. Online train F1 continues rising after validation F1 largely plateaus, while validation CE worsens. This supports training-set classification fitting in addition to confidence sharpening, with the online-measure caveat. It does not isolate an RGB shortcut or establish a modality effect: geometry controls were not repeated, and all scores are source validation.
 
 The compact branches barely reduce total parameters when the 256-wide temporal stack stays intact. Their disappointing results do not establish that all capacity reduction fails; they compress a different part of the model.
 
@@ -227,9 +233,9 @@ Transition `near`, `steady` and `unknown` are **frame-state** slices within labe
 ## What this supports next
 
 1. **Shortlist smaller-temporal geometry + LiDAR for confirmation**, retaining E002a geometry and the matched normalized LiDAR control. This is the clearest common-source result, not an established final model. The additional cost of repeat seeds should be measured and agreed before launching them.
-2. **Keep RGB provisional.** ROAD favors temporal-small as a F1/CE compromise, while LOKI does not give the same loss result. A new broad bottleneck/dropout search or another three-modality run is not justified automatically. If RGB remains central, first specify the single failure hypothesis and the smallest discriminating comparison.
+2. **Keep RGB provisional.** ROAD favors temporal-small as a F1/CE compromise, while LOKI does not give the same loss result. The completed E002a RGB seed repeat confirms a large online train/validation classification gap; the targeted E002b dropout probe is in progress. Avoid broad architecture or regularization search until that result is reviewed.
 3. **Do not restart the interrupted group merely to make the table look complete.** Report its best-so-far checkpoints and common-epoch comparison. A future confirmation run needs an explicit fresh budget and output directory; it would be a new attempt.
-4. **Separate confidence from classification in future diagnostics.** Record online train F1 alongside CE; consider a fixed-checkpoint train/validation comparison only if needed to resolve the mechanism. ECE, temperature scaling and selective prediction have not been evaluated here.
+4. **Separate confidence from classification in future diagnostics.** Online train F1 alongside CE is now available for the E002a RGB repeats; consider a fixed-checkpoint train/validation comparison only if needed to resolve the mechanism. ECE, temperature scaling and selective prediction have not been evaluated here.
 5. **Keep final generalization evaluation separate.** Declare the confirmation seeds, stopping rule and eventual held-out/transfer access before execution. Current validation-guided choices cannot establish an untouched-test or strict dataset-excluded transfer claim. The current comparison supports a practical reference, not architectural novelty.
 
 No new encoder, scene retrieval module or heterogeneous-supervision design is selected by this report. The evidence supports a narrower confirmation step before committing the remaining project time to one substantive extension.
@@ -242,6 +248,7 @@ Canonical artifacts are on `aalto` under `/home/user20/projects/pedestrian-behav
 - [All primary/secondary CSV rows](../../outputs/experiments/E002b/results-review-20261027-final/primary-metrics.csv), [per-class CSV](../../outputs/experiments/E002b/results-review-20261027-final/per-class-metrics.csv), [all observation-bin/class CSV rows](../../outputs/experiments/E002b/results-review-20261027-final/strata-metrics.csv). Empty scores stay blank in CSV and `null` in JSON.
 - Five PNG/SVG figure pairs: primary F1, class F1, validation-F1 curves, train/validation CE and GT-count strata. Full per-run confusion/strata plots remain in original evaluation folders and linked W&B records; checkpoints and full predictions remain local.
 - [Regeneration command](../../README.md#e002ae002b-saved-results-comparison), [collector](../../src/pedestrian_behavior/experiments/e002ab_results.py), [focused acceptance tests](../../tests/test_e002ab_results.py). All metrics reconstruct from saved float32 predictions at `rtol=1e-8`, `atol=1e-10`. Records with different ordering are matched by unique locator; relative/absolute archive references are canonicalized, and GT/time/condition membership matches exactly. Thirteen condition axes are common to all arms; RGB/LiDAR availability axes occur only in enabled arms, giving 14 or 15 axes there.
+- The separate RGB repeat uses Aalto `outputs/experiments/E002a/runs/g-rgb-seeds-1-4-20261028-083613-197026/` and original seed0 at `outputs/experiments/E002a/runs/rgb-lidar-20261023-125617/`. Local ignored `outputs/experiments/E002a/rgb-seed-curves-20261028/` contains copied histories/provenance/status and two PNG/SVG pairs; [plot regeneration](../../README.md#e002a-rgb-seed-history-figures) reads histories only. This update did not repeat the 26-checkpoint prediction/confusion audit or evaluate held-out tests.
 
 Original histories, checkpoints, statuses, prediction archives and W&B records stay unchanged. The three recovered LOKI records link back to interrupted training and retain 23 completed epochs. All other models stopped by patience before the 100-epoch cap. E002a LOKI LiDAR already reaches its best F1 at epoch 18, so restricting all four LOKI LiDAR histories to their first 23 epochs preserves the best-so-far ranking (76.41 /75.87 /74.27 /73.11% for temporal-small /E002a /norm /branches-small). This controls the observed epoch window, not the counterfactual effect of completing training; later improvement remains unknown.
 

@@ -1,6 +1,6 @@
 # E002a — First multimodal behavior pilot
 
-**Results update, 2026-10-27:** the [joint E002a/E002b review](../E002b-normalization-capacity/results-review.md) compares all eight completed E002a controls with all 18 selected E002b models on source validation. Original preparation, runs and results remain unchanged.
+**Results update, 2026-10-28:** the [joint E002a/E002b review](../E002b-normalization-capacity/results-review.md) compares all eight seed0 E002a controls with 18 selected E002b models on source validation, and now includes the separate E002a `g-rgb` seeds1–4 repeat. Original preparation, runs and results remain unchanged.
 
 **Agreed pilot specification, updated 2026-10-22.** First behavior pilot within [E002](../E002-multimodal-reference/README.md). Scope, branch/tensor interfaces, dropout, fitting, batching policy and450 GB point-cache budget are settled below. The [model, trainer and manual commands](#model-and-training-acceptance--2026-10-21) are implemented, with bounded GPU operational checks; full RGB preparation and all-entry readback are complete. Modality benefit and final research architecture remain hypotheses. At the2026-10-22 snapshot, build6050233's first full ROAD geometry attempt was active; the [population-scale throughput check](#full-population-throughput-check--2026-10-22) reveals an input-pipeline problem. No full attempt had completed at that snapshot. Completed extraction/resource/semantic probes are [preparatory evidence](#preparatory-work), not separate behavior experiments. Later E002 comparisons may use different architectures.
 
@@ -72,13 +72,36 @@ The next agreed increment is [E002b's branch-normalization/capacity comparison](
 
 ## Geometry + RGB repeat — seeds 1–4 (prepared 2026-10-28)
 
-Run `g-rgb` with seeds 1–4 on both sources to characterize seed variation and compare online training classification with validation classification. Keep the E002a geometry + RGB model, frozen 3× DINO CLS cache, source populations/normalization, 100-epoch maximum, patience 15, AdamW, dropout, effective batch 64 and checkpoint-selection rule unchanged. Use one fresh output per seed/source and the current calibrated execution profile. The existing seed-0 validation result can join a five-seed validation summary; its historical training F1 is unavailable, so training-F1 curves use only seeds 1–4. Epoch training F1/CE use training-mode forwards while weights change; they are optimization traces, not fixed-checkpoint train evaluations. This repeat tests RGB run variance and the train/validation classification pattern; without repeated geometry controls it cannot establish a seed-robust RGB contribution. No held-out or opposite-dataset evaluation is planned. [Launcher command](../../README.md#e002a-geometry--rgb-repeat-seeds-14).
+The predeclared `g-rgb` repeat used seeds 1–4 on both sources to characterize seed variation and compare online training classification with validation classification. It kept the E002a geometry + RGB model, frozen 3× DINO CLS cache, source populations/normalization, 100-epoch maximum, patience 15, AdamW, dropout, effective batch 64 and checkpoint-selection rule unchanged. The existing seed-0 validation result joins the five-seed summary; its historical training F1 is unavailable, so training-F1 curves use only seeds 1–4. Epoch training F1/CE use training-mode forwards while weights change; they are optimization traces, not fixed-checkpoint train evaluations. This repeat tests RGB run variance and the train/validation classification pattern; without repeated geometry controls it cannot establish a seed-robust RGB contribution. No held-out or opposite-dataset evaluation was run. [Launcher command](../../README.md#e002a-geometry--rgb-repeat-seeds-14).
 
 The fixed-limit Aalto calibration at `outputs/experiments/E002a/calibration-train-f1-seeds-20261028/profile.json` is **complete** on the RTX 4080 with current train-F1 execution hashes: 56 measured workloads, zero failures, and unchanged limits of 64 tracks, 665,856 temporal cells, 1,460,024 physical point tokens, 1,810,000 ordinary padded tokens, four frames/chunk and 524,288 point tokens/frame. It used only development fixtures with discarded weights; no new behavior run or held-out evaluation. The calibration itself includes LiDAR stress shapes even though this repeat uses only RGB, to satisfy the existing shared E002a profile contract.
 
 The first user launch on 28 October failed in ROAD seed 1 before completing a training batch: `FeatureCatalog.source_identity` could not find a pinned Waymo camera Parquet while `/dev/nvme0n1p3` was unmounted. RGB training reads cached CLS features but checks native source file metadata for identity, so the partition must remain mounted throughout the run. W&B initialized run `omjlffnj` and then finished with no epoch records; the failed sweep/attempt remain under `outputs/experiments/E002a/runs/g-rgb-seeds-1-4-20261028-082357-122904/`. No retry or mutation of that output. The user subsequently confirmed the expected `/run/media/user20/F47C60057C5FC152` mount and the missing camera file exists there. A launcher preflight now rejects an unavailable pinned native root before starting W&B; run again only with a fresh output directory.
 
 The fresh repeat at Aalto `outputs/experiments/E002a/runs/g-rgb-seeds-1-4-20261028-083613-197026/` completed all eight attempts. [Per-source CE/F1 panels](../../README.md#e002a-rgb-seed-history-figures) use saved histories only, with train/validation CE above and online train/validation F1 below for seeds1–4. Selected source-validation F1 is **58.40% ±0.72 pp** on ROAD-Waymo and **66.81% ±0.54 pp** on LOKI (mean ± sample SD, four seeds). ROAD selected epochs are42/8/25/21; LOKI14/6/22/9. Training F1 continues upward while validation F1 changes little after selection, and validation CE rises, especially on ROAD. Training traces use changing weights and active dropout. These are exploratory source-validation curves, without fixed-checkpoint train evaluation or held-out results.
+
+### Selected RGB checkpoints across five seeds
+
+F1 is four-class track-weighted macro-F1 in percent; CE is track-averaged. Epochs show selected /last completed. Seed0 is the original pilot; seeds1–4 are the complete fresh repeat. Links point to each W&B run.
+
+| Seed | ROAD F1 | ROAD CE | Epochs | LOKI F1 | LOKI CE | Epochs |
+|---|---:|---:|---:|---:|---:|---:|
+| 0 | [56.97](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/c3fh137p) | 2.179 | 50/65 | [66.44](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/hwhjnm5h) | 0.578 | 11/26 |
+| 1 | [58.76](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/6t5dqjqk) | 1.881 | 42/57 | [66.37](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/i277kca5) | 0.646 | 14/29 |
+| 2 | [57.56](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/moo6e9c3) | 0.876 | 8/23 | [66.69](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/pnw36rx3) | 0.548 | 6/21 |
+| 3 | [59.20](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/nws120jo) | 1.692 | 25/40 | [66.59](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/7hqvcdw2) | 0.717 | 22/37 |
+| 4 | [58.10](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/k4fv3fqn) | 1.555 | 21/36 | [67.60](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/izrvqbmu) | 0.545 | 9/24 |
+| **Mean ± sample SD** | **58.12 ±0.90** | — | — | **66.74 ±0.50** | — | — |
+
+The selected F1 ranges are56.97–59.20% on ROAD and66.37–67.60% on LOKI. Across seeds1–4, final online training F1 is94.09–98.52% ROAD and87.80–90.74% LOKI, while final validation F1 is54.37–57.92% and64.08–65.69%, respectively. These curves show a classification gap as well as worsening validation CE; they do not measure fixed-checkpoint training performance. The five-seed RGB mean is not a controlled modality gain over a five-seed geometry baseline.
+
+![ROAD RGB seed CE and F1 curves](../../outputs/experiments/E002a/rgb-seed-curves-20261028/figures/road-waymo-g-rgb-seed-curves.png)
+
+[ROAD SVG](../../outputs/experiments/E002a/rgb-seed-curves-20261028/figures/road-waymo-g-rgb-seed-curves.svg)
+
+![LOKI RGB seed CE and F1 curves](../../outputs/experiments/E002a/rgb-seed-curves-20261028/figures/loki-g-rgb-seed-curves.png)
+
+[LOKI SVG](../../outputs/experiments/E002a/rgb-seed-curves-20261028/figures/loki-g-rgb-seed-curves.svg). The local ignored analysis root also retains the copied `history.json`, `provenance.json` and `status.json` used for regeneration. The source run folders remain on Aalto; the earlier mount-failed attempt is excluded.
 
 ## Retained data and evaluation contract
 

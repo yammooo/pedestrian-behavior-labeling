@@ -106,7 +106,8 @@ class MultimodalClassifier(nn.Module):
     """Frozen-feature readout; defaults preserve E002a's 64/128/128 -> 256 model."""
 
     def __init__(self, arm, profile, *, geometry_width=64, rgb_width=128, spatial_width=128,
-                 temporal_width=256, temporal_ffn=1024, normalize_branches=False, temporal_dropout=.1):
+                 temporal_width=256, temporal_ffn=1024, normalize_branches=False, temporal_dropout=.1,
+                 rgb_branch_dropout=0.):
         super().__init__()
         if arm not in ARM_FLAGS:
             raise ValueError("Unknown multimodal arm")
@@ -115,6 +116,7 @@ class MultimodalClassifier(nn.Module):
         self.geometry_norm = nn.LayerNorm(geometry_width) if normalize_branches else None
         self.rgb = nn.Linear(768, rgb_width) if "rgb_valid" in ARM_FLAGS[arm] else None
         self.rgb_norm = nn.LayerNorm(rgb_width) if normalize_branches and self.rgb is not None else None
+        self.rgb_branch_dropout = nn.Dropout1d(rgb_branch_dropout)
         self.spatial = SpatialReadout(spatial_width) if "lidar_valid" in ARM_FLAGS[arm] else None
         self.spatial_norm = nn.LayerNorm(spatial_width) if normalize_branches and self.spatial is not None else None
         fusion_width = geometry_width + rgb_width * int(self.rgb is not None) + spatial_width * int(self.spatial is not None)
@@ -151,6 +153,7 @@ class MultimodalClassifier(nn.Module):
             rgb = self.rgb(rgb)
             if self.rgb_norm is not None:
                 rgb = self.rgb_norm(rgb)
+            rgb = self.rgb_branch_dropout(rgb.transpose(1, 2)).transpose(1, 2)
             descriptors.append(rgb * flags[..., 1:2])
         if self.spatial is not None:
             lidar = g.new_zeros(b * t, self.spatial.project.out_features)

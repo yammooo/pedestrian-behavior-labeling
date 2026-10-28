@@ -1,6 +1,6 @@
-# E002c — RGB temporal-dropout diagnostic
+# E002c — RGB dropout diagnostics
 
-**Completed 2026-10-28.** This follow-up tests whether stronger temporal dropout improves the normalized geometry + RGB model's source-validation behavior. The runs were launched with the E002b runner before this separate logical record was agreed; their existing E002b output paths and W&B names remain unchanged.
+The temporal-dropout comparison completed 2026-10-28; the RGB branch-dropout follow-up below is prepared and awaiting execution. The completed runs were launched with the E002b runner before this separate logical record was agreed; their existing E002b output paths and W&B names remain unchanged.
 
 ## Comparison
 
@@ -51,3 +51,9 @@ Within every source/model pair, increasing dropout0.3→0.5 lowers final online 
 Canonical new runs: `aalto:/home/user20/projects/pedestrian-behavior-labeling/outputs/experiments/E002b/runs/dropout-20261028-114606-{road-waymo,loki}/`; original0.1 controls: `E002b/runs/independent-20261025-125024-264808/` (ROAD) and `E002b/runs/independent-20261025-134338-803720/` (LOKI). New runs used code revision `ca46415` and the completed RTX4080 [calibration](../E002b-normalization-capacity/README.md#rgb-dropout-probe--prepared-2026-10-28); local checkpoints, full float32 predictions, metrics, histories and plots remain in their original folders. [Local summary CSV](../../outputs/experiments/E002c/results-20261028/summary.csv) and copied JSON inputs retain the numerical evidence for this record. Each selected F1/CE above matches its saved validation metrics; class/support denominators agree within source across all 12 cells. W&B links for all 12 cells are in the F1 table; no artifacts were uploaded for this review.
 
 Keep the 0.1 controls as the current RGB references. Do not promote 0.5 from one ROAD F1 increase or start a wider dropout search on this evidence. A repeated-seed comparison would be needed to establish a robust gain; the current result is an exploratory source-validation diagnostic and does not alter E002b's original 18-model comparison or the E002a seed-repeat findings.
+
+## RGB branch dropout — prepared 2026-10-28
+
+This narrower follow-up tests whether regularizing the RGB descriptor itself changes the geometry + RGB validation gap. Use the E002b `g-rgb` `temporal-small` model with temporal dropout fixed at0.1. Apply dropout after the RGB projection and LayerNorm, before the existing validity mask and fusion. The dropout mask is shared across every timestep of a track, independently sampled for each track during training. Geometry, validity flags and evaluation inputs are unchanged. Compare RGB branch dropout0.3 and0.5 with the existing zero-branch-dropout E002b controls above, separately on ROAD-Waymo and LOKI. This isolates the regularization site more closely than the completed temporal-dropout comparison.
+
+Four new seed0 source-validation attempts use the same frozen populations, features, optimizer,100-epoch/patience15 budget and F1-selected checkpoint policy as the controls. Record attempts under `outputs/experiments/E002c/runs/` with `e002c-<source>-g-rgb-temporal-small-rgbdrop{30|50}-s0` W&B names. This is exploratory validation-guided development; do not use held-out tests to choose the dropout value. If a gain looks meaningful, repeat seeds before claiming it. [The manual command](../../README.md#e002c-rgb-branch-dropout) is the execution reference. Results: **pending**.

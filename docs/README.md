@@ -11,7 +11,7 @@ Updated **2026-10-28**. We are developing a reliable **offline, given-track pede
 
 ## Next work
 
-1. Discuss the [E002a/E002b shortlist](../experiments/E002b-normalization-capacity/results-review.md#what-this-supports-next) in light of the completed [RGB seed repeat](../experiments/E002a-feature-feasibility/README.md#selected-rgb-checkpoints-across-five-seeds) and [dropout diagnostic](../experiments/E002c-rgb-regularization/README.md). Predeclare any confirmation seeds, budgets and evaluation access before wider runs; validation-guided development is not final generalization evidence.
+1. Run the prepared [E002c RGB branch-dropout diagnostic](../experiments/E002c-rgb-regularization/README.md#rgb-branch-dropout--prepared-2026-10-28), then discuss the [E002a/E002b shortlist](../experiments/E002b-normalization-capacity/results-review.md#what-this-supports-next) with the seed-repeat and dropout evidence. Predeclare confirmation seeds and evaluation access before wider runs; validation-guided development is not final generalization evidence.
 2. Arrange a separate backup for valuable checkpoints/predictions; external storage is **TBD**. Original interrupted attempts and all earlier evidence remain preserved.
 3. Choose at most one substantial follow-up using measured error/cost evidence and the [schedule](research.md#schedule). Broader ontology, heterogeneous supervision and reliability experiments remain hypotheses.
 

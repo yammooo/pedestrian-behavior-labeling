@@ -142,6 +142,7 @@ class E002bModelTest(unittest.TestCase):
         self.assertIsNone(model.spatial_norm)
         self.assertFalse(any("_norm" in name for name in model.state_dict()
                              if name.startswith(("geometry_norm", "rgb_norm", "spatial_norm"))))
+        self.assertFalse(any(name.startswith("rgb_branch_dropout") for name in model.state_dict()))
         restored = MultimodalClassifier("g-rgb-dditr", PROFILE)
         restored.load_state_dict(model.state_dict(), strict=True)
 
@@ -162,6 +163,52 @@ class E002bModelTest(unittest.TestCase):
                 self.assertIsNone(model.spatial)
                 self.assertEqual(tuple(model(batch_for("g-rgb")).shape), (2, 3, 4))
 
+    def test_rgb_branch_dropout_is_time_locked_per_track_and_preserves_state_keys(self):
+        batch = batch_for("g-rgb")
+        model = build_model("g-rgb", "temporal-small", PROFILE, dropout=0., rgb_branch_dropout=.5).train()
+        baseline = build_model("g-rgb", "temporal-small", PROFILE, dropout=0.).train()
+        self.assertEqual(set(model.state_dict()), set(baseline.state_dict()))
+        baseline.load_state_dict(model.state_dict(), strict=True)
+
+        captured, fused = [], []
+        hook = model.rgb_branch_dropout.register_forward_hook(
+            lambda _module, inputs, output: captured.append((inputs[0].detach(), output.detach())))
+        fusion_hook = model.fusion.register_forward_pre_hook(
+            lambda _module, inputs: fused.append(inputs[0].detach()))
+        model(batch)
+        hook.remove()
+        fusion_hook.remove()
+
+        before, after = captured[0]
+        lengths = batch["lengths"]
+        keep = []
+        for track, length in enumerate(lengths.tolist()):
+            track_keep = []
+            for channel in range(before.shape[1]):
+                observed = before[track, channel, :length].abs() > 1e-6
+                ratios = after[track, channel, :length][observed] / before[track, channel, :length][observed]
+                self.assertGreater(len(ratios), 0)
+                self.assertTrue(torch.all((ratios == 0.) | (ratios == 2.)))
+                self.assertTrue(torch.all(ratios == ratios[0]))
+                track_keep.append(bool(ratios[0]))
+            keep.append(torch.tensor(track_keep))
+        self.assertTrue((keep[0] != keep[1]).any())
+
+        valid = torch.arange(batch["geometry"].shape[1])[None, :] < lengths[:, None]
+        geometry = batch["geometry"].masked_fill(~valid[..., None], 0.)
+        expected_geometry = model.geometry_norm(model.geometry(geometry))
+        expected_geometry = expected_geometry * batch["flags"][..., :1].masked_fill(~valid[..., None], 0.)
+        torch.testing.assert_close(fused[0][..., :64], expected_geometry)
+        torch.testing.assert_close(fused[0][..., 64 + 128:],
+                                   batch["flags"].masked_fill(~valid[..., None], 0.))
+
+        eval_rows = []
+        hook = model.rgb_branch_dropout.register_forward_hook(
+            lambda _module, inputs, output: eval_rows.append((inputs[0].detach(), output.detach())))
+        model.eval()(batch)
+        hook.remove()
+        self.assertTrue(torch.equal(eval_rows[0][0], eval_rows[0][1]))
+
     def test_independent_runner_requires_current_code_and_exact_model_coverage(self):
         with tempfile.TemporaryDirectory() as directory:
             profile_path = Path(directory) / "profile.json"
@@ -174,6 +221,12 @@ class E002bModelTest(unittest.TestCase):
             profile_path.write_text(json.dumps(row))
             args = SimpleNamespace(profile=profile_path, arm="g", model_variant="norm", device="cpu")
             self.assertEqual(e002b_run._profile_for(args)["model_coverage"], ["g/norm"])
+            args = SimpleNamespace(profile=profile_path, arm="g-rgb", model_variant="temporal-small",
+                                   device="cpu", rgb_branch_dropout=.5)
+            row["model_specs"] = {"g-rgb/temporal-small": model_spec("g-rgb", "temporal-small")}
+            row["model_coverage"] = ["g-rgb/temporal-small"]
+            profile_path.write_text(json.dumps(row))
+            self.assertEqual(e002b_run._profile_for(args)["model_coverage"], ["g-rgb/temporal-small"])
             row["code"] = {"stale": "hash"}
             profile_path.write_text(json.dumps(row))
             with self.assertRaisesRegex(ValueError, "code changed"):
@@ -186,6 +239,13 @@ class E002bModelTest(unittest.TestCase):
                                    rgb_cache_root=root / "experiments/E002a/rgb-cache",
                                    point_cache_root=root / "experiments/E002a/indexed-loki")
             e002b_run.validate_roots(args, {})
+            args.rgb_branch_dropout = .3
+            args.output = root / "experiments/E002c/runs/attempt"
+            e002b_run.validate_roots(args, {})
+            args.output = root / "experiments/E002b/runs/attempt"
+            with self.assertRaisesRegex(ValueError, "E002c evidence"):
+                e002b_run.validate_roots(args, {})
+            del args.rgb_branch_dropout
             args.output = root / "experiments/E002a/runs/attempt"
             with self.assertRaisesRegex(ValueError, "E002b evidence"):
                 e002b_run.validate_roots(args, {})

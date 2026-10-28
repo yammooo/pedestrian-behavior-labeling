@@ -670,6 +670,30 @@ done
 
 Each source launches four sequential attempts with distinct W&B names and local evidence. The completed runs used revision `ca46415` and fresh output identifier `dropout-20261028-114606`. No held-out test was opened.
 
+### E002c RGB branch dropout
+
+The [prepared four-run comparison](experiments/E002c-rgb-regularization/README.md#rgb-branch-dropout--prepared-2026-10-28) keeps the `g-rgb temporal-small` temporal dropout at0.1 and tests track-consistent RGB branch dropout0.3/0.5. Run from the Aalto checkout after pulling the implementing revision. This command starts full source-validation training; it does not open held-out tests.
+
+```bash
+cd /home/user20/projects/pedestrian-behavior-labeling-e002b-evaluation
+export PYTHONPATH="$PWD/src" OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+e002a_root="$PWD/outputs/experiments/E002a"
+e002c_profile="$PWD/outputs/experiments/E002b/calibration-rgb-branch-20261028/profile.json"
+attempt_id="rgb-branch-$(date -u +%Y%m%d-%H%M%S)"
+for source in road-waymo loki; do
+  for rgb_dropout in 0.3 0.5; do
+    uv run --no-project --python "$e002a_root/extractor-env/bin/python" python scripts/train-e002b.py \
+      --source "$source" --arm g-rgb --variant temporal-small --dropout 0.1 \
+      --rgb-branch-dropout "$rgb_dropout" --device cuda \
+      --profile "$e002c_profile" \
+      --rgb-preparation "$e002a_root/rgb-cache-preparation-03/cache.json" \
+      --output "outputs/experiments/E002c/runs/$attempt_id-$source-rgbdrop${rgb_dropout#0.}0" || exit 1
+  done
+done
+```
+
+Use a fresh attempt identifier if rerunning. Each attempt has its own W&B run, checkpoint and local predictions.
+
 ### E002b shared LiDAR training
 
 `scripts/train-e002b-lidar-group.py` trains the three `g-dditr` variants with shared training and validation preparation. Each retains its own initialization, dropout RNG, optimizer, stopping, W&B run, checkpoints and predictions. It loads each physical batch once, then runs the models sequentially; model computation and device transfers remain separate. Caches are read-only. Full source validation and the100/15 recipe are unchanged.

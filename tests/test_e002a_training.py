@@ -550,12 +550,21 @@ class MultimodalTest(unittest.TestCase):
             for arm, fail in (("g", None), ("g-rgb", None), ("g-dditr", None),
                               ("g-rgb-dditr", None), ("g-rgb-dditr", "final")):
                 events = []
+                seed = 7 if arm == "g-rgb" else 0
+                initialized, loader_seeds = [], []
                 args = SimpleNamespace(source="loki", arm=arm, device="cpu", smoke=True,
                     outputs_root=root, output=root / "experiments/E002a" / ("failed" if fail else arm),
                     probe=probe, profile=profile, smoke_selection=selection,
                     rgb_cache_root=root / "experiments/E002a/missing-rgb-cache" if arm == "g-dditr" else rgb_root,
                     rgb_preparation=None if arm == "g-dditr" else rgb_preparation,
-                    indexed_point_cache=points_root)
+                    indexed_point_cache=points_root, seed=seed)
+                logical_batches = e002a_run.LogicalBatches
+                def make_batches(*values, **options):
+                    loader_seeds.append(values[3])
+                    return logical_batches(*values, **options)
+                def initialize(**options):
+                    initialized.append(options)
+                    return FakeRun(events, fail)
                 with patch.object(e002a_run, "load_configuration", return_value=(config, root / "experiments/fixture-transform.json")) as load_config, \
                      patch.object(e002a_run, "load_point_configuration", return_value=(point_config, root / "experiments/fixture-transform.json")) as load_point_config, \
                      patch.object(e002a_run.FeatureSupply, "rgb", side_effect=rgb, autospec=True) as rgb_read, \
@@ -563,7 +572,8 @@ class MultimodalTest(unittest.TestCase):
                                   side_effect=lambda supply, source, key: supply.points.iter_track(key)) as point_read, \
                      patch.object(e002a_run.PreparedSupply, "track_cost", autospec=True,
                                   side_effect=lambda supply, source, key: supply.points.track_cost(key)) as cost_read, \
-                     patch("pedestrian_behavior.experiments.run.wandb.init", return_value=FakeRun(events, fail)):
+                     patch.object(e002a_run, "LogicalBatches", side_effect=make_batches), \
+                     patch("pedestrian_behavior.experiments.run.wandb.init", side_effect=initialize):
                     if fail:
                         with self.assertRaisesRegex(RuntimeError, "logging"):
                             e002a_run.run(args)
@@ -574,6 +584,9 @@ class MultimodalTest(unittest.TestCase):
                     self.assertEqual(load_point_config.called, arm == "g-dditr")
                     self.assertEqual(point_read.called, arm in ("g-dditr", "g-rgb-dditr"))
                     self.assertEqual(cost_read.called, arm in ("g-dditr", "g-rgb-dditr"))
+                self.assertEqual(initialized[0]["config"]["settings"]["seed"], seed)
+                self.assertIn(f"e002a-loki-{arm}-s{seed}", initialized[0]["name"])
+                self.assertEqual(loader_seeds, [seed, seed])
                 self.assertFalse((root / "experiments/E002a/point-cache").exists())
                 status = json.loads((args.output / "status.json").read_text())
                 self.assertEqual(status["status"], "failed" if fail else "complete")

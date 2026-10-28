@@ -1,6 +1,6 @@
 # Research dashboard
 
-Updated **2026-10-27**. We are developing a reliable **offline, given-track pedestrian behavior labeler**. Final architecture and publication contribution remain provisional. Deadline **17 December 2026**; **7–17 December** is protected for buffer and handover. The [literature review](literature/offline-labeling-research-direction.md) supports an empirical study first, with one conditional retrieval or supervision comparison.
+Updated **2026-10-28**. We are developing a reliable **offline, given-track pedestrian behavior labeler**. Final architecture and publication contribution remain provisional. Deadline **17 December 2026**; **7–17 December** is protected for buffer and handover. The [literature review](literature/offline-labeling-research-direction.md) supports an empirical study first, with one conditional retrieval or supervision comparison.
 
 ## Current evidence
 
@@ -11,7 +11,7 @@ Updated **2026-10-27**. We are developing a reliable **offline, given-track pede
 
 ## Next work
 
-1. Discuss the [comparison and shortlist](../experiments/E002b-normalization-capacity/results-review.md#what-this-supports-next) before declaring confirmation seeds, budgets and any new experiment. Keep original geometry controls; do not assume every modality or smaller model helps. Validation-guided development is not final generalization evidence.
+1. Run the targeted [E002a RGB seeds 1–4 repeat](../experiments/E002a-feature-feasibility/README.md#geometry--rgb-repeat--seeds-14-prepared-2026-10-28) on both sources to inspect seed variation and online train/validation classification curves. Then discuss the [E002a/E002b shortlist](../experiments/E002b-normalization-capacity/results-review.md#what-this-supports-next) before any wider confirmation. Keep original geometry controls; validation-guided development is not final generalization evidence.
 2. Arrange a separate backup for valuable checkpoints/predictions; external storage is **TBD**. Original interrupted attempts and all earlier evidence remain preserved.
 3. Choose at most one substantial follow-up using measured error/cost evidence and the [schedule](research.md#schedule). Broader ontology, heterogeneous supervision and reliability experiments remain hypotheses.
 

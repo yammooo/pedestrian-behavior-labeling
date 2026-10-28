@@ -70,6 +70,12 @@ The ROAD macro-F1 gain over geometry is concentrated in CROSSING; the LOKI gain 
 
 The next agreed increment is [E002b's branch-normalization/capacity comparison](../E002b-normalization-capacity/README.md), documented separately after these validation results. The earlier LR/query sweep is not part of that increment. Original E002a settings and evidence remain unchanged.
 
+## Geometry + RGB repeat — seeds 1–4 (prepared 2026-10-28)
+
+Run `g-rgb` with seeds 1–4 on both sources to characterize seed variation and compare online training classification with validation classification. Keep the E002a geometry + RGB model, frozen 3× DINO CLS cache, source populations/normalization, 100-epoch maximum, patience 15, AdamW, dropout, effective batch 64 and checkpoint-selection rule unchanged. Use one fresh output per seed/source and the current calibrated execution profile. The existing seed-0 validation result can join a five-seed validation summary; its historical training F1 is unavailable, so training-F1 curves use only seeds 1–4. Epoch training F1/CE use training-mode forwards while weights change; they are optimization traces, not fixed-checkpoint train evaluations. This repeat tests RGB run variance and the train/validation classification pattern; without repeated geometry controls it cannot establish a seed-robust RGB contribution. No held-out or opposite-dataset evaluation is planned. [Launcher command](../../README.md#e002a-geometry--rgb-repeat-seeds-14).
+
+The fixed-limit Aalto calibration at `outputs/experiments/E002a/calibration-train-f1-seeds-20261028/profile.json` is **complete** on the RTX 4080 with current train-F1 execution hashes: 56 measured workloads, zero failures, and unchanged limits of 64 tracks, 665,856 temporal cells, 1,460,024 physical point tokens, 1,810,000 ordinary padded tokens, four frames/chunk and 524,288 point tokens/frame. It used only development fixtures with discarded weights; no new behavior run or held-out evaluation. The calibration itself includes LiDAR stress shapes even though this repeat uses only RGB, to satisfy the existing shared E002a profile contract.
+
 ## Retained data and evaluation contract
 
 - Reuse E001/E001b's frozen eligible complete tracks, 5 Hz grids, four-state targets, native associations and group splits. Preserve 3D-only LOKI tracks, internal gaps and unlabeled context.

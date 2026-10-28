@@ -318,7 +318,7 @@ def assembly(args, *, policy=None):
                 "conditions": conditions, "kind": "integration-smoke" if args.smoke else "exploratory-source-validation",
                 "custom_smoke": True, "smoke_limits": {"selected_tracks": sorted(selected), "max_training_updates": 2,
                     "held_out_tests": False} if selected is not None else None,
-                "run_name": policy.get("run_name", f"e002a-{args.source}-{args.arm}-s0" +
+                "run_name": policy.get("run_name", f"e002a-{args.source}-{args.arm}-s{getattr(args, 'seed', SETTINGS['seed'])}" +
                     ("-smoke-" + args.output.name if args.smoke else "")),
                 "log_learning_rate": True, "runtime_snapshot": snapshot, "close": close}
     except BaseException:
@@ -333,6 +333,7 @@ def add_arguments(parser):
     parser.add_argument("--arm", choices=SUPPORTED_ARMS, required=True)
     parser.add_argument("--device", choices=("cpu", "cuda"), required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--seed", type=int, default=SETTINGS["seed"])
     parser.add_argument("--profile", type=Path, required=True)
     parser.add_argument("--outputs-root", type=Path, default=Path("outputs"))
     parser.add_argument("--probe", type=Path, default=Path("outputs/experiments/E002a/native-probe-07"))
@@ -346,13 +347,17 @@ def add_arguments(parser):
 
 
 def run(args):
+    seed = getattr(args, "seed", SETTINGS["seed"])
+    if not 0 <= seed < 2**32:
+        raise ValueError("Seed must be in [0, 2**32)")
     if args.smoke and args.smoke_selection is None:
         raise ValueError("Smoke requires an explicit bounded source train/validation selection")
     if args.arm in RGB_ARMS and args.rgb_preparation is None:
         raise ValueError("RGB-enabled attempt requires --rgb-preparation with completed matching RGB preparation")
     torch.set_num_threads(2)
     return execute_attempt(args.source, args.arm, "Transformer", args.output, args.device, args.smoke,
-                           settings=SETTINGS, assemble=lambda *_: assembly(args), classes=CLASSES,
+                           settings=SETTINGS | {"seed": seed},
+                           assemble=lambda *_: assembly(args), classes=CLASSES,
                            axes={k: v for k, v in STRATA.items() if k not in ("rgb-observed", "lidar-observed")
                                  or (k == "rgb-observed" and args.arm in RGB_ARMS)
                                  or (k == "lidar-observed" and args.arm in POINT_ARMS)})

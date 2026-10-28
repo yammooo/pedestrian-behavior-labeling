@@ -551,6 +551,22 @@ uv run --no-project --python "$probe_root/extractor-env/bin/python" python scrip
 
 `--indexed-point-cache` defaults to `outputs-root/experiments/E002a/indexed-<source>`; the sweep's `--indexed-cache-root` is their parent. Retired training options `--point-cache-root`, `--point-cache-gb`, `--min-free-gb` are removed; storage capacity/headroom belong to preparation. Geometry (`--arm g`) needs neither RGB preparation, point cache nor encoder probe. The existing [cache inventory](experiments/E002a-feature-feasibility/README.md#cache-inventory-and-retirement--2026-10-22) distinguishes training dependencies from historical fixtures.
 
+### E002a geometry + RGB repeat, seeds 1–4
+
+The [predeclared repeat](experiments/E002a-feature-feasibility/README.md#geometry--rgb-repeat--seeds-14-prepared-2026-10-28) runs eight source-validation attempts sequentially, with the unchanged E002a `g-rgb` model and a fresh output directory. Use the isolated E002a extractor environment on `aalto` after pulling this branch. A new calibration is required because the online train-F1 implementation changed hashed execution code; the matching fixed-limit profile is at `outputs/experiments/E002a/calibration-train-f1-seeds-20261028/profile.json`.
+
+```bash
+cd /home/user20/projects/pedestrian-behavior-labeling-e002b-evaluation
+export PYTHONPATH="$PWD/src" OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+e002a_root="$PWD/outputs/experiments/E002a"
+uv run --no-project --python "$e002a_root/extractor-env/bin/python" python scripts/run-e002a-g-rgb-repeat.py \
+  --device cuda --profile "$e002a_root/calibration-train-f1-seeds-20261028/profile.json" \
+  --rgb-preparation "$e002a_root/rgb-cache-preparation-03/cache.json" \
+  --output "$e002a_root/runs/g-rgb-seeds-1-4-$(date -u +%Y%m%d-%H%M%S)"
+```
+
+The launcher creates a sweep record and per-attempt logs; failures stop the queue without retry or resume. Each attempt saves `training_f1` in `history.json` and logs W&B `train/macro_f1` and `val/macro_f1` per epoch, plus step loss. Training F1 is measured on changing training weights with dropout, so these curves do not give fixed-checkpoint train performance. The historical seed-0 run lacks training F1. No test or opposite-dataset evaluation is performed.
+
 ### Geometry + D-DITR follow-up
 
 The post-pilot `g-dditr` diagnostic uses Geometry64 + D-DITR128 with only `geometry_valid` and `lidar_valid` flags. It does not need RGB preparation, the RGB cache or DINO weights. The six-attempt launcher above remains unchanged. The revalidated profile is already saved at `/home/user20/projects/e002a-execution-optimizations-20261023/calibration-g-dditr-followup/profile.json`; use it directly for a run. The commands below run from the new isolated checkout, whose `outputs` link points to the canonical Aalto output directory. They do not change the existing training checkout.

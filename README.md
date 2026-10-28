@@ -567,6 +567,18 @@ uv run --no-project --python "$e002a_root/extractor-env/bin/python" python scrip
 
 The launcher checks that both pinned native source roots are mounted before creating an output/W&B run. The 28 October first launch stopped before a training batch because the partition was unmounted; that failed sweep and W&B run remain evidence. The launcher creates a sweep record and per-attempt logs; failures stop the queue without retry or resume. Each attempt saves `training_f1` in `history.json` and logs W&B `train/macro_f1` and `val/macro_f1` per epoch, plus step loss. Training F1 is measured on changing training weights with dropout, so these curves do not give fixed-checkpoint train performance. The historical seed-0 run lacks training F1. No test or opposite-dataset evaluation is performed.
 
+### E002a RGB seed history figures
+
+The completed repeat is `outputs/experiments/E002a/runs/g-rgb-seeds-1-4-20261028-083613-197026/` on Aalto. To regenerate the two PNG/SVG figures there from saved histories, after the training checkout is idle and updated through Git:
+
+```bash
+uv run --no-project --python "$e002a_root/extractor-env/bin/python" python scripts/plot-e002a-g-rgb-histories.py \
+  --runs-root "$e002a_root/runs/g-rgb-seeds-1-4-20261028-083613-197026" \
+  --output "$e002a_root/rgb-seed-curves-20261028"
+```
+
+The current figures are also under ignored local `outputs/experiments/E002a/rgb-seed-curves-20261028/figures/`. The plot includes seeds1–4; seed0 lacks online training F1.
+
 ### Geometry + D-DITR follow-up
 
 The post-pilot `g-dditr` diagnostic uses Geometry64 + D-DITR128 with only `geometry_valid` and `lidar_valid` flags. It does not need RGB preparation, the RGB cache or DINO weights. The six-attempt launcher above remains unchanged. The revalidated profile is already saved at `/home/user20/projects/e002a-execution-optimizations-20261023/calibration-g-dditr-followup/profile.json`; use it directly for a run. The commands below run from the new isolated checkout, whose `outputs` link points to the canonical Aalto output directory. They do not change the existing training checkout.

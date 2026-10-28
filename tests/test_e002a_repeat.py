@@ -84,6 +84,23 @@ class E002aRepeatTest(unittest.TestCase):
                 e002a_repeat.validate_inputs(args)
             self.assertFalse(output.exists())
 
+    def test_preflight_rejects_unmounted_native_source_before_output(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "outputs"
+            profile_path = Path(temporary) / "profile.json"
+            profile_path.write_text(json.dumps({"status": "complete", "device": "cpu", "code": {"fixture": 1},
+                "torch": str(torch.__version__), "cuda": torch.version.cuda, "profile": PROFILE}))
+            preparation = Path(temporary) / "rgb-preparation.json"
+            preparation.write_text("{}")
+            output = root / "experiments/E002a/runs/repeat"
+            args = SimpleNamespace(outputs_root=root, output=output, device="cpu", profile=profile_path,
+                rgb_preparation=preparation, probe=Path(temporary) / "probe")
+            with patch.object(e002a_repeat, "resource_code", return_value={"fixture": 1}), \
+                 patch.object(e002a_repeat, "load_configuration", return_value=({"waymo_root": str(Path(temporary) / "unmounted")}, Path("transform.json"))), \
+                 self.assertRaisesRegex(FileNotFoundError, "Native source root unavailable"):
+                e002a_repeat.validate_inputs(args)
+            self.assertFalse(output.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

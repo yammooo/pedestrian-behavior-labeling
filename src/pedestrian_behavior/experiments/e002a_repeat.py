@@ -58,6 +58,9 @@ def validate_inputs(args):
         raise FileNotFoundError(f"RGB preparation record missing: {args.rgb_preparation}")
     preparation = json.loads(args.rgb_preparation.read_text())
     config, _ = load_configuration(args.probe)
+    for key in ("waymo_root", "loki_root"):
+        if config.get(key) and not Path(config[key]).is_dir():
+            raise FileNotFoundError(f"Native source root unavailable; mount the dataset partition: {config[key]}")
     identity = extraction_identity(args.device, config)
     if preparation.get("status") != "complete" or preparation.get("extraction") != identity:
         raise ValueError("Matching completed RGB cache preparation required")

@@ -407,7 +407,7 @@ A separate ROAD CUDA smoke uses `--smoke` with either configuration and a fresh 
 
 ## E002a pretrained-feature feasibility
 
-The [E002a behavior pilot](experiments/E002a-feature-feasibility/README.md) has separate preparation, calibration, integration and training commands below. Use its isolated CUDA extractor environment and pinned author clones/weights; the main E001 environment and caches remain unchanged. The earlier bounded probe (`scripts/probe-e002a.py --help`) checks native crops, semantic BEV/alignment and resources without behavior training, held-out scoring, W&B or full caches.
+The [E002a behavior pilot](experiments/E002a-feature-feasibility/README.md) has separate preparation, calibration, integration and training commands below. Use its isolated CUDA extractor environment and pinned author clones/weights; the main E001 environment and caches remain unchanged. RGB cache reads verify native source file identity, so keep the native dataset partition mounted during RGB training even though the model consumes saved CLS features. The earlier bounded probe (`scripts/probe-e002a.py --help`) checks native crops, semantic BEV/alignment and resources without behavior training, held-out scoring, W&B or full caches.
 
 The [pilot specification](experiments/E002a-feature-feasibility/README.md#deferred-training-pilot) fixes scope, dropout, fitting and sequential execution. The implementation reuses E001 loss, validation selection, checkpoints, metrics, plots and W&B; the pilot evaluates source validation only.
 
@@ -565,7 +565,7 @@ uv run --no-project --python "$e002a_root/extractor-env/bin/python" python scrip
   --output "$e002a_root/runs/g-rgb-seeds-1-4-$(date -u +%Y%m%d-%H%M%S)"
 ```
 
-The launcher creates a sweep record and per-attempt logs; failures stop the queue without retry or resume. Each attempt saves `training_f1` in `history.json` and logs W&B `train/macro_f1` and `val/macro_f1` per epoch, plus step loss. Training F1 is measured on changing training weights with dropout, so these curves do not give fixed-checkpoint train performance. The historical seed-0 run lacks training F1. No test or opposite-dataset evaluation is performed.
+The launcher checks that both pinned native source roots are mounted before creating an output/W&B run. The 28 October first launch stopped before a training batch because the partition was unmounted; that failed sweep and W&B run remain evidence. The launcher creates a sweep record and per-attempt logs; failures stop the queue without retry or resume. Each attempt saves `training_f1` in `history.json` and logs W&B `train/macro_f1` and `val/macro_f1` per epoch, plus step loss. Training F1 is measured on changing training weights with dropout, so these curves do not give fixed-checkpoint train performance. The historical seed-0 run lacks training F1. No test or opposite-dataset evaluation is performed.
 
 ### Geometry + D-DITR follow-up
 

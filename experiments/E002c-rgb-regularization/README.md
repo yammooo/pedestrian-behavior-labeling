@@ -1,6 +1,6 @@
 # E002c — RGB dropout diagnostics
 
-The temporal-dropout comparison completed 2026-10-28; the RGB branch-dropout follow-up below is prepared and awaiting execution. The completed runs were launched with the E002b runner before this separate logical record was agreed; their existing E002b output paths and W&B names remain unchanged.
+The temporal-dropout comparison completed 2026-10-28; the RGB branch-dropout follow-up completed afterward. The temporal-dropout runs were launched with the E002b runner before this separate logical record was agreed; their existing E002b output paths and W&B names remain unchanged.
 
 ## Comparison
 
@@ -52,8 +52,42 @@ Canonical new runs: `aalto:/home/user20/projects/pedestrian-behavior-labeling/ou
 
 Keep the 0.1 controls as the current RGB references. Do not promote 0.5 from one ROAD F1 increase or start a wider dropout search on this evidence. A repeated-seed comparison would be needed to establish a robust gain; the current result is an exploratory source-validation diagnostic and does not alter E002b's original 18-model comparison or the E002a seed-repeat findings.
 
-## RGB branch dropout — prepared 2026-10-28
+## RGB branch dropout — completed 2026-10-29
 
 This narrower follow-up tests whether regularizing the RGB descriptor itself changes the geometry + RGB validation gap. Use the E002b `g-rgb` `temporal-small` model with temporal dropout fixed at0.1. Apply dropout after the RGB projection and LayerNorm, before the existing validity mask and fusion. The dropout mask is shared across every timestep of a track, independently sampled for each track during training. Geometry, validity flags and evaluation inputs are unchanged. Compare RGB branch dropout0.3 and0.5 with the existing zero-branch-dropout E002b controls above, separately on ROAD-Waymo and LOKI. This isolates the regularization site more closely than the completed temporal-dropout comparison.
 
-Four new seed0 source-validation attempts use the same frozen populations, features, optimizer,100-epoch/patience15 budget and F1-selected checkpoint policy as the controls. Record attempts under `outputs/experiments/E002c/runs/` with `e002c-<source>-g-rgb-temporal-small-rgbdrop{30|50}-s0` W&B names. This is exploratory validation-guided development; do not use held-out tests to choose the dropout value. If a gain looks meaningful, repeat seeds before claiming it. [The manual command](../../README.md#e002c-rgb-branch-dropout) is the execution reference. Results: **pending**.
+Four new seed0 source-validation attempts use the same frozen populations, features, optimizer,100-epoch/patience15 budget and F1-selected checkpoint policy as the controls. They are stored under `outputs/experiments/E002c/runs/` with `e002c-<source>-g-rgb-temporal-small-rgbdrop{30|50}-s0` W&B names. This is exploratory validation-guided development; do not use held-out tests to choose the dropout value. If a gain looks meaningful, repeat seeds before claiming it. [The manual command](../../README.md#e002c-rgb-branch-dropout) is the execution reference.
+
+### Selected source-validation results
+
+F1 is the four-class track-weighted macro-F1; CE is mean per-track CE at the **F1-selected epoch**. ΔF1 is relative to the matched zero-branch-dropout control, not to the temporal-dropout rows above. Epochs are selected /last completed. Links open the original W&B runs.
+
+| Source | RGB branch dropout | F1 (%) | ΔF1 (pp) | CE | Epochs |
+|---|---:|---:|---:|---:|---:|
+| ROAD | 0 (E002b control) | [62.29](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/m2ov73kt) | — | 0.801 | 9/24 |
+| ROAD | 0.3 | [64.21](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/tzr354j7) | +1.92 | 1.377 | 40/55 |
+| ROAD | 0.5 | [64.37](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/iqsomnq7) | +2.08 | 0.805 | 16/31 |
+| LOKI | 0 (E002b control) | [67.63](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/0cvhe1n1) | — | 0.755 | 28/43 |
+| LOKI | 0.3 | [67.83](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/m5nqlrf0) | +0.20 | 0.548 | 12/27 |
+| LOKI | 0.5 | [68.20](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/ck3vsjb4) | +0.57 | 0.520 | 11/26 |
+
+All four new runs completed with patience stopping, no recorded failures or changed protected inputs. Their validation denominators match the controls: ROAD78 groups /1,110 tracks /45,388 accepted GT frames; LOKI93 /1,861 /60,231. No held-out or cross-dataset test was opened.
+
+The F1 gain is larger on ROAD. Relative to its control, ROAD0.5 gains3.62 pp on Waiting to Cross and4.01 pp on Crossing, while Moving falls0.92 pp; ROAD0.3 gains7.07/5.00 pp on those two classes but loses2.17/2.20 pp on Moving/Stopped and has much worse selected CE. On LOKI, both settings chiefly improve Stopped (+3.62/+2.87 pp), while Waiting to Cross and Crossing fall slightly. The average gain therefore does not mean every class improved.
+
+### Training trace and interpretation
+
+These are **last-epoch** traces, separate from the selected-checkpoint table. Training F1 and CE are accumulated online while weights change and dropout is active; validation uses the fixed end-of-epoch model in evaluation mode.
+
+| Source | RGB dropout | Final train /val F1 (%) | Final train /val CE |
+|---|---:|---:|---:|
+| ROAD | 0.3 | 96.23 /61.31 | 0.074 /1.643 |
+| ROAD | 0.5 | 89.02 /62.08 | 0.218 /1.085 |
+| LOKI | 0.3 | 89.69 /64.35 | 0.176 /0.740 |
+| LOKI | 0.5 | 88.09 /67.40 | 0.200 /0.612 |
+
+Every run's final validation F1 is below its selected F1, and final validation CE is above its selected CE. The train/validation classification gap remains substantial, especially on ROAD, despite the lower final training F1 at0.5. RGB branch dropout appears more promising than increasing temporal dropout in this seed0 comparison, but these are validation-guided, single-seed results. The0.16 pp ROAD and0.37 pp LOKI differences between0.5 and0.3 do not establish a preferred probability. A matched repeated-seed control versus branch-dropout comparison is the minimal confirmation before changing the reference model; preserve the current controls meanwhile.
+
+### Evidence
+
+The four new attempts are at `aalto:/home/user20/projects/pedestrian-behavior-labeling-e002b-evaluation/outputs/experiments/E002c/runs/rgb-branch-20261028-150200-{road-waymo,loki}-rgbdrop{30,50}/`. They used code revision `e201ebf`, the completed RTX4080 calibration `E002b/calibration-rgb-branch-20261028/profile.json`, and the shared E002a RGB preparation. Each local attempt retains status, history, checkpoint, validation predictions/metrics and plots; W&B links are in the result table. The launch recorded no source diff. These runs add no new E002 held-out evidence.

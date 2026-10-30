@@ -696,7 +696,7 @@ Use a fresh attempt identifier if rerunning. Each attempt has its own W&B run, c
 
 ### E002d RGB + LiDAR complementarity
 
-The [four-run E002d pilot](experiments/E002d-rgb-lidar-complementarity/README.md) uses the single-model trainer sequentially: ROAD-Waymo then LOKI, each with RGB branch dropout0 and0.5. Temporal dropout stays0.1; LiDAR dropout is unchanged. Use the updated Aalto checkout and its existing complete RGB and indexed-point caches. Calibration checks the combined model against the exact code/backend before training. The reference profile only supplies the established packing bounds; it is not an E002d training result.
+The [four-run E002d pilot](experiments/E002d-rgb-lidar-complementarity/README.md) uses the single-model trainer sequentially: ROAD-Waymo then LOKI, each with RGB branch dropout0 and0.5. Temporal dropout stays0.1; LiDAR dropout is unchanged. The combined-model CUDA calibration is complete at revision `d81a97a`; use that exact Aalto checkout and its existing RGB/indexed-point caches. This command starts source-validation training only.
 
 ```bash
 cd /home/user20/projects/pedestrian-behavior-labeling-e002b-evaluation
@@ -704,23 +704,17 @@ export PYTHONPATH="$PWD/src" OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_TH
 e002a_root="$PWD/outputs/experiments/E002a"
 e002d_root="$PWD/outputs/experiments/E002d"
 attempt_id="fusion-$(date -u +%Y%m%d-%H%M%S)"
-
-uv run --no-project --python "$e002a_root/extractor-env/bin/python" python scripts/calibrate-e002b.py \
-  --experiment E002d \
-  --reference-profile "$e002a_root/indexed-optimized-20261023/calibration-final/profile.json" \
-  --output "$e002d_root/calibration-$attempt_id" && {
-  for source in road-waymo loki; do
-    for drop in 0 50; do
-      uv run --no-project --python "$e002a_root/extractor-env/bin/python" python scripts/train-e002b.py \
-        --source "$source" --arm g-rgb-dditr --variant temporal-small --dropout 0.1 \
-        --rgb-branch-dropout "0.$drop" --device cuda \
-        --profile "$e002d_root/calibration-$attempt_id/profile.json" \
-        --rgb-preparation "$e002a_root/rgb-cache-preparation-03/cache.json" \
-        --indexed-point-cache "$e002a_root/indexed-$source" \
-        --output "$e002d_root/runs/$attempt_id-$source-rgbdrop$drop" || break 2
-    done
+for source in road-waymo loki; do
+  for drop in 0 50; do
+    uv run --no-project --python "$e002a_root/extractor-env/bin/python" python scripts/train-e002b.py \
+      --source "$source" --arm g-rgb-dditr --variant temporal-small --dropout 0.1 \
+      --rgb-branch-dropout "0.$drop" --device cuda \
+      --profile "$e002d_root/calibration-20261030-sequential-ready/profile.json" \
+      --rgb-preparation "$e002a_root/rgb-cache-preparation-03/cache.json" \
+      --indexed-point-cache "$e002a_root/indexed-$source" \
+      --output "$e002d_root/runs/$attempt_id-$source-rgbdrop$drop" || break 2
   done
-}
+done
 ```
 
 This runs source-validation training only and stops launching further attempts if one fails. Each attempt has separate local/W&B evidence. Do not reuse an output directory. The earlier E002b LiDAR-only reference is retained without retraining; its interrupted LOKI training remains a comparison limitation.

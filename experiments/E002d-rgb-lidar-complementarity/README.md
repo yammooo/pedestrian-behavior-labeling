@@ -1,6 +1,6 @@
 # E002d — RGB–LiDAR complementarity
 
-**Prepared 2026-10-30; no E002d training or test evaluation yet.** This is a bounded source-validation comparison within E002, not a new architecture search.
+**Prepared 2026-10-30; CUDA calibration complete, no E002d training or test evaluation yet.** This is a bounded source-validation comparison within E002, not a new architecture search.
 
 ## Question and comparison
 
@@ -32,4 +32,8 @@ The [shared E002 safeguards](../README.md#strict-zero-shot-access), [E002b contr
 
 ## Execution and evidence
 
-Use the [sequential launch command](../../README.md#e002d-rgb--lidar-complementarity) after pulling the implementing revision and completing the exact-code CUDA calibration. Each attempt gets a fresh directory under ignored `outputs/experiments/E002d/runs/`, its own W&B run, history, best/last checkpoints, source-validation predictions, metrics and plots. No checkpoint or full prediction upload. The feature caches are read-only. Record completed calibration, attempted runs, failures and outcomes here after execution.
+Use the [sequential launch command](../../README.md#e002d-rgb--lidar-complementarity) on Aalto revision `d81a97a`. Each attempt gets a fresh directory under ignored `outputs/experiments/E002d/runs/`, its own W&B run, history, best/last checkpoints, source-validation predictions, metrics and plots. No checkpoint or full prediction upload. The feature caches are read-only.
+
+The completed CUDA calibration is `outputs/experiments/E002d/calibration-20261030-sequential-ready/profile.json` on Aalto, SHA-256 `c1d923c894f56c23f7bd7d3d831b0d8633f30e933b9a7380f63719aad4c62bd8`. It covers one real full-track combined-arm forward/backward per source plus a64-track temporal shape check with empty LiDAR inputs. Maximum allocation **in those bounded checks** was2,785,686,016 bytes against the9,711,719,546-byte ceiling; this is not the peak of a production training batch or epoch. It uses the completed E002a indexed profile for the existing point-token/packing limits and performs no behavior training or W&B logging. The earlier failed profiles, `calibration-20261030-sequential` and `calibration-20261030-sequential-fixed`, remain: the first incorrectly extrapolated a single-frame reference memory peak by squared track length; the second discarded the LiDAR flag while selecting a fixture. Both failed before any E002d training. The corrected code and focused regression tests are in revision `d81a97a`. If execution code or backend changes, rerun calibration in a fresh directory before training.
+
+Record attempted runs, failures and outcomes here after execution.

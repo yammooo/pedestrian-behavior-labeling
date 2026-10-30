@@ -34,6 +34,13 @@ def _coverage(experiment):
     raise ValueError("Unknown E002 calibration scope")
 
 
+def _preflight_peak(experiment, reference_peak, reference_slots, target_slots):
+    if experiment == "E002d":
+        # E002a's indexed profile already enforces the same token and temporal-cell caps.
+        return reference_peak
+    return int(reference_peak * (target_slots / reference_slots) ** 2 * 1.25)
+
+
 def _model_sample(sample, arm):
     result = {key: sample[key] for key in ("geometry", "targets", "gt_valid", "locator", "archive")}
     all_flags = ("geometry_valid", "rgb_valid", "lidar_valid")
@@ -179,16 +186,19 @@ def run(args):
             if not spatial_rows:
                 raise ValueError("Indexed reference profile lacks measured combined RGB/LiDAR workloads")
             reference_peak = max(reference_peak, *(row["peak_allocated"] for row in spatial_rows))
-            reference_slots = min(reference_slots,
-                                  *(row["slots"] // row["tracks"] for row in spatial_rows))
         preflight_slots = max(slots_bound, max(len(sample["targets"]) for _, sample in representatives.values()))
-        estimated_peak = int(reference_peak * (preflight_slots / reference_slots) ** 2 * 1.25)
-        record["shape_preflight"] = {"reference_max_slots": reference_slots,
-            "reference_peak_allocated_bytes": reference_peak, "target_slots": preflight_slots,
-            "margin": 1.25, "estimated_peak_allocated_bytes": estimated_peak,
+        estimated_peak = _preflight_peak(args.experiment, reference_peak, reference_slots, preflight_slots)
+        record["shape_preflight"] = {"reference_peak_allocated_bytes": reference_peak,
+            "target_slots": preflight_slots, "estimated_peak_allocated_bytes": estimated_peak,
             "allocated_ceiling_bytes": allocated_ceiling}
+        if args.experiment == "E002d":
+            record["shape_preflight"]["method"] = (
+                "reuse the indexed reference peak under identical point-token and temporal-cell caps; "
+                "then measure real full-track fusion for each source and a 64-track temporal-bound batch")
+        else:
+            record["shape_preflight"].update(reference_max_slots=reference_slots, margin=1.25)
         if estimated_peak > allocated_ceiling:
-            raise ValueError("Conservative E002b shape estimate exceeds the 78% VRAM ceiling")
+            raise ValueError(f"Conservative {args.experiment} shape estimate exceeds the 78% VRAM ceiling")
 
         for source in ("road-waymo", "loki"):
             _, rgb_sample = representatives[source]

@@ -164,6 +164,10 @@ class E002bModelTest(unittest.TestCase):
         prepared = e002b_calibrate._model_sample(sample, "g-rgb-dditr")
         self.assertIs(prepared["points"], points)
         self.assertEqual(tuple(prepared["flags"].shape), (2, 3))
+        measured_peak = 4_190_666_240
+        self.assertEqual(e002b_calibrate._preflight_peak("E002d", measured_peak, 1, 102), measured_peak)
+        self.assertEqual(e002b_calibrate._preflight_peak("E002b", measured_peak, 100, 102),
+                         int(measured_peak * (102 / 100) ** 2 * 1.25))
 
     def test_rgb_regularization_changes_only_temporal_dropout(self):
         for variant in ("norm", "temporal-small"):

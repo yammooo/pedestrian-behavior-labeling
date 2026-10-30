@@ -156,14 +156,24 @@ class E002bModelTest(unittest.TestCase):
     def test_e002d_calibration_covers_only_combined_temporal_small_arm(self):
         self.assertEqual(e002b_calibrate._coverage("E002d"), (("g-rgb-dditr",), ("temporal-small",)))
         self.assertEqual(e002b_calibrate._coverage("E002b"), (("g", "g-rgb"), tuple(VARIANTS)))
-        points = [torch.randn(3, 68), torch.randn(2, 68)]
-        sample = {"geometry": torch.randn(2, 20), "targets": torch.tensor([0, 1]),
-                  "gt_valid": torch.ones(2, dtype=torch.bool), "locator": "fixture",
-                  "archive": "fixture.npz", "flags": torch.ones(2, 3),
-                  "rgb": torch.randn(2, 768), "points": points}
+
+        def fixture(source, name, slots):
+            return name, {"_resource_source": source, "geometry": torch.randn(slots, 20),
+                          "targets": torch.arange(slots), "gt_valid": torch.ones(slots, dtype=torch.bool),
+                          "locator": name, "archive": name + ".npz", "flags": torch.ones(slots, 3),
+                          "rgb": torch.randn(slots, 768),
+                          "points": [torch.randn(2, 68) for _ in range(slots)]}
+
+        samples = [fixture("road-waymo", "road-short", 1),
+                   fixture("road-waymo", "road-long", 2), fixture("loki", "loki-long", 3)]
+        representatives = e002b_calibrate._representatives(samples)
+        name, sample = representatives["road-waymo"]
+        self.assertEqual(name, "road-long")
+        self.assertEqual(tuple(sample["flags"].shape), (2, 3))
+        self.assertEqual(len(sample["points"]), len(sample["targets"]))
         prepared = e002b_calibrate._model_sample(sample, "g-rgb-dditr")
-        self.assertIs(prepared["points"], points)
-        self.assertEqual(tuple(prepared["flags"].shape), (2, 3))
+        self.assertIs(prepared["points"], sample["points"])
+        self.assertTrue(torch.equal(prepared["flags"], sample["flags"]))
         measured_peak = 4_190_666_240
         self.assertEqual(e002b_calibrate._preflight_peak("E002d", measured_peak, 1, 102), measured_peak)
         self.assertEqual(e002b_calibrate._preflight_peak("E002b", measured_peak, 100, 102),

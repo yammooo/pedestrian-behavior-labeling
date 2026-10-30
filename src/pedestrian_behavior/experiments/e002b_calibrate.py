@@ -54,6 +54,15 @@ def _model_sample(sample, arm):
     return result
 
 
+def _representatives(samples):
+    representatives = {}
+    for name, sample in samples:
+        source = sample["_resource_source"]
+        if source not in representatives or len(sample["targets"]) > len(representatives[source][1]["targets"]):
+            representatives[source] = (name, sample)
+    return representatives
+
+
 def _stress_sample(slots, arm):
     torch.manual_seed(73)
     enabled = e002b.ARM_FLAGS[arm]
@@ -154,13 +163,7 @@ def run(args):
                 record["model_specs"][f"{arm}/{variant}"] = e002b.model_spec(arm, variant)
 
         samples = e002a_calibrate.fixture_samples(fixture_root)
-        representatives = {}
-        for name, sample in samples:
-            source = sample["_resource_source"]
-            sample = _model_sample(sample, "g-rgb")
-            sample["_resource_source"] = source
-            if source not in representatives or len(sample["targets"]) > len(representatives[source][1]["targets"]):
-                representatives[source] = (name, sample)
+        representatives = _representatives(samples)
         if set(representatives) != {"road-waymo", "loki"}:
             raise ValueError("Calibration fixtures must include both frozen source populations")
         max_tracks = profile["max_tracks"]

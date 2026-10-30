@@ -1,0 +1,22 @@
+# Static-map feature distillation — proposal
+
+**Status: uncommitted idea, discussed 2026-10-30.** This is a possible LiDAR representation experiment, not an E002 configuration or an approved training run. The question is whether offline static scene context can improve pedestrian behavior labeling without repeatedly encoding a dense map at every frame.
+
+## Proposed data flow
+
+1. For each recording, align its native LiDAR sweeps using the recorded poses and build a cleaned static point map with an established dynamic-object removal method. [ERASOR2](https://erasor2.github.io/) is a candidate with [released code](https://github.com/url-kaist/ERASOR2); its map quality on ROAD-Waymo and LOKI is **unknown**. Build maps within recordings only.
+2. Encode the static map once, potentially in overlapping spatial tiles, and retain spatial features. The tiling, resolution, feature levels and storage cost are **TBD**. At each frame, supply the current points that add or contradict map evidence. How to define this residual without discarding useful current-sweep geometry is **TBD**.
+3. Pretrain a small student separately from the behavior task. It receives nearby cached static-map features and the frame's residual points, and predicts frame-specific spatial features. Any change to map features is temporary for that frame; the cached map is not rewritten. A frozen [Utonia](https://github.com/Pointcept/Utonia) teacher receives the corresponding cleaned-map-plus-full-current-sweep input. The distillation target and spatial alignment are **TBD** because the teacher's hierarchical point support can differ from the student's.
+4. Freeze the pretrained student. Encode each frame once, then reuse its output across pedestrians: select each pedestrian's 20 m neighborhood **after** spatial encoding and feed it to the existing pedestrian readout and offline temporal model. Behavior labels train that downstream model, not the proposed student pretraining.
+
+This separates one-time representation learning from the later behavior comparisons. It preserves the useful part of the [current E002a point path](../experiments/E002a-feature-feasibility/README.md): full-frame encoding once, followed by pedestrian-specific feature selection. Encoding a dense static-map/sweep union independently at every frame could repeat substantial work; encoding a 20 m raw-point crop per pedestrian could lose that sharing. Whether the proposed student is actually faster is **unknown**.
+
+## Evidence needed before committing
+
+- **Map quality:** on a small set of ROAD-Waymo and LOKI recordings, inspect retained road/sidewalk structure and ghosts from vehicles, pedestrians and stationary-then-moving objects. ERASOR2 uses ground and instance estimates; its [usage guide](https://github.com/url-kaist/ERASOR2/blob/main/USAGE.md) warns that poor clustering degrades removal. Poses and sensor density must be checked for both datasets.
+- **Teacher feasibility:** measure points, memory, runtime and feature quality for representative local map-plus-sweep inputs. Utonia is a pretrained point encoder; its usefulness on this denser input, and for our behavior task, has not been established. Its Waymo pretraining exposure must remain disclosed in transfer claims.
+- **Student value:** compare the same downstream behavior model with current sweep features, direct teacher features and distilled student features, with matched observations and validation access. Include a student without distillation to attribute any gain to the teacher. Measure preparation time, cached bytes and inference throughput, not only F1. The exact comparison budget and seeds are **TBD**.
+
+Feature imitation alone is not evidence of better behavior labeling. A plausible result is that the student matches Utonia well but neither improves validation or transfer performance. [Neural Map Prior](https://openaccess.thecvf.com/content/CVPR2023/html/Xiong_Neural_Map_Prior_for_Autonomous_Driving_CVPR_2023_paper.html) already uses learned fusion of stored map features and current observations for a different mapping task; the general idea of learned map-feature updates is established, not a novelty claim here.
+
+If masking is later tested, dropping only current residual points still leaves static LiDAR context. A full LiDAR-modality dropout must remove the combined LiDAR descriptor. Any raw-input masking before the student would require fresh feature computation or separate cached variants, so a training-speed benefit should not be assumed.

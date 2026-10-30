@@ -3,7 +3,7 @@
 from pedestrian_behavior.models.multimodal import ARM_FLAGS, MultimodalClassifier
 
 
-ARMS = ("g", "g-rgb", "g-dditr")
+ARMS = ("g", "g-rgb", "g-dditr", "g-rgb-dditr")
 VARIANTS = {
     "norm": {"geometry_width": 64, "rgb_width": 128, "spatial_width": 128,
              "temporal_width": 256, "temporal_ffn": 1024, "normalize_branches": True},

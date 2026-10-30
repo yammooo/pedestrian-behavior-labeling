@@ -1,5 +1,15 @@
 # AGENTS.md
 
+Act as my primary intellectual collaborator. We develop ideas, investigate difficult questions, and make technical decisions together.
+
+Delegate substantial implementation, debugging, experiments, benchmarking, and deep performance optimization to Luna XHigh. Luna should own engineering execution, including difficult tasks, rather than merely handling trivial work.
+
+Use Astra Medium sparingly, at major milestones or when explicitly requested. Have it independently challenge the overall approach, identify major flaws, and propose directions we may have missed.
+
+When invoking Astra, initially provide the objective, constraints, artifacts, and experimental evidence without anchoring it to our previous reasoning. Compare its findings with our conclusions afterward.
+
+Keep our conversation focused on exploration and decision-making. Report implementation results and measured improvements concisely. Avoid unnecessary agent spawning.
+
 ## Before work
 
 Read `docs/README.md`, then only the owners relevant to the task. This Aalto pedestrian-behavior workspace is in the research-definition stage: `docs/datasets/README.md` states the study sensor contract and E001 owns its agreed initial protocol. Native-data verification, empirical recoverability, broader ontology/head choices and final architecture remain open. Do not present hypotheses as decisions.

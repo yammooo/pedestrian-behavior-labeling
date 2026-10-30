@@ -1,6 +1,6 @@
 # E002 — Multimodal offline reference
 
-**Overview, updated 2026-10-28.** E002 groups the multimodal offline-labeling direction. Each concrete comparison owns its architecture, settings, preparation and results. [E002a](../E002a-feature-feasibility/README.md) owns the first behavior pilot and RGB seed repeat; [E002b](../E002b-normalization-capacity/README.md) owns normalization/capacity and the [joint 26-model review](../E002b-normalization-capacity/results-review.md); [E002c](../E002c-rgb-regularization/README.md) owns the completed RGB dropout diagnostic. Earlier extraction, timing and operational evidence remains in E002a.
+**Overview, updated 2026-10-30.** E002 groups the multimodal offline-labeling direction. Each concrete comparison owns its architecture, settings, preparation and results. [E002a](../E002a-feature-feasibility/README.md) owns the first behavior pilot and RGB seed repeat; [E002b](../E002b-normalization-capacity/README.md) owns normalization/capacity and the [joint 26-model review](../E002b-normalization-capacity/results-review.md); [E002c](../E002c-rgb-regularization/README.md) owns the completed RGB dropout diagnostic; [E002d](../E002d-rgb-lidar-complementarity/README.md) owns the prepared fusion pilot. Earlier extraction, timing and operational evidence remains in E002a.
 
 ## Question and interpretation
 
@@ -15,6 +15,7 @@ The [E001-family review](../E001b-2d-bbox-contribution/results-review.md) motiva
 | [E002a — first multimodal behavior pilot](../E002a-feature-feasibility/README.md) | Original three arms plus a separate geometry + D-DITR follow-up; frozen encoders, complete tracks, indexed point supply; Utonia deferred | Eight seed0 source-validation runs complete; geometry + D-DITR best in this seed |
 | [E002b — normalization and capacity](../E002b-normalization-capacity/README.md) | Geometry / +RGB / +LiDAR; normalized reference versus smaller temporal or branch representations | 18 best checkpoints evaluated; 15 normal stops, three LOKI LiDAR interrupted at23 epochs |
 | [E002c — RGB temporal dropout](../E002c-rgb-regularization/README.md) | Matched0.1/0.3/0.5 temporal dropout across full/small normalized `g-rgb` models on both sources | Eight additional seed0 source-validation runs complete; original E002b paths retained |
+| [E002d — RGB–LiDAR complementarity](../E002d-rgb-lidar-complementarity/README.md) | Sequential `g-rgb-dditr / temporal-small` with RGB branch dropout0/0.5 against the existing `g-dditr` control | Four seed0 source-validation attempts prepared; no results yet |
 
 E002a's architecture is specific to that pilot. Later comparisons may revise it with explicit hypotheses and controls; they do not inherit its encoders, widths or readout by default. Completed PCA, alignment, semantic and resource probes remain [preparatory evidence inside E002a](../E002a-feature-feasibility/README.md#preparatory-work), with original settings and failures preserved.
 

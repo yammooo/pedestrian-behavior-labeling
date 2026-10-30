@@ -12,7 +12,7 @@ import torch
 from pedestrian_behavior.data.multimodal import collate_multimodal
 from pedestrian_behavior.experiments.e002b import ARMS, VARIANTS, build_model, model_spec
 from pedestrian_behavior.experiments.e002b_independent import attempt_command, attempts
-from pedestrian_behavior.experiments import e002b_run
+from pedestrian_behavior.experiments import e002b_calibrate, e002b_run
 from pedestrian_behavior.models.multimodal import ARM_FLAGS, MultimodalClassifier
 
 
@@ -149,9 +149,21 @@ class E002bModelTest(unittest.TestCase):
     def test_factory_rejects_unfrozen_arms_and_variants(self):
         self.assertEqual(set(VARIANTS), {"norm", "temporal-small", "branches-small"})
         with self.assertRaises(ValueError):
-            model_spec("g-rgb-dditr", "norm")
+            model_spec("unknown-arm", "norm")
         with self.assertRaises(ValueError):
             model_spec("g", "custom")
+
+    def test_e002d_calibration_covers_only_combined_temporal_small_arm(self):
+        self.assertEqual(e002b_calibrate._coverage("E002d"), (("g-rgb-dditr",), ("temporal-small",)))
+        self.assertEqual(e002b_calibrate._coverage("E002b"), (("g", "g-rgb"), tuple(VARIANTS)))
+        points = [torch.randn(3, 68), torch.randn(2, 68)]
+        sample = {"geometry": torch.randn(2, 20), "targets": torch.tensor([0, 1]),
+                  "gt_valid": torch.ones(2, dtype=torch.bool), "locator": "fixture",
+                  "archive": "fixture.npz", "flags": torch.ones(2, 3),
+                  "rgb": torch.randn(2, 768), "points": points}
+        prepared = e002b_calibrate._model_sample(sample, "g-rgb-dditr")
+        self.assertIs(prepared["points"], points)
+        self.assertEqual(tuple(prepared["flags"].shape), (2, 3))
 
     def test_rgb_regularization_changes_only_temporal_dropout(self):
         for variant in ("norm", "temporal-small"):
@@ -227,6 +239,13 @@ class E002bModelTest(unittest.TestCase):
             row["model_coverage"] = ["g-rgb/temporal-small"]
             profile_path.write_text(json.dumps(row))
             self.assertEqual(e002b_run._profile_for(args)["model_coverage"], ["g-rgb/temporal-small"])
+            row["experiment"] = "E002d"
+            row["model_specs"] = {"g-rgb-dditr/temporal-small": model_spec("g-rgb-dditr", "temporal-small")}
+            row["model_coverage"] = ["g-rgb-dditr/temporal-small"]
+            profile_path.write_text(json.dumps(row))
+            args = SimpleNamespace(profile=profile_path, arm="g-rgb-dditr", model_variant="temporal-small",
+                                   device="cpu", rgb_branch_dropout=.5)
+            self.assertEqual(e002b_run._profile_for(args)["model_coverage"], ["g-rgb-dditr/temporal-small"])
             row["code"] = {"stale": "hash"}
             profile_path.write_text(json.dumps(row))
             with self.assertRaisesRegex(ValueError, "code changed"):
@@ -237,7 +256,7 @@ class E002bModelTest(unittest.TestCase):
             root = Path(directory)
             args = SimpleNamespace(outputs_root=root, output=root / "experiments/E002b/runs/attempt",
                                    rgb_cache_root=root / "experiments/E002a/rgb-cache",
-                                   point_cache_root=root / "experiments/E002a/indexed-loki")
+                                   point_cache_root=root / "experiments/E002a/indexed-loki", arm="g-rgb")
             e002b_run.validate_roots(args, {})
             args.rgb_branch_dropout = .3
             args.output = root / "experiments/E002c/runs/attempt"
@@ -246,8 +265,11 @@ class E002bModelTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "E002c evidence"):
                 e002b_run.validate_roots(args, {})
             del args.rgb_branch_dropout
+            args.arm = "g-rgb-dditr"
+            args.output = root / "experiments/E002d/runs/attempt"
+            e002b_run.validate_roots(args, {})
             args.output = root / "experiments/E002a/runs/attempt"
-            with self.assertRaisesRegex(ValueError, "E002b evidence"):
+            with self.assertRaisesRegex(ValueError, "E002d evidence"):
                 e002b_run.validate_roots(args, {})
 
     def test_independent_launcher_matrix_and_command_keep_lidar_grouped(self):

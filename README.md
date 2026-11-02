@@ -741,6 +741,40 @@ done
 
 Each attempt gets its own W&B run and fresh local output. No training is started by calibration. After these runs, the planned comparison is exploratory opposite-dataset validation; held-out tests remain untouched.
 
+### E002e weight-decay sensitivity
+
+The [E002e check](experiments/E002e-weight-decay-sensitivity/README.md) compares `g-rgb / temporal-small` with AdamW weight decay0.01 and0.1 against the existing0.0001 E002b controls. Only weight decay changes. The isolated checkout below has the canonical Aalto `outputs` tree linked as `outputs`; the command first waits for the currently active E002d LOKI process (PID765491), then writes a fresh current-code E002b calibration using the accepted chunk-4 reference, then launches ROAD and LOKI at both decay values sequentially. It stops if calibration or an attempt fails.
+
+```bash
+(
+set -euo pipefail
+cd /home/user20/projects/pedestrian-behavior-labeling-e002e
+export PYTHONPATH="$PWD/src" OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+outputs_root="/home/user20/projects/pedestrian-behavior-labeling-e002b-evaluation/outputs"
+e002a_root="$outputs_root/experiments/E002a"
+attempt_id="wd-$(date -u +%Y%m%d-%H%M%S)"
+profile_dir="$outputs_root/experiments/E002b/calibration-e002e-$attempt_id"
+
+tail --pid=765491 -f /dev/null
+uv run --no-project --python "$e002a_root/extractor-env/bin/python" python scripts/calibrate-e002b.py \
+  --experiment E002b --device cuda \
+  --reference-profile /home/user20/projects/e002a-execution-optimizations-20261023/calibration-chunk4-final/profile.json \
+  --fixtures "$e002a_root/execution-probe-04" \
+  --output "$profile_dir"
+
+for source in road-waymo loki; do
+  for wd in 0.01 0.1; do
+    wd_id="${wd/./p}"
+    uv run --no-project --python "$e002a_root/extractor-env/bin/python" python scripts/train-e002e.py \
+      --source "$source" --weight-decay "$wd" --device cuda \
+      --outputs-root "$outputs_root" --profile "$profile_dir/profile.json" \
+      --rgb-preparation "$e002a_root/rgb-cache-preparation-03/cache.json" \
+      --output "$outputs_root/experiments/E002e/runs/$attempt_id-$source-wd$wd_id"
+  done
+done
+)
+```
+
 ### E002b shared LiDAR training
 
 `scripts/train-e002b-lidar-group.py` trains the three `g-dditr` variants with shared training and validation preparation. Each retains its own initialization, dropout RNG, optimizer, stopping, W&B run, checkpoints and predictions. It loads each physical batch once, then runs the models sequentially; model computation and device transfers remain separate. Caches are read-only. Full source validation and the100/15 recipe are unchanged.

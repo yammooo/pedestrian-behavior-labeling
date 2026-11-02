@@ -13,7 +13,7 @@ Updated **2026-11-02**. We are developing a reliable **offline, given-track pede
 
 ## Next work
 
-1. Run the prepared [E002d LiDAR descriptor-dropout controls](../experiments/E002d-rgb-lidar-complementarity/README.md): two sequential seed0 geometry + LiDAR runs with descriptor dropout0.5, one per source, against the existing no-descriptor-dropout controls. This tests a regularization difference exposed by exploratory transfer; keep source-only checkpoint selection and held-out tests closed.
+1. Finish the active [E002d LiDAR descriptor-dropout controls](../experiments/E002d-rgb-lidar-complementarity/README.md), then run the prepared [E002e weight-decay sensitivity](../experiments/E002e-weight-decay-sensitivity/README.md) on geometry + RGB / temporal-small. Keep source-only checkpoint selection and held-out tests closed.
 2. Arrange a separate backup for valuable checkpoints/predictions; external storage is **TBD**. Original interrupted attempts and all earlier evidence remain preserved.
 3. Review the [E003a masking draft](../experiments/E003a-structured-observation-masking/README.md): agreed block/subset/resampling structure, with proposed probabilities and exact severity limits explicitly marked. Audit the finalized sampler before implementation. The unused retrieval proposal is deferred; E004 remains conditional.
 

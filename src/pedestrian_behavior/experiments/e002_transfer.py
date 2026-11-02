@@ -16,9 +16,10 @@ from pedestrian_behavior.data.prepared_rgb import PreparedRGB
 from pedestrian_behavior.data.multimodal import LogicalBatches, PredictionBatches
 from pedestrian_behavior.evaluation import prediction_metrics, save_predictions
 from pedestrian_behavior.experiments import e001b, e001b_run, e002a_run, e002b, e002b_group
-from pedestrian_behavior.experiments.e002a_features import FeatureCatalog, load_configuration
+from pedestrian_behavior.experiments.e002a_features import FeatureCatalog, extraction_identity, load_configuration
 from pedestrian_behavior.experiments.run import write_json
 from pedestrian_behavior.inspection.pretrained import DITR_CONFIG_SHA256, DITR_REVISION, DITR_SHA256
+from pedestrian_behavior.training import seed_run
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -47,7 +48,10 @@ def _load_frozen(rows, outputs_root):
         setups[source], bbox_records[source] = (setup_path, setup, collection, extension), bbox
 
     for row in rows:
-        checkpoint_path = (ROOT / row["checkpoint"]).resolve()
+        relative_checkpoint = Path(row["checkpoint"])
+        if not relative_checkpoint.parts or relative_checkpoint.parts[0] != outputs_root.name:
+            raise ValueError("Frozen checkpoint path must be relative to the repository outputs directory")
+        checkpoint_path = (outputs_root.parent / relative_checkpoint).resolve()
         if checksum(checkpoint_path) != row["checkpoint_sha256"]:
             raise ValueError(f"Frozen checkpoint hash changed: {checkpoint_path}")
         checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
@@ -83,6 +87,7 @@ class _Target:
             e001_root=outputs_root / "experiments/E001", e001b_root=outputs_root / "experiments/E001b")["conditions"]
         self.probe, self.rgb_root = probe, rgb_root
         self.catalog = self.rgb = self.points = None
+        self.extraction = None
 
     def supply(self, row, run_config):
         arm = ARMS[row["input"]]
@@ -90,6 +95,7 @@ class _Target:
             return None
         if self.catalog is None:
             config, transform = load_configuration(self.probe)
+            self.extraction = extraction_identity("cuda", config)
             self.catalog = FeatureCatalog(self.outputs_root, self.source, config, transform)
         if arm in ("g-rgb", "g-rgb-dditr") and self.rgb is None:
             self.rgb = PreparedRGB(self.rgb_root)
@@ -103,7 +109,11 @@ class _Target:
                 max_open_scenes=point_config["open_scenes"],
                 max_metadata_bytes=point_config["metadata_limit_bytes"],
                 frame_workers=point_config["frame_workers"])
-        identity = run_config.get("frozen_features") if self.rgb is not None else None
+        identity = None
+        if arm in ("g-rgb", "g-rgb-dditr"):
+            if self.extraction != run_config.get("frozen_features"):
+                raise ValueError("Target RGB preparation identity differs from the frozen training extractor")
+            identity = self.extraction
         return e002a_run.PreparedSupply(self.catalog, self.rgb if arm in ("g-rgb", "g-rgb-dditr") else None,
             self.points if arm in ("g-dditr", "g-rgb-dditr") else None, identity)
 
@@ -164,7 +174,7 @@ def _write_results(output, records):
         "| Training source | Inputs | Source val F1 | Source val CE | Opposite val F1 | Opposite val CE | Δ F1 (pp) |",
         "|---|---|---:|---:|---:|---:|---:|"]
     for r in records:
-        lines.append(f"| {r['training_source']} | {r['input']} | {r['source_f1']:.4f} | {r['source_ce']:.4f} | {r['target_f1']:.4f} | {r['target_ce']:.4f} | {r['delta_f1_pp']:+.2f} |")
+        lines.append(f"| {r['training_source']} | {r['input']} | {100*r['source_f1']:.2f} | {r['source_ce']:.4f} | {100*r['target_f1']:.2f} | {r['target_ce']:.4f} | {r['delta_f1_pp']:+.2f} |")
     lines.extend(["", "The source checkpoint’s baseline and bbox normalization was applied to opposite-source validation. The frozen checkpoint list, hashes and source metrics are recorded in the repository's `experiments/E002-multimodal-reference/transfer-comparison.json`.", "",
         "![Source and opposite-source validation F1](f1.png)"])
     (output / "transfer-results.md").write_text("\n".join(lines) + "\n")
@@ -177,12 +187,12 @@ def _write_results(output, records):
         rows = [r for r in records if r["training_source"] == source]
         x = np.arange(len(inputs))
         width = .36
-        source_scores = [next(r["source_f1"] for r in rows if r["input"] == name) for name in inputs]
-        target_scores = [next(r["target_f1"] for r in rows if r["input"] == name) for name in inputs]
+        source_scores = [100 * next(r["source_f1"] for r in rows if r["input"] == name) for name in inputs]
+        target_scores = [100 * next(r["target_f1"] for r in rows if r["input"] == name) for name in inputs]
         ax.bar(x - width/2, source_scores, width, label="Source validation")
         ax.bar(x + width/2, target_scores, width, label="Opposite validation")
         ax.set(title=f"Trained on {source}", xticks=x, xticklabels=["G", "G+RGB", "G+LiDAR", "G+RGB+LiDAR"],
-               ylim=(0, 1), ylabel="Track-weighted macro-F1")
+               ylim=(0, 100), ylabel="Track-weighted macro-F1 (%)")
         ax.tick_params(axis="x", rotation=18)
         ax.grid(axis="y", alpha=.2)
     axes[0].legend()
@@ -206,15 +216,18 @@ def run(comparison, outputs_root, output, device="cuda"):
             or frozen_config["evaluation"].get("held_out_tests_accessed") is not False
             or len(frozen_config.get("models", [])) != 8):
         raise ValueError("Frozen eight-cell validation comparison required")
+    determinism = seed_run(0)
     rows, setups, bbox_records = _load_frozen(frozen_config["models"], outputs_root)
     if device == "cuda" and not torch.cuda.is_available():
         raise RuntimeError("CUDA requested but unavailable")
     torch.set_num_threads(2)
     output.mkdir(parents=True)
     started = time.monotonic()
+    started_utc = datetime.now(timezone.utc).isoformat()
     write_json(output / "transfer-comparison.json", frozen_config)
     write_json(output / "status.json", {"status": "incomplete", "completed_cells": [],
-        "scope": "opposite-source validation only; no held-out test access", "started_utc": datetime.now(timezone.utc).isoformat()})
+        "scope": "opposite-source validation only; no held-out test access", "started_utc": started_utc,
+        "determinism": determinism})
     probe = outputs_root / "experiments/E002a/native-probe-07"
     rgb_root = outputs_root / "experiments/E002a/rgb-cache"
     targets = {}
@@ -230,15 +243,17 @@ def run(comparison, outputs_root, output, device="cuda"):
             record = _evaluate(row, target, output / "cells", device)
             records.append(record)
             write_json(output / "status.json", {"status": "incomplete", "completed_cells": records,
-                "scope": "opposite-source validation only; no held-out test access", "started_utc": datetime.now(timezone.utc).isoformat()})
+                "scope": "opposite-source validation only; no held-out test access", "started_utc": started_utc,
+                "determinism": determinism})
         _write_results(output, records)
         write_json(output / "status.json", {"status": "complete", "completed_cells": records,
             "scope": "exploratory opposite-source validation; no held-out test access",
-            "started_utc": json.loads((output / "status.json").read_text())["started_utc"],
+            "started_utc": started_utc, "determinism": determinism,
             "finished_utc": datetime.now(timezone.utc).isoformat(), "elapsed_seconds": time.monotonic() - started})
     except Exception as error:
         write_json(output / "status.json", {"status": "failed", "completed_cells": records,
-            "failure": f"{type(error).__name__}: {error}", "finished_utc": datetime.now(timezone.utc).isoformat()})
+            "failure": f"{type(error).__name__}: {error}", "started_utc": started_utc,
+            "finished_utc": datetime.now(timezone.utc).isoformat(), "determinism": determinism})
         raise
     finally:
         for target in targets.values():

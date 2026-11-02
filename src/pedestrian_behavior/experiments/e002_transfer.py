@@ -63,8 +63,10 @@ def _load_frozen(rows, outputs_root):
         rgb_dropout = row["rgb_branch_dropout"]
         model_spec = e002b.model_spec(arm, row["variant"], dropout=0.1,
                                       rgb_branch_dropout=rgb_dropout)
-        if (run_config.get("source") != source or run_config.get("configuration") != arm
-                or run_config.get("variant") != row["variant"] or run_config.get("model") != model_spec
+        run_arm = run_config.get("configuration", run_config.get("arm"))
+        run_variant = run_config.get("variant", run_config.get("model_variant"))
+        if (run_config.get("source") != source or run_arm != arm
+                or run_variant != row["variant"] or run_config.get("model") != model_spec
                 or run_config.get("held_out_tests") is not False
                 or checkpoint.get("epoch") != row["selected_epoch"]
                 or checkpoint.get("selection", {}).get("epoch") != row["selected_epoch"]

@@ -120,10 +120,12 @@ Training contains **8,574 tracks / 270,355 context slots / 262,071 accepted GT s
 
 | Split | RGB on accepted GT | LiDAR on accepted GT |
 |---|---:|---:|
-| Training | 45.20% | Not computed |
+| Training | 45.20% | 99.998% |
 | Validation | 41.15% | 100.00% |
 
 **3D-only input remains common:** 2,888/8,574 training tracks (33.7%) and 717/1,861 validation tracks (38.5%) have no usable RGB. Every track has some usable LiDAR, and 7,356/8,574 training tracks (85.8%) have it throughout. Missing RGB tracks remain eligible. These masks do not establish why an RGB crop is missing.
+
+The later [training-only mask audit](../../experiments/E002-multimodal-reference/README.md#training-gt-runs-and-temporal-mask-feasibility-2026-11-02) measured the training LiDAR/GT overlap above: four accepted GT slots lack a usable LiDAR crop. It found 10,153 contiguous accepted-label runs, with median20 slots and P25–P75 of10–34 slots; GT gaps and label changes break runs. These are observed label spans at nominal cadence, not uncensored behavior episodes.
 
 Source: [E002 availability audit, numerical artifacts and validation cross-check](../../experiments/E002-multimodal-reference/README.md#rgb-and-lidar-availability-in-the-frozen-e002-populations). The native track statistics below concern different populations and timing rules.
 

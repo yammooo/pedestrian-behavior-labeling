@@ -151,7 +151,7 @@ No “first” or established methodological novelty is claimed. These are order
 
 ### Ideas already established, or not sufficient as novelty
 
-Bidirectionality/future context; dense action labeling; temporal Transformers; target crops/queries; scene cross-attention; 4D point processing; concatenated pretrained encoders; masked modality reconstruction/dropout; partial-label native heads; auxiliary motion forecasting; cross-dataset evaluation; temperature scaling/rejection; automatic pseudo-labeling/smoothing. Specific new mechanisms or carefully controlled new evidence can still contribute, but these ingredients alone do not.
+Bidirectionality/future context; dense action labeling; temporal Transformers; target crops/queries; scene cross-attention; 4D point processing; concatenated pretrained encoders; masked modality reconstruction/dropout; partial-label native heads; auxiliary motion forecasting; cross-dataset evaluation; temperature scaling/rejection; automatic pseudo-labeling/smoothing. Specific new mechanisms or carefully controlled new evidence can still contribute, but these ingredients alone do not. The [2026-11-02 masking follow-up](README.md#observation-masking-precedents) distinguishes ModDrop whole-modality removal, our existing descriptor dropout, proposed temporal observation masks and ActionMAE reconstruction; it does not freeze a new protocol.
 
 Reliability is best integrated into candidate 1: calibration and rejection without independent error/coverage evidence are standard techniques, not trustworthy annotation. A high-confidence benchmark error remains an error, and rejecting all rare states is not a useful full labeler.
 

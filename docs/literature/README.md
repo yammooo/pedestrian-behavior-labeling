@@ -1,6 +1,6 @@
 # Literature and contribution comparison
 
-Updated **2026-10-15**. The [focused review and direction recommendation](offline-labeling-research-direction.md) owns the closest-work comparison, architecture tradeoffs, encoder/access checks and ranked contribution hypotheses. Eight close papers received deeper protocol reviews; additional shorter notes resolve specific mechanism, pretraining, supervision and reliability questions. The [PTv3 follow-up](papers/ptv3.md#concrete-outdoor-checkpoint-follow-up-2026-10-15) verifies concrete outdoor files/configs; [Utonia's training mixtures](papers/utonia.md#verified-pretraining-partitions-2026-10-15) include official held-out partitions. No novelty, state-of-the-art or reproduction claim. Dataset notes continue to own native facts and release findings.
+Updated **2026-11-02**; ModDrop/ActionMAE masking follow-up added. Earlier source and encoder checks retain their own review dates. The [focused review and direction recommendation](offline-labeling-research-direction.md) owns the closest-work comparison, architecture tradeoffs, encoder/access checks and ranked contribution hypotheses. Eight close papers received deeper protocol reviews; additional shorter notes resolve specific mechanism, pretraining, supervision and reliability questions. The [PTv3 follow-up](papers/ptv3.md#concrete-outdoor-checkpoint-follow-up-2026-10-15) verifies concrete outdoor files/configs; [Utonia's training mixtures](papers/utonia.md#verified-pretraining-partitions-2026-10-15) include official held-out partitions. No novelty, state-of-the-art or reproduction claim. Dataset notes continue to own native facts and release findings.
 
 **Recommended direction:** empirical offline-labeling study + established multimodal reference; one conditional complete-track-conditioned retrieval or complementary-supervision comparison. A Transformer replacement and joint raw RGB/4D architecture are not prerequisites. [Current research roadmap](../research.md#tentative-experiment-direction).
 
@@ -38,7 +38,8 @@ Individual paper notes live in `papers/`; cross-paper reviews remain in this dir
 | [Detecting 32 attributes, T-ITS](papers/detecting-32-attributes.md) | Existing partial-label pedestrian heads/gradient normalization and detection-versus-box classification |
 | [MSeg, CVPR 2020](papers/mseg.md) | Semantic reconciliation and true held-out dataset controls; not a universal-ontology requirement |
 | [MultiMAE, ECCV 2022](papers/multimae.md) | Aligned 2D multimodal masked learning and teacher/pseudo-label provenance |
-| [ActionMAE, AAAI 2023](papers/actionmae.md) | Established missing-modality reconstruction; random dropout differs from natural missingness |
+| [ModDrop, TPAMI 2016](papers/moddrop.md) | Whole-modality supervised dropout; differs from our descriptor-channel dropout and proposed temporal gaps |
+| [ActionMAE, AAAI 2023](papers/actionmae.md) | Masked clip-modality summary reconstruction; auxiliary loss, natural-missingness limits and frozen-feature adaptation |
 | [Calibration, ICML 2017](papers/calibration.md) | Cheap source-validation temperature scaling; no shifted-domain reliability guarantee |
 | [SelectiveNet, ICML 2019](papers/selectivenet.md) | Risk/coverage, class retention and why acceptance needs independent error evidence |
 | [ViCross, September 2026 preprint](papers/vicross.md) | Target-centric visual tokens/auxiliary spatial tasks; strong transfer failure despite in-domain accuracy |
@@ -48,6 +49,19 @@ Individual paper notes live in `papers/`; cross-paper reviews remain in this dir
 | [ScaLR, CVPR 2024 / ScaLR+](papers/scalr.md) | 2026-10-15 candidate screen: image-to-LiDAR distillation, published outdoor weights and inference-versus-pretraining modality distinction |
 | [TARL, CVPR 2023](papers/tarl.md) | 2026-10-15 repository screen: temporal LiDAR pretraining, SemanticKITTI weights and intensity/compatibility gate |
 | [DITR / D-DITR, 3DV 2026](papers/ditr.md) | Multi-level image-feature injection versus point-only inference after distillation; verified nuScenes PTv3 checkpoint/config candidates |
+
+## Observation-masking precedents
+
+The **2026-11-02 follow-up** separates established mechanisms from our proposed dense-track adaptation. Individual notes contain primary sources and limitations; the proposed masking policy remains undecided.
+
+| Mechanism | What changes | Relevance here |
+|---|---|---|
+| Existing E002 descriptor dropout | Some embedding channels are zeroed with a time-locked mask; availability stays valid | Regularizes each branch but does not train complete observation outages |
+| [ModDrop](papers/moddrop.md) | Whole modality components are randomly removed; classification labels stay fixed | Direct low-complexity baseline for reducing dependence on a branch |
+| Proposed temporal observation masking | Available branch observations are withheld at scattered times or across blocks | Needs explicit effective validity, preserved track slots and an evaluation of ambiguous gaps |
+| [ActionMAE](papers/actionmae.md) | Clip-modality summaries are masked and reconstructed with an additional feature loss | A later reconstruction comparison; not equivalent to masking alone |
+
+Masking is established prior art. Our hypothesis is whether a specific policy helps dense pedestrian labeling and transfer under the observed missingness patterns. Synthetic missingness robustness, natural-missingness robustness and cross-dataset generalization need separate measurements. These notes do not establish novelty or guarantee benefit.
 
 ## Reference index
 

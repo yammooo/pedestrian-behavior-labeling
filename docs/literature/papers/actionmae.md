@@ -1,13 +1,27 @@
 # Towards Good Practices for Missing Modality Robust Action Recognition
 
-Woo et al., AAAI 2023; ActionMAE. Reviewed 2026-10-13: [full paper](https://arxiv.org/pdf/2211.13916), §2–3 and availability/fusion comparisons; [official implementation](https://github.com/sangminwoo/ActionMAE).
+Woo et al., **AAAI 2023**; ActionMAE. Initially reviewed 2026-10-13; expanded **2026-11-02** against the [full paper, v2](https://arxiv.org/html/2211.13916v2), §§2–4 and appendix, and [official implementation](https://github.com/sangminwoo/ActionMAE).
 
-Per-frame modality encoders feed temporal Transformers; a second module drops and reconstructs modality features. Supervised clip-action classification is combined with feature reconstruction. RGB/depth/infrared tests use NTU and related action datasets. Transformer fusion is more robust than summation/concatenation in the reported setup, but still degrades under some missing modalities; reconstruction improves these comparisons. Code is available, while a generally reusable behavior checkpoint was not verified. [Paper, §§2–4](https://arxiv.org/pdf/2211.13916); [repo](https://github.com/sangminwoo/ActionMAE).
+## What is masked and reconstructed
 
-Missing-modality attention, dropout and reconstruction are **established baselines**, not automatic novelty. Natural missingness in LOKI is different from random sensor removal: it can correlate with camera geometry and annotation population. Compare both, and retain an availability-only control where appropriate.
+Per-frame ResNet features feed a temporal Transformer for each modality. Each produces one clip summary; ActionMAE masks these **modality summaries after temporal encoding**, rather than individual frame observations. Its Transformer encoder reads the remaining summaries plus a learned memory token. A decoder inserts dummy tokens at missing positions and reconstructs their features; the resulting summaries feed fusion and one clip-action prediction. At least one modality remains. [Paper, §§2.1, 3.1](https://arxiv.org/html/2211.13916v2#S3.SS1).
 
-First use explicit masks and a functioning kinematic/3D path, then ordinary modality dropout. Add feature reconstruction only if a diagnosed failure remains. Whole-modality clip removal does not directly address intermittent missing target observations; per-slot masks and physical timing remain necessary.
+Training combines classification CE with MSE on synthetically hidden modality summaries. Missing summaries are reconstructed at inference too. Experiments use RGB/depth/infrared subsets on NTU60/120 and RGB/depth on NW-UCLA/UWA3D. Their selected space encoders use ImageNet initialization and are jointly trained; this is not our frozen-feature recipe. Reported comparisons improve missing-modality robustness. [Paper, §§3.2–4.5](https://arxiv.org/html/2211.13916v2#S3.SS2).
 
-A model trained on available modality combinations cannot guarantee reliable labels when its informative evidence is absent. Report coverage/class effects rather than treating reconstructed features as measured evidence.
+## Why it matters for us
 
-[Direction review](../offline-labeling-research-direction.md).
+**Two separate ideas:** [ModDrop](moddrop.md)-style masking can train the existing classifier directly; ActionMAE adds a reconstruction objective and learned reconstruction module. A masking-only experiment should not be described as an ActionMAE implementation.
+
+The paper supports testing missing-modality behavior and fusion, but its clip summaries do not establish how to handle time-varying gaps within our densely labeled tracks. Its controlled modality-subset experiments also do not establish ROAD-Waymo↔LOKI generalization. Natural missingness in our [frozen populations](../../datasets/README.md#measured-rgb-and-lidar-availability) can correlate with scene and annotation selection.
+
+**A possible later auxiliary objective:** reconstruct only features that genuinely existed and were deliberately hidden. Naturally missing LOKI RGB has no measured RGB-feature target; a reconstruction cannot be treated as a recovered observation or trustworthy GT.
+
+Our LiDAR descriptor comes from a trainable spatial readout. Reconstructing it would require a defined target and potentially computing the hidden readout, reducing the computational savings of skipping masked LiDAR. That is an implementation question for our adaptation, not a result from this paper.
+
+## Practical decision and boundaries
+
+First compare ordinary structured observation masking with its matched unmasked control. If reconstruction is later justified, compare masking alone against masking plus reconstruction with the same visible observations, initialization, behavior labels and accounted compute. Report natural availability, fixed missingness cases, per-class F1 and CE; do not infer reliable recovery when decisive evidence is absent.
+
+The official repository provides training code; its README lists PyTorch 1.11, CUDA 11.3 and Apex. Compatibility with our environment and a usable task checkpoint were not verified.
+
+[Cross-paper overview](../README.md#observation-masking-precedents) · [Direction review](../offline-labeling-research-direction.md).

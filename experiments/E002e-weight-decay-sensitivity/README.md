@@ -21,7 +21,7 @@ Only AdamW weight decay changes. Keep LR `3e-4`, betas `(0.9, 0.999)`, epsilon `
 
 ## Calibration and execution
 
-The older independent E002b profile has stale execution hashes. The current E002d profile has the current code hash but covers only `g-dditr`, so neither is accepted for these runs. Preserve both. The launch command creates a fresh current-code E002b calibration from the latest accepted chunk-4 packing reference, then uses its `g-rgb / temporal-small` coverage. Calibration performs bounded CUDA forward/backward/AdamW checks only; it does not train on behavior labels or log to W&B. No feature cache is rebuilt.
+The older independent E002b profile has stale execution hashes. The current E002d profile has the current code hash but covers only `g-dditr`, so neither is accepted for these runs. Preserve both. The launch command creates a fresh current-code E002b calibration from the latest accepted chunk-4 packing reference, then uses its `g-rgb / temporal-small` coverage. Calibration performs bounded CUDA CE/backward/AdamW checks on labeled development fixtures, then discards the resource-check weights; it does not start comparison training or a W&B run. No feature cache is rebuilt.
 
 Use the isolated checkout at `/home/user20/projects/pedestrian-behavior-labeling-e002e` with its `outputs` symlink pointing to the canonical Aalto outputs tree. The [runnable command](../../README.md#e002e-weight-decay-sensitivity) waits for the active E002d LOKI process and runs calibration before training. Outputs remain under ignored `outputs/experiments/E002e/runs/`; one W&B run is created per attempt. Do not reuse attempt directories.
 

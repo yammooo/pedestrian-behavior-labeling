@@ -10,15 +10,16 @@ The [training-only feasibility audit](../E002-multimodal-reference/README.md#tra
 
 ## First comparison
 
+**Fixed-N only:** every source track is presented exactly once per epoch in both conditions.
+
 | Condition | Presentations per source epoch | Status |
 |---|---:|---|
 | No observation masking | N original tracks | Existing matching control, subject to configuration verification |
 | E003a masking | N tracks, each presented once with a fresh clean-or-masked view | First proposed increment: one new seed 0 run per source |
-| Expanded augmentation | 2N: each original plus one newly masked view | Requested later comparison; budget/learning-rate control TBD, not part of the first two runs |
 
 Proposed reference: E002d `g-rgb-dditr / temporal-small`, branch LayerNorm, geometry/RGB/LiDAR widths 64/128/128, temporal width 128, two blocks, temporal/spatial dropout 0.1, RGB descriptor dropout 0.5 and LiDAR descriptor dropout 0.0. This has completed controls on both sources. Keep that model, E002 optimizer/warmup, effective batch 64, maximum 100 epochs/patience 15 and seed 0 fixed. Confirm the reference before implementation; changing descriptor dropout requires a matching control. Inputs, targets, populations and splits remain those of E002.
 
-Fresh views are generated online, not stored as duplicate tracks. Every training track retains one presentation per E003a epoch; reshuffle assignments and redraw masks across epochs. Rejected candidates do not add optimizer updates or replace a track with another track. Only the expanded comparison increases presentations.
+Fresh views are generated online, not stored as duplicate tracks. Every training track retains one presentation per E003a epoch; reshuffle assignments and redraw masks across epochs. Rejected candidates do not add optimizer updates or replace a track with another track.
 
 ## Sampler
 

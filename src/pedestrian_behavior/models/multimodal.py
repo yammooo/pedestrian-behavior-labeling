@@ -107,7 +107,7 @@ class MultimodalClassifier(nn.Module):
 
     def __init__(self, arm, profile, *, geometry_width=64, rgb_width=128, spatial_width=128,
                  temporal_width=256, temporal_ffn=1024, normalize_branches=False, temporal_dropout=.1,
-                 rgb_branch_dropout=0.):
+                 rgb_branch_dropout=0., lidar_branch_dropout=0.):
         super().__init__()
         if arm not in ARM_FLAGS:
             raise ValueError("Unknown multimodal arm")
@@ -119,6 +119,7 @@ class MultimodalClassifier(nn.Module):
         self.rgb_branch_dropout = nn.Dropout1d(rgb_branch_dropout)
         self.spatial = SpatialReadout(spatial_width) if "lidar_valid" in ARM_FLAGS[arm] else None
         self.spatial_norm = nn.LayerNorm(spatial_width) if normalize_branches and self.spatial is not None else None
+        self.lidar_branch_dropout = nn.Dropout1d(lidar_branch_dropout)
         fusion_width = geometry_width + rgb_width * int(self.rgb is not None) + spatial_width * int(self.spatial is not None)
         self.fusion = nn.Linear(fusion_width + len(ARM_FLAGS[arm]), temporal_width)
         self.temporal = nn.ModuleList([TemporalBlock(temporal_width, temporal_ffn, temporal_dropout),
@@ -185,8 +186,10 @@ class MultimodalClassifier(nn.Module):
                 lidar = lidar.index_copy(0, torch.tensor(indices, device=device), descriptor)
             lidar = lidar.reshape(b, t, self.spatial.project.out_features)
             if self.spatial_norm is not None:
-                lidar_flag = ARM_FLAGS[self.arm].index("lidar_valid")
-                lidar = self.spatial_norm(lidar) * flags[..., lidar_flag:lidar_flag + 1]
+                lidar = self.spatial_norm(lidar)
+            lidar = self.lidar_branch_dropout(lidar.transpose(1, 2)).transpose(1, 2)
+            lidar_flag = ARM_FLAGS[self.arm].index("lidar_valid")
+            lidar = lidar * flags[..., lidar_flag:lidar_flag + 1]
             descriptors.append(lidar)
         x = self.fusion(torch.cat((*descriptors, flags), -1))
         for layer in self.temporal:

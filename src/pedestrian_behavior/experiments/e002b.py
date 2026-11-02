@@ -14,7 +14,7 @@ VARIANTS = {
 }
 
 
-def model_spec(arm, variant, dropout=.1, rgb_branch_dropout=0.):
+def model_spec(arm, variant, dropout=.1, rgb_branch_dropout=0., lidar_branch_dropout=0.):
     if arm not in ARMS:
         raise ValueError("E002b supports only g, g-rgb and g-dditr arms")
     if variant not in VARIANTS:
@@ -42,6 +42,10 @@ def model_spec(arm, variant, dropout=.1, rgb_branch_dropout=0.):
         raise ValueError("RGB branch dropout must be 0, 0.3 or 0.5 on an RGB arm")
     if rgb_branch_dropout:
         spec["rgb_branch_dropout"] = rgb_branch_dropout
+    if lidar_branch_dropout not in (0., .5) or (lidar_branch_dropout and arm != "g-dditr"):
+        raise ValueError("LiDAR branch dropout must be 0, or 0.5 on the LiDAR-only arm")
+    if lidar_branch_dropout:
+        spec["lidar_branch_dropout"] = lidar_branch_dropout
     if "rgb_valid" in flags:
         spec["rgb_projection"] = [768, settings["rgb_width"]]
     if "lidar_valid" in flags:
@@ -52,8 +56,9 @@ def model_spec(arm, variant, dropout=.1, rgb_branch_dropout=0.):
     return spec
 
 
-def build_model(arm, variant, profile, dropout=.1, rgb_branch_dropout=0.):
+def build_model(arm, variant, profile, dropout=.1, rgb_branch_dropout=0., lidar_branch_dropout=0.):
     """Construct one frozen E002b model; execution and fitting stay with callers."""
-    model_spec(arm, variant, dropout, rgb_branch_dropout)
+    model_spec(arm, variant, dropout, rgb_branch_dropout, lidar_branch_dropout)
     return MultimodalClassifier(arm, profile, temporal_dropout=dropout,
-                                rgb_branch_dropout=rgb_branch_dropout, **VARIANTS[variant])
+                                rgb_branch_dropout=rgb_branch_dropout, lidar_branch_dropout=lidar_branch_dropout,
+                                **VARIANTS[variant])

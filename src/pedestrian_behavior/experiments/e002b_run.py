@@ -17,7 +17,8 @@ from .run import run_attempt as execute_attempt
 
 ARMS = ("g", "g-rgb")
 E002D_ARM = "g-rgb-dditr"
-RUN_ARMS = ARMS + (E002D_ARM,)
+RUN_ARMS = ARMS + ("g-dditr", E002D_ARM)
+LIDAR_DROPOUT_ARM = "g-dditr"
 SETTINGS = e002a_run.SETTINGS
 
 
@@ -33,7 +34,8 @@ def validate_roots(args, config):
     """E002b output guard; keep E002a's hashed extraction-policy module untouched."""
     rgb, points, output = (path.resolve() for path in (args.rgb_cache_root, args.point_cache_root, args.output))
     root = args.outputs_root.resolve()
-    experiment = ("E002d" if getattr(args, "arm", None) == E002D_ARM else
+    experiment = ("E002d" if getattr(args, "arm", None) == E002D_ARM
+                  or getattr(args, "lidar_branch_dropout", 0.) else
                   "E002c" if getattr(args, "rgb_branch_dropout", 0.) else "E002b")
     if not output.is_relative_to(root / f"experiments/{experiment}"):
         raise ValueError(f"{experiment} evidence must be under outputs-root/experiments/{experiment}")
@@ -50,7 +52,9 @@ def validate_roots(args, config):
 
 def _profile_for(args):
     record = json.loads(args.profile.read_text())
-    expected_experiment = "E002d" if args.arm == E002D_ARM else "E002b"
+    rgb_branch_dropout = getattr(args, "rgb_branch_dropout", 0.)
+    lidar_branch_dropout = getattr(args, "lidar_branch_dropout", 0.)
+    expected_experiment = "E002d" if args.arm == E002D_ARM or lidar_branch_dropout else "E002b"
     if record.get("status") != "complete" or record.get("experiment") != expected_experiment:
         raise ValueError(f"Completed {expected_experiment} calibration profile required")
     if record.get("device") != args.device:
@@ -63,8 +67,9 @@ def _profile_for(args):
         raise ValueError(f"{expected_experiment} calibration hardware differs from the requested CUDA device")
     key = f"{args.arm}/{args.model_variant}"
     # E002c adds training-time masking without changing the calibrated tensor shape.
-    if record.get("model_specs", {}).get(key) != e002b.model_spec(args.arm, args.model_variant):
-        raise ValueError("Selected arm/variant is not covered by this exact E002b calibration")
+    if record.get("model_specs", {}).get(key) != e002b.model_spec(
+            args.arm, args.model_variant, lidar_branch_dropout=lidar_branch_dropout):
+        raise ValueError("Selected arm/variant/dropout is not covered by this exact calibration")
     if key not in record.get("model_coverage", ()):
         raise ValueError("Selected arm/variant is not listed as completed in E002b calibration")
     e002a_run.validate_profile(record.get("profile", {}))
@@ -75,8 +80,12 @@ def assembly(args):
     _profile_for(args)
     dropout = args.dropout
     rgb_branch_dropout = getattr(args, "rgb_branch_dropout", 0.)
-    experiment = ("E002d" if args.arm == E002D_ARM else "E002c" if rgb_branch_dropout else "E002b")
-    run_name = (f"e002d-{args.source}-g-rgb-dditr-temporal-small-rgbdrop{int(rgb_branch_dropout * 100)}-s0"
+    lidar_branch_dropout = getattr(args, "lidar_branch_dropout", 0.)
+    experiment = ("E002d" if args.arm == E002D_ARM or lidar_branch_dropout else
+                  "E002c" if rgb_branch_dropout else "E002b")
+    run_name = (f"e002d-{args.source}-g-dditr-temporal-small-lidardrop{int(lidar_branch_dropout * 100)}-s0"
+                if lidar_branch_dropout else
+                f"e002d-{args.source}-g-rgb-dditr-temporal-small-rgbdrop{int(rgb_branch_dropout * 100)}-s0"
                 if args.arm == E002D_ARM else
                 f"e002c-{args.source}-g-rgb-temporal-small-rgbdrop{int(rgb_branch_dropout * 100)}-s0"
                 if rgb_branch_dropout else
@@ -87,9 +96,10 @@ def assembly(args):
         "experiment": experiment,
         "resource_code": resource_code,
         "validate_roots": validate_roots,
-        "model_spec": lambda arm, variant: e002b.model_spec(arm, variant, dropout, rgb_branch_dropout),
+        "model_spec": lambda arm, variant: e002b.model_spec(
+            arm, variant, dropout, rgb_branch_dropout, lidar_branch_dropout),
         "model_factory": lambda arm, variant, profile: e002b.build_model(
-            arm, variant, profile, dropout, rgb_branch_dropout),
+            arm, variant, profile, dropout, rgb_branch_dropout, lidar_branch_dropout),
         "run_name": run_name,
     }
     return e002a_run.assembly(args, policy=policy)
@@ -107,6 +117,14 @@ def run(args):
     rgb_branch_dropout = getattr(args, "rgb_branch_dropout", 0.)
     if rgb_branch_dropout not in (0., .3, .5):
         raise ValueError("RGB branch dropout must be 0, 0.3 or 0.5")
+    lidar_branch_dropout = getattr(args, "lidar_branch_dropout", 0.)
+    if lidar_branch_dropout not in (0., .5):
+        raise ValueError("LiDAR branch dropout must be 0 or 0.5")
+    if args.arm == LIDAR_DROPOUT_ARM and not lidar_branch_dropout:
+        raise ValueError("The single-run LiDAR-only arm is scoped here to the E002d dropout control")
+    if lidar_branch_dropout and (args.arm != LIDAR_DROPOUT_ARM or args.model_variant != "temporal-small"
+                                 or args.dropout != .1 or rgb_branch_dropout or args.smoke):
+        raise ValueError("E002d LiDAR dropout requires full g-dditr temporal-small, temporal dropout 0.1, RGB dropout 0")
     if args.arm == E002D_ARM and (args.model_variant != "temporal-small" or args.dropout != .1
                                   or rgb_branch_dropout not in (0., .5) or args.smoke):
         raise ValueError("E002d requires full g-rgb-dditr temporal-small runs, temporal dropout 0.1 and RGB branch dropout 0 or 0.5")
@@ -120,7 +138,7 @@ def run(args):
     axes = {key: value for key, value in e002a_run.STRATA.items()
             if key not in ("rgb-observed", "lidar-observed")
             or key == "rgb-observed" and args.arm in ("g-rgb", E002D_ARM)
-            or key == "lidar-observed" and args.arm == E002D_ARM}
+            or key == "lidar-observed" and args.arm in ("g-dditr", E002D_ARM)}
     return execute_attempt(args.source, args.arm, args.model_variant, args.output, args.device, args.smoke,
                            settings=SETTINGS, assemble=lambda *_: assembly(args), classes=e002a_run.CLASSES,
                            axes=axes)
@@ -132,6 +150,7 @@ def add_arguments(parser):
     parser.add_argument("--variant", dest="model_variant", choices=tuple(e002b.VARIANTS), required=True)
     parser.add_argument("--dropout", type=float, choices=(.1, .3, .5), default=.1)
     parser.add_argument("--rgb-branch-dropout", type=float, choices=(0., .3, .5), default=0.)
+    parser.add_argument("--lidar-branch-dropout", type=float, choices=(0., .5), default=0.)
     parser.add_argument("--device", choices=("cpu", "cuda"), required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--profile", type=Path, required=True)

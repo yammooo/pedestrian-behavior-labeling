@@ -719,6 +719,28 @@ done
 
 This runs source-validation training only and stops launching further attempts if one fails. Each attempt has separate local/W&B evidence. Do not reuse an output directory. The earlier E002b LiDAR-only reference is retained without retraining; its interrupted LOKI training remains a comparison limitation.
 
+### E002d follow-up: LiDAR descriptor dropout
+
+This launches the separate two-run geometry + LiDAR control, ROAD-Waymo then LOKI, with track-consistent dropout at0.5 after the LiDAR branch LayerNorm. It has no RGB branch and uses no RGB cache. First complete the exact CUDA calibration described in the [E002d record](experiments/E002d-rgb-lidar-complementarity/README.md#follow-up-lidar-branch-regularization). The command stops after a failed attempt and uses fresh output directories:
+
+```bash
+cd /home/user20/projects/pedestrian-behavior-labeling-e002b-evaluation
+export PYTHONPATH="$PWD/src" OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+e002a_root="$PWD/outputs/experiments/E002a"
+e002d_root="$PWD/outputs/experiments/E002d"
+attempt_id="lidardrop-$(date -u +%Y%m%d-%H%M%S)"
+for source in road-waymo loki; do
+  uv run --no-project --python "$e002a_root/extractor-env/bin/python" python scripts/train-e002b.py \
+    --source "$source" --arm g-dditr --variant temporal-small --dropout 0.1 \
+    --lidar-branch-dropout 0.5 --device cuda \
+    --profile "$e002d_root/calibration-lidar-dropout-20261102/profile.json" \
+    --indexed-point-cache "$e002a_root/indexed-$source" \
+    --output "$e002d_root/runs/$attempt_id-$source-lidardrop50" || break
+done
+```
+
+Each attempt gets its own W&B run and fresh local output. No training is started by calibration. After these runs, the planned comparison is exploratory opposite-dataset validation; held-out tests remain untouched.
+
 ### E002b shared LiDAR training
 
 `scripts/train-e002b-lidar-group.py` trains the three `g-dditr` variants with shared training and validation preparation. Each retains its own initialization, dropout RNG, optimizer, stopping, W&B run, checkpoints and predictions. It loads each physical batch once, then runs the models sequentially; model computation and device transfers remain separate. Caches are read-only. Full source validation and the100/15 recipe are unchanged.

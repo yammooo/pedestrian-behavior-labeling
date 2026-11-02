@@ -13,7 +13,7 @@ Updated **2026-11-02**. We are developing a reliable **offline, given-track pede
 
 ## Next work
 
-1. Discuss the [cross-validation transfer result](../experiments/E002-multimodal-reference/transfer-results.md) before selecting one follow-up. RGB-containing models have the highest transfer F1 in this seed, while LiDAR-only leads source validation. Preserve held-out tests; avoid selecting a final method from these exploratory target scores.
+1. Prepare the [E002d LiDAR descriptor-dropout controls](../experiments/E002d-rgb-lidar-complementarity/README.md): two sequential seed0 geometry + LiDAR runs with descriptor dropout0.5, one per source, against the existing no-descriptor-dropout controls. This tests a regularization difference exposed by exploratory transfer; keep source-only checkpoint selection and held-out tests closed.
 2. Arrange a separate backup for valuable checkpoints/predictions; external storage is **TBD**. Original interrupted attempts and all earlier evidence remain preserved.
 3. Choose at most one substantial follow-up using measured error/cost evidence and the [schedule](research.md#schedule). Broader ontology, heterogeneous supervision and reliability experiments remain hypotheses.
 

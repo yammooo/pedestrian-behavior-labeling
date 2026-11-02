@@ -39,3 +39,13 @@ The completed CUDA calibration is `outputs/experiments/E002d/calibration-2026103
 ## Results
 
 See the [concise comparison and overfitting review](results-review.md) for the modality/model table, two summary graphs, W&B links and Aalto artifact paths. The RGB-dropout0.5 fusion arm gains over dropout0 on both sources, but does not clearly beat the matched geometry + LiDAR reference: it is effectively tied on ROAD F1 and lower on LOKI. Validation CE still worsens late in every E002d run.
+
+## Follow-up: LiDAR branch regularization
+
+The four fusion attempts above are complete. A separate two-run control will test whether dropout on the **normalized LiDAR descriptor** changes the geometry + LiDAR model's generalization: `g-dditr / temporal-small`, LiDAR descriptor dropout0.5, ROAD-Waymo and LOKI, seed0. No RGB branch is present. This is motivated by the remaining train/validation gap; it is not a broader dropout search or a replacement for the completed fusion comparison.
+
+Apply `Dropout1d(0.5)` to the LayerNorm'ed LiDAR descriptor, with one channel mask shared across all time steps in each track. The LiDAR validity flag is appended unchanged; missing/padded descriptors are zeroed after dropout. Geometry receives no descriptor dropout. Spatial and temporal dropout stay0.1. Keep the E002d 100-epoch/patience15 source-validation recipe, seed, model widths, normalization, optimizer and caches unchanged. Names end in `lidardrop50`.
+
+After the two runs, compare their best source-selected checkpoints on the opposite dataset's **validation** split, labeled exploratory/target-informed development. Do not run held-out test evaluation as part of this follow-up.
+
+The new CUDA calibration must use the accepted four-frame E002a profile at `/home/user20/projects/e002a-execution-optimizations-20261023/calibration-chunk4-final/profile.json` only as its packing-limit reference. It recalibrates the exact `g-dditr / temporal-small / LiDAR dropout0.5` model on both source fixtures and the bounded temporal-shape check. The generated calibration profile path and hash are recorded after completion; the older two-frame E002d profile is not valid for this follow-up.

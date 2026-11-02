@@ -26,10 +26,14 @@ ARMS = ("g", "g-rgb")
 E002D_ARM = "g-rgb-dditr"
 
 
-def _coverage(experiment):
+def _coverage(experiment, lidar_branch_dropout=0.):
     if experiment == "E002b":
         return ARMS, tuple(e002b.VARIANTS)
     if experiment == "E002d":
+        if lidar_branch_dropout not in (0., .5):
+            raise ValueError("E002d LiDAR branch dropout must be 0 or 0.5")
+        if lidar_branch_dropout:
+            return ("g-dditr",), ("temporal-small",)
         return (E002D_ARM,), ("temporal-small",)
     raise ValueError("Unknown E002 calibration scope")
 
@@ -81,10 +85,11 @@ def _stress_sample(slots, arm):
     return result
 
 
-def _measure(sample, arm, variant, profile, device, *, tracks=64, shape_stress=False):
+def _measure(sample, arm, variant, profile, device, *, tracks=64, shape_stress=False,
+             lidar_branch_dropout=0.):
     seed_run(0)
     batch = collate_multimodal([sample] * tracks)
-    model = e002b.build_model(arm, variant, profile).to(device)
+    model = e002b.build_model(arm, variant, profile, lidar_branch_dropout=lidar_branch_dropout).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), **e002a_calibrate.SETTINGS["optimizer"])
     timings = []
     torch.cuda.empty_cache()
@@ -126,7 +131,11 @@ def run(args):
     output = args.output.resolve()
     fixture_root = args.fixtures.resolve()
     reference_path = args.reference_profile.resolve()
-    arms, variants = _coverage(args.experiment)
+    if args.experiment == "E002d" and args.lidar_branch_dropout not in (0., .5):
+        raise ValueError("E002d LiDAR branch dropout must be 0 or 0.5")
+    if args.experiment != "E002d" and args.lidar_branch_dropout:
+        raise ValueError("LiDAR branch dropout calibration is an E002d control")
+    arms, variants = _coverage(args.experiment, args.lidar_branch_dropout)
     if not output.is_relative_to(outputs / f"experiments/{args.experiment}"):
         raise ValueError(f"Calibration evidence must be under outputs-root/experiments/{args.experiment}")
     if output == fixture_root or output.is_relative_to(fixture_root) or fixture_root.is_relative_to(output):
@@ -153,6 +162,7 @@ def run(args):
                                     "status": reference.get("status"), "code": reference.get("code")},
               "fixtures": str(fixture_root / "execution.json"),
               "fixture_sha256": checksum(fixture_root / "execution.json"),
+              "lidar_branch_dropout": args.lidar_branch_dropout,
               "settings": e002a_calibrate.SETTINGS, "model_specs": {}, "workloads": [],
               "failures": [], "held_out_tests": False,
               "interpretation": "CUDA CE/backward/AdamW resource checks only; no behavior result or training run"}
@@ -160,7 +170,8 @@ def run(args):
     try:
         for arm in arms:
             for variant in variants:
-                record["model_specs"][f"{arm}/{variant}"] = e002b.model_spec(arm, variant)
+                record["model_specs"][f"{arm}/{variant}"] = e002b.model_spec(
+                    arm, variant, lidar_branch_dropout=args.lidar_branch_dropout)
 
         samples = e002a_calibrate.fixture_samples(fixture_root)
         representatives = _representatives(samples)
@@ -212,7 +223,8 @@ def run(args):
                     # The point-cache reference already bounds physical LiDAR batches; measure one real
                     # full track here, then use the shape fixture to cover the complete temporal batch.
                     tracks = 1 if args.experiment == "E002d" else max_tracks
-                    row = _measure(sample, arm, variant, profile, torch.device(args.device), tracks=tracks)
+                    row = _measure(sample, arm, variant, profile, torch.device(args.device), tracks=tracks,
+                                   lidar_branch_dropout=args.lidar_branch_dropout)
                     if row["peak_allocated_bytes"] > allocated_ceiling:
                         raise ValueError(f"Measured allocation exceeded 78% VRAM ceiling: {source}/{arm}/{variant}")
                     row["name"] = f"{source}-longest-fixture"
@@ -225,7 +237,8 @@ def run(args):
             sample = _stress_sample(slots_bound, arm)
             for variant in variants:
                 row = _measure(sample, arm, variant, profile, torch.device(args.device),
-                               tracks=max_tracks, shape_stress=True)
+                               tracks=max_tracks, shape_stress=True,
+                               lidar_branch_dropout=args.lidar_branch_dropout)
                 if row["peak_allocated_bytes"] > allocated_ceiling:
                     raise ValueError(f"Shape stress exceeded 78% VRAM ceiling: {arm}/{variant}")
                 row["source"] = "both-source-shape-bound"
@@ -255,6 +268,7 @@ def main():
     parser.add_argument("--reference-profile", type=Path, required=True,
                         help="Completed profile used only for existing packing limits; model code is recalibrated here")
     parser.add_argument("--experiment", choices=("E002b", "E002d"), default="E002b")
+    parser.add_argument("--lidar-branch-dropout", choices=(0., .5), type=float, default=0.)
     parser.add_argument("--fixtures", type=Path, default=Path("outputs/experiments/E002a/execution-probe-04"))
     parser.add_argument("--device", choices=("cuda",), default="cuda")
     parser.add_argument("--output", type=Path, required=True)

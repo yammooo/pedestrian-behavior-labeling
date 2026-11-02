@@ -155,6 +155,7 @@ class E002bModelTest(unittest.TestCase):
 
     def test_e002d_calibration_covers_only_combined_temporal_small_arm(self):
         self.assertEqual(e002b_calibrate._coverage("E002d"), (("g-rgb-dditr",), ("temporal-small",)))
+        self.assertEqual(e002b_calibrate._coverage("E002d", .5), (("g-dditr",), ("temporal-small",)))
         self.assertEqual(e002b_calibrate._coverage("E002b"), (("g", "g-rgb"), tuple(VARIANTS)))
 
         def fixture(source, name, slots):
@@ -235,6 +236,72 @@ class E002bModelTest(unittest.TestCase):
         hook.remove()
         self.assertTrue(torch.equal(eval_rows[0][0], eval_rows[0][1]))
 
+    def test_lidar_branch_dropout_is_time_locked_masked_and_state_compatible(self):
+        torch.manual_seed(14)
+        batch = batch_for("g-dditr")
+        dropped = build_model("g-dditr", "temporal-small", PROFILE, dropout=0.,
+                              lidar_branch_dropout=.5).train()
+        baseline = build_model("g-dditr", "temporal-small", PROFILE, dropout=0.).train()
+        self.assertEqual(set(dropped.state_dict()), set(baseline.state_dict()))
+        baseline.load_state_dict(dropped.state_dict(), strict=True)
+        self.assertEqual(model_spec("g-dditr", "temporal-small"),
+                         model_spec("g-dditr", "temporal-small", lidar_branch_dropout=0.))
+        self.assertEqual(model_spec("g-dditr", "temporal-small", lidar_branch_dropout=.5)
+                         ["lidar_branch_dropout"], .5)
+
+        class FixedSpatial(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.seed = torch.nn.Parameter(torch.zeros(1, 128))
+                self.project = SimpleNamespace(out_features=128)
+
+            def forward(self, _tokens, lengths, seed):
+                return seed.new_ones((len(lengths), seed.shape[-1]))
+
+        for model in (dropped, baseline):
+            model.spatial = FixedSpatial()
+            model.spatial_norm = torch.nn.Identity()
+
+        captured, fused = [], []
+        hook = dropped.lidar_branch_dropout.register_forward_hook(
+            lambda _module, inputs, output: captured.append((inputs[0].detach(), output.detach())))
+        fusion_hook = dropped.fusion.register_forward_pre_hook(
+            lambda _module, inputs: fused.append(inputs[0].detach()))
+        dropped(batch)
+        hook.remove()
+        fusion_hook.remove()
+
+        before, after = captured[0]
+        valid = torch.arange(batch["geometry"].shape[1])[None, :] < batch["lengths"][:, None]
+        lidar_flag = ARM_FLAGS["g-dditr"].index("lidar_valid")
+        observed = batch["flags"][..., lidar_flag].bool() & valid
+        masks = []
+        for track in range(before.shape[0]):
+            ratios = after[track, :, observed[track]] / before[track, :, observed[track]]
+            self.assertTrue(torch.all((ratios == 0.) | (ratios == 2.)))
+            self.assertTrue(torch.all(ratios == ratios[:, :1]))
+            masks.append(ratios[:, 0].bool())
+        self.assertTrue((masks[0] != masks[1]).any())
+
+        lidar_input = fused[0][..., 64:192]
+        self.assertTrue(torch.equal(lidar_input[~observed], torch.zeros_like(lidar_input[~observed])))
+        torch.testing.assert_close(fused[0][..., 192:], batch["flags"].masked_fill(~valid[..., None], 0.),
+                                   rtol=0, atol=0)
+
+        dropped.eval()
+        baseline.eval()
+        eval_features = []
+        for model in (dropped, baseline):
+            hook = model.fusion.register_forward_pre_hook(
+                lambda _module, inputs: eval_features.append(inputs[0].detach().clone()))
+            model(batch)
+            hook.remove()
+        torch.testing.assert_close(eval_features[0][..., 64:192], eval_features[1][..., 64:192],
+                                   rtol=0, atol=0)
+
+        with self.assertRaisesRegex(ValueError, "LiDAR branch dropout"):
+            model_spec("g-rgb-dditr", "temporal-small", lidar_branch_dropout=.5)
+
     def test_independent_runner_requires_current_code_and_exact_model_coverage(self):
         with tempfile.TemporaryDirectory() as directory:
             profile_path = Path(directory) / "profile.json"
@@ -260,6 +327,13 @@ class E002bModelTest(unittest.TestCase):
             args = SimpleNamespace(profile=profile_path, arm="g-rgb-dditr", model_variant="temporal-small",
                                    device="cpu", rgb_branch_dropout=.5)
             self.assertEqual(e002b_run._profile_for(args)["model_coverage"], ["g-rgb-dditr/temporal-small"])
+            row["model_specs"] = {"g-dditr/temporal-small": model_spec(
+                "g-dditr", "temporal-small", lidar_branch_dropout=.5)}
+            row["model_coverage"] = ["g-dditr/temporal-small"]
+            profile_path.write_text(json.dumps(row))
+            args = SimpleNamespace(profile=profile_path, arm="g-dditr", model_variant="temporal-small",
+                                   device="cpu", lidar_branch_dropout=.5)
+            self.assertEqual(e002b_run._profile_for(args)["model_coverage"], ["g-dditr/temporal-small"])
             row["code"] = {"stale": "hash"}
             profile_path.write_text(json.dumps(row))
             with self.assertRaisesRegex(ValueError, "code changed"):

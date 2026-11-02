@@ -12,7 +12,7 @@ Updated **2026-11-02**. We are developing a reliable **offline, given-track pede
 
 ## Next work
 
-1. Use the [E002d result](../experiments/E002d-rgb-lidar-complementarity/results-review.md) to decide whether any fusion repeat is worth its cost. Seed0 validation does not establish an RGB gain over LiDAR; preserve held-out tests for a justified candidate rather than expanding the dropout grid.
+1. Run the [frozen E002 cross-dataset validation comparison](../experiments/E002-multimodal-reference/transfer-comparison.json): eight seed0 checkpoints, four modality configurations per training source, evaluated on the opposite validation set with source normalization. Reuse existing caches and source-validation scores; held-out tests remain closed. These already-inspected validation sets support exploratory development evidence.
 2. Arrange a separate backup for valuable checkpoints/predictions; external storage is **TBD**. Original interrupted attempts and all earlier evidence remain preserved.
 3. Choose at most one substantial follow-up using measured error/cost evidence and the [schedule](research.md#schedule). Broader ontology, heterogeneous supervision and reliability experiments remain hypotheses.
 

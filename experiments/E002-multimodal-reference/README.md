@@ -29,4 +29,10 @@ The [joint 26-model review](../E002b-normalization-capacity/results-review.md) i
 
 The [E002c dropout result](../E002c-rgb-regularization/README.md#selected-source-validation-results) finds no consistent RGB F1 improvement from stronger temporal dropout. The only gain over a matched0.1 control is +0.74 pp on ROAD `temporal-small`; all LOKI higher-dropout variants lose F1. This remains single-seed validation development.
 
+## Exploratory cross-dataset validation transfer
+
+Agreed **2026-11-02**: evaluate the frozen eight-checkpoint list in [transfer-comparison.json](transfer-comparison.json) once on the opposite source's validation split, using each checkpoint's training-source normalization. Compare with its already saved source-validation metrics; do not rerun source inference. The eight models cover geometry, geometry + RGB, geometry + LiDAR, and all three inputs for ROAD and LOKI training sources. The original within-source selected-F1 checkpoint rule is retained; CE is reported alongside F1.
+
+This is **exploratory, target-informed validation transfer**, not held-out or strict zero-shot evidence: these same validation populations have already guided source-specific checkpoint/model selection. No test split is accessed. Existing train/validation RGB and indexed LiDAR caches are read-only; no new cache is prepared. See the compact [transfer results](transfer-results.md) when complete.
+
 Full multi-seed held-out modality/transfer comparisons remain deferred. E002b is source-validation development; it does not authorize the previously discussed40-attempt /80-test-cell comparison. Confirmatory seed sets and final test access remain separately declared.

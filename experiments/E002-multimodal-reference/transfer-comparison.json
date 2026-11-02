@@ -1,0 +1,117 @@
+{
+  "status": "frozen-before-cross-dataset-validation-inference",
+  "comparison": "E002-cross-dataset-validation-transfer",
+  "seed": 0,
+  "models": [
+    {
+      "training_source": "road-waymo",
+      "input": "geometry",
+      "experiment": "E002b",
+      "arm": "g",
+      "variant": "temporal-small",
+      "rgb_branch_dropout": 0.0,
+      "selected_epoch": 26,
+      "source_validation": {"track_weighted_macro_f1": 0.5400434376517569, "track_ce": 1.1602848962703962},
+      "checkpoint": "outputs/experiments/E002b/runs/independent-20261025-125024-264808/e002b-road-waymo-g-temporal-small-s0/best.pt",
+      "checkpoint_sha256": "7d19e15da5f2fb3afcd80c68fc731dd1fd046f5a9cf0831f755e998854644619"
+    },
+    {
+      "training_source": "road-waymo",
+      "input": "geometry+rgb",
+      "experiment": "E002c",
+      "arm": "g-rgb",
+      "variant": "temporal-small",
+      "rgb_branch_dropout": 0.5,
+      "selected_epoch": 16,
+      "source_validation": {"track_weighted_macro_f1": 0.6436991407559947, "track_ce": 0.8047937027910066},
+      "checkpoint": "outputs/experiments/E002c/runs/rgb-branch-20261028-150200-road-waymo-rgbdrop50/best.pt",
+      "checkpoint_sha256": "05e99fb04be5cc15978a559ea3a5f7792711d14fde4dbf0df407ce41a540e89f"
+    },
+    {
+      "training_source": "road-waymo",
+      "input": "geometry+lidar",
+      "experiment": "E002b",
+      "arm": "g-dditr",
+      "variant": "temporal-small",
+      "rgb_branch_dropout": 0.0,
+      "selected_epoch": 17,
+      "source_validation": {"track_weighted_macro_f1": 0.6605054248846289, "track_ce": 0.7190737569500241},
+      "checkpoint": "outputs/experiments/E002b/runs/shared-lidar-20261025-175839-542708/temporal-small/best.pt",
+      "checkpoint_sha256": "3f1a30f77404bf3e4eeb15d55052df1ecc5e1703358504c11e44b08eaf5b7ad5"
+    },
+    {
+      "training_source": "road-waymo",
+      "input": "geometry+rgb+lidar",
+      "experiment": "E002d",
+      "arm": "g-rgb-dditr",
+      "variant": "temporal-small",
+      "rgb_branch_dropout": 0.5,
+      "selected_epoch": 17,
+      "source_validation": {"track_weighted_macro_f1": 0.6607025742847996, "track_ce": 0.8027448811273742},
+      "checkpoint": "outputs/experiments/E002d/runs/fusion-20261030-140937-road-waymo-rgbdrop50/best.pt",
+      "checkpoint_sha256": "d1f83183dcff61f8d9925a74c2c76811d1eca225119e588df8aa3770720e42a8"
+    },
+    {
+      "training_source": "loki",
+      "input": "geometry",
+      "experiment": "E002b",
+      "arm": "g",
+      "variant": "temporal-small",
+      "rgb_branch_dropout": 0.0,
+      "selected_epoch": 11,
+      "source_validation": {"track_weighted_macro_f1": 0.6477122584287602, "track_ce": 0.5201505361070512},
+      "checkpoint": "outputs/experiments/E002b/runs/independent-20261025-134338-803720/e002b-loki-g-temporal-small-s0/best.pt",
+      "checkpoint_sha256": "892927b5a8c94d96d2a8abc1961db960bc5da69413de35e163f2a7635467444b"
+    },
+    {
+      "training_source": "loki",
+      "input": "geometry+rgb",
+      "experiment": "E002c",
+      "arm": "g-rgb",
+      "variant": "temporal-small",
+      "rgb_branch_dropout": 0.5,
+      "selected_epoch": 11,
+      "source_validation": {"track_weighted_macro_f1": 0.6820415975669514, "track_ce": 0.5202053910008949},
+      "checkpoint": "outputs/experiments/E002c/runs/rgb-branch-20261028-150200-loki-rgbdrop50/best.pt",
+      "checkpoint_sha256": "7e764fab1b372bfa420337cb5658da59c758a27209cd1ec6f57f476ebf47b42b"
+    },
+    {
+      "training_source": "loki",
+      "input": "geometry+lidar",
+      "experiment": "E002b",
+      "arm": "g-dditr",
+      "variant": "temporal-small",
+      "rgb_branch_dropout": 0.0,
+      "selected_epoch": 12,
+      "source_validation": {"track_weighted_macro_f1": 0.7640958784791501, "track_ce": 0.37638922806134645},
+      "training_status": "interrupted-after-epoch-23",
+      "checkpoint": "outputs/experiments/E002b/runs/shared-lidar-20261026-060327-526425/temporal-small/best.pt",
+      "checkpoint_sha256": "47e1c5f7544204b2a7c45ce8139c0cb96f6a8a90fe600f1a1ffdd3fc6b32245e"
+    },
+    {
+      "training_source": "loki",
+      "input": "geometry+rgb+lidar",
+      "experiment": "E002d",
+      "arm": "g-rgb-dditr",
+      "variant": "temporal-small",
+      "rgb_branch_dropout": 0.5,
+      "selected_epoch": 12,
+      "source_validation": {"track_weighted_macro_f1": 0.7467957180106706, "track_ce": 0.38528180728144246},
+      "checkpoint": "outputs/experiments/E002d/runs/fusion-20261030-140937-loki-rgbdrop50/best.pt",
+      "checkpoint_sha256": "ee097048df9e98367ca1f355632a32fa8ad389cf32796d24bdf0c7d871be4e17"
+    }
+  ],
+  "evaluation": {
+    "split": "opposite-source-validation",
+    "normalization": "use each checkpoint's source-training statistics for target validation geometry and bbox features",
+    "selection": "checkpoints and variants fixed from source-validation before cross-dataset inference",
+    "interpretation": "exploratory target-informed validation transfer; the same validation populations have already informed source-specific checkpoint/model selection",
+    "architecture": "temporal-small, temporal dropout 0.1; RGB branch dropout 0.5 for RGB arms",
+    "source_validation_metrics": "full-precision selected checkpoint selection fields; no source inference rerun",
+    "primary_metric": "four-class track-weighted macro-F1",
+    "secondary_metric": "track-averaged cross-entropy",
+    "cells": 8,
+    "no_held_out_test_access": true,
+    "held_out_tests_accessed": false
+  }
+}

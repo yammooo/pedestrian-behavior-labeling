@@ -168,6 +168,28 @@ The [full structural recheck](../archive/2026-10-02-road-waymo-linkage.md#struct
 
 Remaining work: document acquisition/release history, preserve runnable mapping/checker code in version control, characterize action episodes and physical-ID overlap, investigate timing irregularities below, audit semantic disagreements and varied associations visually, and declare the training acceptance rule. The merger currently hardcodes Waymo `training` paths; this matches the inspected subset but must be changed before processing another split. The combined native reader/preparation is now implemented; no model has run.
 
+## E002 RGB and LiDAR availability (2026-11-02)
+
+These are measured **usable model-input rates for the frozen E002 cohort**, before training dropout; they are not native-release-wide sensor availability. [Shared definitions](README.md#measured-rgb-and-lidar-availability) distinguish usable RGB/20 m LiDAR crops, pooled slots, equal-track statistics and accepted GT.
+
+Training contains **4,380 tracks / 332,940 context slots / 167,280 accepted GT slots**; validation contains **1,110 / 87,824 / 45,388**. Full-track percentages include unlabeled context; brackets give the 25th–75th percentiles of per-track coverage.
+
+| Split | Modality | Pooled slot coverage | Mean per track | Median per track [P25–P75] | Tracks: none / partial / full |
+|---|---|---:|---:|---:|---:|
+| Training | RGB | 50.96% | 52.28% | 48.28% [23.00–83.87] | 0 / 3,951 / 429 |
+| Training | LiDAR | 90.79% | 90.04% | 100.00% [93.08–100.00] | 0 / 1,340 / 3,040 |
+| Validation | RGB | 52.32% | 54.58% | 53.21% [23.23–87.88] | 0 / 988 / 122 |
+| Validation | LiDAR | 89.65% | 89.22% | 100.00% [91.92–100.00] | 0 / 349 / 761 |
+
+| Split | RGB on accepted GT | LiDAR on accepted GT |
+|---|---:|---:|
+| Training | 100.00% | Not computed |
+| Validation | 100.00% | 83.48% |
+
+**The denominator matters:** RGB is present on every scored GT frame but only about half the full-track context. LiDAR is present throughout 3,040/4,380 training tracks (69.4%), although it is missing on 16.52% of scored validation frames. These are different observation patterns, not interchangeable forms of regularization.
+
+Source: [E002 availability audit, numerical artifacts and validation cross-check](../../experiments/E002-multimodal-reference/README.md#rgb-and-lidar-availability-in-the-frozen-e002-populations). The native track statistics below concern different populations and timing rules.
+
 ## Track extents and gaps (2026-10-05)
 
 Full annotation-only index scan, with identity `(road_clip_id, road_tube_uid)`: context spans the first to last ROAD pedestrian observation, including empty intermediate frames. Ten identical repeated observations are counted once, reconciling to 712,630 observations and 426,491 paired observations. Extent durations use exact verified Waymo endpoint timestamps, independently of gallery playback.

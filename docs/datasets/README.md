@@ -46,6 +46,18 @@ The headline 54k ROAD-Waymo / 7k ROAD / >28k LOKI agent counts include other cla
 
 This table specifies inspection obligations, not a software schema or adapter framework.
 
+## Measured RGB and LiDAR availability
+
+The **2026-11-02 E002 audit** measures usable model inputs on the frozen eligible training/validation populations, rather than sensor-file presence or the unrestricted native releases. Dataset-specific counts and tables are in [ROAD-Waymo](road-waymo.md#e002-rgb-and-lidar-availability-2026-11-02) and [LOKI](loki.md#e002-rgb-and-lidar-availability-2026-11-02).
+
+- **RGB available:** the prepared target crop has a valid RGB descriptor. An existing camera image alone does not establish this.
+- **LiDAR available:** the target-centered 20 m indexed crop contains at least one selected spatial token. A sweep alone does not establish a usable target crop.
+- **Full-track coverage:** available slots divided by all unpadded 5 Hz track slots, including unlabeled context, before artificial training dropout. Pooled coverage weights slots equally; the track mean, median and quartiles weight tracks equally.
+- **GT-only coverage:** available slots divided by accepted behavior-GT slots. This denominator differs from full-track context. Training GT-only LiDAR overlap was not computed in this audit; the validation overlap was checked against saved predictions.
+- **None / partial / full tracks:** zero, some, or all full-track slots have that modality. Missing RGB is not automatically evidence of occlusion or being outside the camera field of view.
+
+The [E002 audit record](../../experiments/E002-multimodal-reference/README.md#rgb-and-lidar-availability-in-the-frozen-e002-populations) retains provenance, joint-modality counts and links to the per-track CSV, JSON summary and reproduction snippet. These availability masks do not measure the effect of natural missingness or establish equivalence to descriptor dropout.
+
 ## Reader and prepared-track schema
 
 Steps 1–2 use a common native-reader contract and [shared preparation](../../src/pedestrian_behavior/data/preparation.py). Readers own native IDs, associations, units, clocks and full native-to-world transforms. The creator owns scene-frame selection, fixed canonical coordinates and adjacent-slot velocities; [E001](../../experiments/E001-kinematic-transfer/README.md#first-baseline-temporal-representation) owns their scientific rules.

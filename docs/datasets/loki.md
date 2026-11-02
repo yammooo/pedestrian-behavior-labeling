@@ -105,6 +105,28 @@ The complete reader/preparation audit retains **13,365 candidates** across all *
 
 Evidence: ignored `outputs/experiments/E001/reader-preparation/loki/{manifest,audit}.json`; the [eight native cases](../../experiments/E001-kinematic-transfer/reader-cases.json) are preserved in the portable inspector. Source annotations and physical-clock qualification are unchanged.
 
+## E002 RGB and LiDAR availability (2026-11-02)
+
+These are measured **usable model-input rates for the frozen E002 cohort**, before training dropout; they are not native-release-wide sensor availability. [Shared definitions](README.md#measured-rgb-and-lidar-availability) distinguish usable RGB/20 m LiDAR crops, pooled slots, equal-track statistics and accepted GT.
+
+Training contains **8,574 tracks / 270,355 context slots / 262,071 accepted GT slots**; validation contains **1,861 / 61,900 / 60,231**. Full-track percentages include unlabeled context; brackets give the 25th–75th percentiles of per-track coverage. The grid uses LOKI's declared nominal clock.
+
+| Split | Modality | Pooled slot coverage | Mean per track | Median per track [P25–P75] | Tracks: none / partial / full |
+|---|---|---:|---:|---:|---:|
+| Training | RGB | 46.22% | 39.40% | 38.10% [0.00–71.43] | 2,888 / 5,165 / 521 |
+| Training | LiDAR | 96.93% | 97.03% | 100.00% [100.00–100.00] | 0 / 1,218 / 7,356 |
+| Validation | RGB | 42.13% | 36.86% | 33.33% [0.00–70.10] | 717 / 1,025 / 119 |
+| Validation | LiDAR | 97.30% | 96.73% | 100.00% [100.00–100.00] | 0 / 255 / 1,606 |
+
+| Split | RGB on accepted GT | LiDAR on accepted GT |
+|---|---:|---:|
+| Training | 45.20% | Not computed |
+| Validation | 41.15% | 100.00% |
+
+**3D-only input remains common:** 2,888/8,574 training tracks (33.7%) and 717/1,861 validation tracks (38.5%) have no usable RGB. Every track has some usable LiDAR, and 7,356/8,574 training tracks (85.8%) have it throughout. Missing RGB tracks remain eligible. These masks do not establish why an RGB crop is missing.
+
+Source: [E002 availability audit, numerical artifacts and validation cross-check](../../experiments/E002-multimodal-reference/README.md#rgb-and-lidar-availability-in-the-frozen-e002-populations). The native track statistics below concern different populations and timing rules.
+
 ## Track extents and gaps (2026-10-05)
 
 Annotation-only scan of all 644 scenarios: identity remains `(scenario, track_id)`, and context spans the first to last **2D or 3D** pedestrian observation, including empty frames in between. Every within-scenario filename increment is two (40,185 increments); `suffix / 2` is the ordinal at the documented nominal 5 Hz. Physical timestamps remain unverified. Regular filenames cannot reveal dropped frames renumbered consecutively or irregular capture intervals; zero missing selections does not prove regular physical timing. One-frame tracks span zero elapsed seconds but need one context position.

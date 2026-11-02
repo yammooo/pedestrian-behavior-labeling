@@ -721,7 +721,7 @@ This runs source-validation training only and stops launching further attempts i
 
 ### E002d follow-up: LiDAR descriptor dropout
 
-This launches the separate two-run geometry + LiDAR control, ROAD-Waymo then LOKI, with track-consistent dropout at0.5 after the LiDAR branch LayerNorm. It has no RGB branch and uses no RGB cache. First complete the exact CUDA calibration described in the [E002d record](experiments/E002d-rgb-lidar-complementarity/README.md#follow-up-lidar-branch-regularization). The command stops after a failed attempt and uses fresh output directories:
+This launches the separate two-run geometry + LiDAR control, ROAD-Waymo then LOKI, with track-consistent dropout at 0.5 after the LiDAR branch LayerNorm. It has no RGB branch and uses no RGB cache. The exact CUDA calibration is complete; use the profile described in the [E002d record](experiments/E002d-rgb-lidar-complementarity/README.md#follow-up-lidar-branch-regularization). The command stops after a failed attempt and uses fresh output directories:
 
 ```bash
 cd /home/user20/projects/pedestrian-behavior-labeling-e002b-evaluation

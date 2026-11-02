@@ -13,7 +13,7 @@ Updated **2026-11-02**. We are developing a reliable **offline, given-track pede
 
 ## Next work
 
-1. Prepare the [E002d LiDAR descriptor-dropout controls](../experiments/E002d-rgb-lidar-complementarity/README.md): two sequential seed0 geometry + LiDAR runs with descriptor dropout0.5, one per source, against the existing no-descriptor-dropout controls. This tests a regularization difference exposed by exploratory transfer; keep source-only checkpoint selection and held-out tests closed.
+1. Run the prepared [E002d LiDAR descriptor-dropout controls](../experiments/E002d-rgb-lidar-complementarity/README.md): two sequential seed0 geometry + LiDAR runs with descriptor dropout0.5, one per source, against the existing no-descriptor-dropout controls. This tests a regularization difference exposed by exploratory transfer; keep source-only checkpoint selection and held-out tests closed.
 2. Arrange a separate backup for valuable checkpoints/predictions; external storage is **TBD**. Original interrupted attempts and all earlier evidence remain preserved.
 3. Choose at most one substantial follow-up using measured error/cost evidence and the [schedule](research.md#schedule). Broader ontology, heterogeneous supervision and reliability experiments remain hypotheses.
 

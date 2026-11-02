@@ -1,6 +1,6 @@
 # E002d — RGB–LiDAR complementarity
 
-**Training completed 2026-11-02.** This is a bounded source-validation comparison within E002, not a new architecture search. No held-out or cross-dataset evaluation was run.
+**Status: the four-run fusion comparison is complete; two LiDAR-dropout controls are calibrated and ready for manual launch.** The original comparison used source validation for selection. The later [E002 umbrella cross-dataset validation](../E002-multimodal-reference/transfer-results.md) is exploratory; no held-out test inference was run.
 
 ## Question and comparison
 
@@ -14,7 +14,7 @@ Does RGB add useful behavior evidence to the best E002b geometry + LiDAR develop
 
 Run the **four new attempts sequentially**, one model at a time. The shared-multiple-model E002b trainer is not used: its measured benefit was too small for this comparison and its interruption cause is unresolved. Preserve the earlier attempts and failure evidence.
 
-The `0.0` fusion comparison against `g-dditr` tests the added RGB descriptor **and its availability flag together**. The `0.5` versus `0.0` fusion comparison isolates RGB branch dropout. There is no LiDAR branch dropout or broader dropout grid. E002c found only a single-seed RGB-branch-dropout signal; it does not establish that 0.5 is optimal or that it will help fusion.
+The `0.0` fusion comparison against `g-dditr` tests the added RGB descriptor **and its availability flag together**. The `0.5` versus `0.0` fusion comparison isolates RGB branch dropout. The four-run fusion comparison had no LiDAR branch dropout or broader dropout grid. E002c found only a single-seed RGB-branch-dropout signal; it does not establish that 0.5 is optimal or that it will help fusion.
 
 ## Fixed protocol
 
@@ -42,10 +42,10 @@ See the [concise comparison and overfitting review](results-review.md) for the m
 
 ## Follow-up: LiDAR branch regularization
 
-The four fusion attempts above are complete. A separate two-run control will test whether dropout on the **normalized LiDAR descriptor** changes the geometry + LiDAR model's generalization: `g-dditr / temporal-small`, LiDAR descriptor dropout0.5, ROAD-Waymo and LOKI, seed0. No RGB branch is present. This is motivated by the remaining train/validation gap; it is not a broader dropout search or a replacement for the completed fusion comparison.
+The four fusion attempts above are complete. The two-run control is now prepared and calibrated. It tests whether dropout on the **normalized LiDAR descriptor** changes the geometry + LiDAR model's generalization: `g-dditr / temporal-small`, LiDAR descriptor dropout0.5, ROAD-Waymo and LOKI, seed0. No RGB branch is present. This is motivated by the remaining train/validation gap; it is not a broader dropout search or a replacement for the completed fusion comparison.
 
-Apply `Dropout1d(0.5)` to the LayerNorm'ed LiDAR descriptor, with one channel mask shared across all time steps in each track. The LiDAR validity flag is appended unchanged; missing/padded descriptors are zeroed after dropout. Geometry receives no descriptor dropout. Spatial and temporal dropout stay0.1. Keep the E002d 100-epoch/patience15 source-validation recipe, seed, model widths, normalization, optimizer and caches unchanged. Names end in `lidardrop50`.
+Apply `Dropout1d(0.5)` after LayerNorm of the LiDAR descriptor, with one channel mask shared across all time steps in each track. The LiDAR validity flag is appended unchanged; missing/padded descriptors are zeroed after dropout. Geometry receives no descriptor dropout. Spatial and temporal dropout stay 0.1. Keep the E002d 100-epoch, patience-15 source-validation recipe, seed, model widths, normalization, optimizer and caches unchanged. Names end in `lidardrop50`.
 
 After the two runs, compare their best source-selected checkpoints on the opposite dataset's **validation** split, labeled exploratory/target-informed development. Do not run held-out test evaluation as part of this follow-up.
 
-The new CUDA calibration must use the accepted four-frame E002a profile at `/home/user20/projects/e002a-execution-optimizations-20261023/calibration-chunk4-final/profile.json` only as its packing-limit reference. It recalibrates the exact `g-dditr / temporal-small / LiDAR dropout0.5` model on both source fixtures and the bounded temporal-shape check. The generated calibration profile path and hash are recorded after completion; the older two-frame E002d profile is not valid for this follow-up.
+The completed CUDA calibration uses the accepted four-frame E002a profile at `/home/user20/projects/e002a-execution-optimizations-20261023/calibration-chunk4-final/profile.json` only as its packing-limit reference. The calibrated profile is `/home/user20/projects/pedestrian-behavior-labeling-e002b-evaluation/outputs/experiments/E002d/calibration-lidar-dropout-20261102/profile.json`, SHA-256 `d7ffef873d6947612af3f3a29999d122ccbe31abb7b296b2dd4fc4f4bd6cc2a5`. It covers only `g-dditr / temporal-small / LiDAR dropout 0.5` on the RTX 4080 at code revision `89b38e2`. The bounded one-track forward/backward updates peaked at 317,553,664 bytes for the 100-slot ROAD fixture and 2,997,184,512 bytes for the 102-slot LOKI fixture; the 64-track/102-slot shape check peaked at 289,374,720 bytes. The conservative packing preflight was 5,300,867,072 bytes against the 9,711,719,546-byte ceiling. These are calibration checks, not full-batch training peaks or epoch-time estimates. The exact single-run trainer accepts this profile. The older two-frame E002d profile is not valid for this follow-up.

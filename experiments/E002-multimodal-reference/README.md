@@ -1,6 +1,6 @@
 # E002 — Multimodal offline reference
 
-**Overview, updated 2026-10-30.** E002 groups the multimodal offline-labeling direction. Each concrete comparison owns its architecture, settings, preparation and results. [E002a](../E002a-feature-feasibility/README.md) owns the first behavior pilot and RGB seed repeat; [E002b](../E002b-normalization-capacity/README.md) owns normalization/capacity and the [joint 26-model review](../E002b-normalization-capacity/results-review.md); [E002c](../E002c-rgb-regularization/README.md) owns the completed RGB dropout diagnostic; [E002d](../E002d-rgb-lidar-complementarity/README.md) owns the prepared fusion pilot. Earlier extraction, timing and operational evidence remains in E002a.
+**Overview, updated 2026-11-02.** E002 groups the multimodal offline-labeling direction. Each concrete comparison owns its architecture, settings, preparation and results. [E002a](../E002a-feature-feasibility/README.md) owns the first behavior pilot and RGB seed repeat; [E002b](../E002b-normalization-capacity/README.md) owns normalization/capacity and the [joint 26-model review](../E002b-normalization-capacity/results-review.md); [E002c](../E002c-rgb-regularization/README.md) owns the completed RGB dropout diagnostic; [E002d](../E002d-rgb-lidar-complementarity/README.md) owns the completed fusion pilot and prepared descriptor-dropout controls. Earlier extraction, timing and operational evidence remains in E002a.
 
 ## Question and interpretation
 
@@ -15,7 +15,7 @@ The [E001-family review](../E001b-2d-bbox-contribution/results-review.md) motiva
 | [E002a — first multimodal behavior pilot](../E002a-feature-feasibility/README.md) | Original three arms plus a separate geometry + D-DITR follow-up; frozen encoders, complete tracks, indexed point supply; Utonia deferred | Eight seed0 source-validation runs complete; geometry + D-DITR best in this seed |
 | [E002b — normalization and capacity](../E002b-normalization-capacity/README.md) | Geometry / +RGB / +LiDAR; normalized reference versus smaller temporal or branch representations | 18 best checkpoints evaluated; 15 normal stops, three LOKI LiDAR interrupted at23 epochs |
 | [E002c — RGB temporal dropout](../E002c-rgb-regularization/README.md) | Matched0.1/0.3/0.5 temporal dropout across full/small normalized `g-rgb` models on both sources | Eight additional seed0 source-validation runs complete; original E002b paths retained |
-| [E002d — RGB–LiDAR complementarity](../E002d-rgb-lidar-complementarity/README.md) | Sequential `g-rgb-dditr / temporal-small` with RGB branch dropout0/0.5 against the existing `g-dditr` control | Four seed0 source-validation attempts prepared; no results yet |
+| [E002d — RGB–LiDAR complementarity](../E002d-rgb-lidar-complementarity/README.md) | Sequential `g-rgb-dditr / temporal-small` with RGB branch dropout0/0.5; two follow-up `g-dditr` LiDAR-dropout controls | Four fusion runs complete; two LiDAR-dropout controls calibrated and ready for manual launch |
 
 E002a's architecture is specific to that pilot. Later comparisons may revise it with explicit hypotheses and controls; they do not inherit its encoders, widths or readout by default. Completed PCA, alignment, semantic and resource probes remain [preparatory evidence inside E002a](../E002a-feature-feasibility/README.md#preparatory-work), with original settings and failures preserved.
 
@@ -36,3 +36,18 @@ Agreed **2026-11-02**: evaluate the frozen eight-checkpoint list in [transfer-co
 This is **exploratory, target-informed validation transfer**, not held-out or strict zero-shot evidence: these same validation populations have already guided source-specific checkpoint/model selection. No test split is accessed. Existing train/validation RGB and indexed LiDAR caches are read-only; no new cache is prepared. See the compact [transfer results](transfer-results.md).
 
 Full multi-seed held-out modality/transfer comparisons remain deferred. E002b is source-validation development; it does not authorize the previously discussed40-attempt /80-test-cell comparison. Confirmatory seed sets and final test access remain separately declared.
+
+## RGB and LiDAR availability in the frozen E002 populations
+
+Coverage is measured over unpadded 5 Hz full-track context, not only labeled frames. `RGB` means the prepared crop's valid mask; `LiDAR` means at least one selected point in that track's target-centered 20 m indexed crop. The table gives pooled slot coverage and the mean/median track coverage with interquartile range; `none / partial / full` counts tracks with zero, mixed, or complete coverage. The cohort retains every eligible train/validation track, including fully missing RGB tracks.
+
+| Source / split | Tracks / context slots | RGB pooled | RGB track mean / median [IQR] | RGB none / partial / full | LiDAR pooled | LiDAR track mean / median [IQR] | LiDAR none / partial / full | Accepted-GT RGB / LiDAR |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| ROAD training | 4,380 / 332,940 | 50.96% | 52.28 / 48.28 [23.00–83.87]% | 0 / 3,951 / 429 | 90.79% | 90.04 / 100.00 [93.08–100.00]% | 0 / 1,340 / 3,040 | 100.00% / unknown |
+| ROAD validation | 1,110 / 87,824 | 52.32% | 54.58 / 53.21 [23.23–87.88]% | 0 / 988 / 122 | 89.65% | 89.22 / 100.00 [91.92–100.00]% | 0 / 349 / 761 | 100.00% / 83.48% |
+| LOKI training | 8,574 / 270,355 | 46.22% | 39.40 / 38.10 [0.00–71.43]% | 2,888 / 5,165 / 521 | 96.93% | 97.03 / 100.00 [100.00–100.00]% | 0 / 1,218 / 7,356 | 45.20% / unknown |
+| LOKI validation | 1,861 / 61,900 | 42.13% | 36.86 / 33.33 [0.00–70.10]% | 717 / 1,025 / 119 | 97.30% | 96.73 / 100.00 [100.00–100.00]% | 0 / 255 / 1,606 | 41.15% / 100.00% |
+
+The accepted-GT denominator is labeled slots only. Training RGB rates come from the completed RGB/GT audit; validation rates come from saved source flags and GT masks. Training LiDAR GT overlap is left unknown because the existing per-track point counts do not contain that slot-level overlap. The saved validation flags exactly match RGB counts, indexed LiDAR validity/token counts and frozen GT support. Validation context slots `(both / RGB-only / LiDAR-only / neither)` are ROAD **38,382 / 7,571 / 40,348 / 1,523** and LOKI **24,784 / 1,295 / 35,447 / 374**. Within validation GT, ROAD has 37,891 both-modal and 7,497 RGB-only slots; LOKI has 24,784 both-modal and 35,447 LiDAR-only slots. These are source-observation patterns, not evidence that the modalities cause the dataset-level behavior differences.
+
+The full [per-track CSV](../../outputs/experiments/E002/availability-20261102/per_track.csv), [JSON summary](../../outputs/experiments/E002/availability-20261102/summary.json) and standalone [reproduction snippet](../../outputs/experiments/E002/availability-20261102/summarize_availability.py) are in ignored outputs. The analysis reads only existing RGB preparation/audit metadata, indexed point scene manifests, frozen setup summaries and saved E002d validation predictions. It reads no feature payloads or native sensor files and uses no GPU or cache writes.

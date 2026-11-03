@@ -743,7 +743,7 @@ Each attempt gets its own W&B run and fresh local output. No training is started
 
 ### E002e weight-decay sensitivity
 
-The [E002e check](experiments/E002e-weight-decay-sensitivity/README.md) compares `g-rgb / temporal-small` with AdamW weight decay0.01 and0.1 against the existing0.0001 E002b controls. Only weight decay changes. The isolated checkout below has the canonical Aalto `outputs` tree linked as `outputs`; the command first waits for the currently active E002d LOKI process (PID765491), then writes a fresh current-code E002b calibration using the accepted chunk-4 reference, then launches ROAD and LOKI at both decay values sequentially. It stops if calibration or an attempt fails.
+The original [E002e check](experiments/E002e-weight-decay-sensitivity/README.md) compares `g-rgb / temporal-small` with AdamW weight decay0.01 and0.1 against the existing0.0001 E002b controls. Those four attempts are complete. The historical launch command below records the original execution, including its wait and calibration.
 
 ```bash
 (
@@ -771,6 +771,31 @@ for source in road-waymo loki; do
       --rgb-preparation "$e002a_root/rgb-cache-preparation-03/cache.json" \
       --output "$outputs_root/experiments/E002e/runs/$attempt_id-$source-wd$wd_id"
   done
+done
+)
+```
+
+#### E002e weight decay 1.0 follow-up
+
+This adds one seed0 run per source with weight decay1.0; all other settings stay fixed. The runs are sequential and use fresh local directories. Reuse the accepted calibration and prepared RGB cache from the original E002e comparison; no calibration or cache build is needed.
+
+```bash
+(
+set -euo pipefail
+cd /home/user20/projects/pedestrian-behavior-labeling-e002e
+git pull --ff-only origin e002a-feature-feasibility
+export PYTHONPATH="$PWD/src" OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+outputs_root="/home/user20/projects/pedestrian-behavior-labeling-e002b-evaluation/outputs"
+e002a_root="$outputs_root/experiments/E002a"
+attempt_id="wd1p0-$(date -u +%Y%m%d-%H%M%S)"
+profile="$outputs_root/experiments/E002b/calibration-e002e-wd-20261102-185738/profile.json"
+
+for source in road-waymo loki; do
+  uv run --no-project --python "$e002a_root/extractor-env/bin/python" python scripts/train-e002e.py \
+    --source "$source" --weight-decay 1.0 --device cuda \
+    --outputs-root "$outputs_root" --profile "$profile" \
+    --rgb-preparation "$e002a_root/rgb-cache-preparation-03/cache.json" \
+    --output "$outputs_root/experiments/E002e/runs/$attempt_id-$source-wd1p0"
 done
 )
 ```

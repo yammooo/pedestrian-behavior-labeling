@@ -56,6 +56,8 @@ Both RGB-descriptor dropout settings have higher selected F1 than the control on
 
 The curve figure uses the control, the largest tested temporal dropout, the largest tested RGB-descriptor dropout and the largest tested weight decay to keep it readable; it does not cherry-pick the best settings. Train-F1 curves are absent for the historical controls. Full-precision numerical rows, W&B links and the small regeneration script are in ignored local `outputs/experiments/E002-regularization-comparison-20261103/`; all source-specific settings, epochs, full result tables and run evidence remain with [E002c](../E002c-rgb-regularization/README.md) and [E002e](../E002e-weight-decay-sensitivity/README.md).
 
+An additional AdamW weight-decay1.0 run per source is prepared separately in [E002e](../E002e-weight-decay-sensitivity/README.md#additional-high-decay-check-2026-11-03); it is not part of this seven-setting figure/table and has no results yet.
+
 ## Exploratory cross-dataset validation transfer
 
 Agreed **2026-11-02**: evaluate the frozen eight-checkpoint list in [transfer-comparison.json](transfer-comparison.json) once on the opposite source's validation split, using each checkpoint's training-source normalization. Compare with its already saved source-validation metrics; do not rerun source inference. The eight models cover geometry, geometry + RGB, geometry + LiDAR, and all three inputs for ROAD and LOKI training sources. The original within-source selected-F1 checkpoint rule is retained; CE is reported alongside F1.

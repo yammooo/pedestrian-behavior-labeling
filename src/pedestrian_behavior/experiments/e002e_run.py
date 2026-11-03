@@ -9,7 +9,7 @@ from . import e002a_run, e002b, e002b_run
 from .run import run_attempt
 
 
-WEIGHT_DECAYS = (0.01, 0.1)
+WEIGHT_DECAYS = (0.01, 0.1, 1.0)
 
 
 def validate_roots(args, config):
@@ -32,7 +32,7 @@ def validate_roots(args, config):
 
 def attempt_settings(weight_decay):
     if weight_decay not in WEIGHT_DECAYS:
-        raise ValueError("E002e weight decay must be 0.01 or 0.1")
+        raise ValueError("E002e weight decay must be 0.01, 0.1, or 1.0")
     return {**e002a_run.SETTINGS,
             "optimizer": e002a_run.SETTINGS["optimizer"] | {"weight_decay": weight_decay}}
 
@@ -73,7 +73,7 @@ def run(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", choices=("road-waymo", "loki"), required=True)
-    parser.add_argument("--weight-decay", choices=(.01, .1), type=float, required=True)
+    parser.add_argument("--weight-decay", choices=WEIGHT_DECAYS, type=float, required=True)
     parser.add_argument("--device", choices=("cpu", "cuda"), required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--profile", type=Path, required=True)

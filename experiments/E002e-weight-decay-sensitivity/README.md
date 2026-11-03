@@ -1,6 +1,6 @@
 # E002e — Weight-decay sensitivity
 
-**Status:** Four runs completed 2026-11-03. This is a small E002 follow-up, not a new model family.
+**Status:** Original four runs completed 2026-11-03; two weight-decay1.0 follow-ups prepared 2026-11-03. This is a small E002 follow-up, not a new model family.
 
 ## Question and comparison
 
@@ -44,4 +44,25 @@ Training CE and F1 are online epoch aggregates with changing weights and active 
 
 The four-panel training/validation CE and F1 figure overlays the three weight-decay settings for each source and notes that historical controls have no training-F1 trace. Aalto artifacts: `/home/user20/projects/pedestrian-behavior-labeling/outputs/experiments/E002e/results-20261103/weight-decay-curves.png` and `.svg`.
 
-For a compact comparison with E002c temporal and RGB-descriptor dropout, see the E002 umbrella's [single-axis regularization view](../E002-multimodal-reference/README.md#single-axis-regularization-comparison-2026-11-03).
+## Comparison with dropout
+
+Across the matched `g-rgb / temporal-small` seed0 runs, RGB descriptor dropout0.5 gives the clearest selected-F1 gain: **+2.08 pp ROAD / +0.57 pp LOKI**, with nearly unchanged selected CE on ROAD and lower CE on LOKI. Temporal dropout0.5 gives **+0.74 / −1.39 pp**; neither higher weight-decay setting improves selected F1. RGB dropout softens CE divergence, but substantial train/validation gaps remain. These are separate interventions, not combined settings; single-seed validation does not establish a reliable winner.
+
+![Selected source-validation F1 and CE for weight decay and dropout](../../outputs/experiments/E002-regularization-comparison-20261103/selected-metrics.png)
+
+The curves show the control and the largest tested value of each knob. Dashed training traces use changing weights and active dropout; solid traces are source validation. Historical controls have no train-F1 trace. Runs stop at different epochs, so their terminal gaps are not matched-exposure comparisons.
+
+![Training and validation curves for the control and three regularization settings](../../outputs/experiments/E002-regularization-comparison-20261103/training-validation-curves.png)
+
+[Full comparison table](../E002-multimodal-reference/README.md#single-axis-regularization-comparison-2026-11-03) · [Selected-metrics SVG](../../outputs/experiments/E002-regularization-comparison-20261103/selected-metrics.svg) · [Curves SVG](../../outputs/experiments/E002-regularization-comparison-20261103/training-validation-curves.svg).
+
+## Additional high-decay check (2026-11-03)
+
+The user requested one final setting after reviewing the original comparison. Run AdamW weight decay **1.0** on the same `g-rgb / temporal-small` seed0 model, once per source. Keep LR `3e-4`, temporal dropout0.1, geometry/RGB branch dropout0, optimizer betas/epsilon, model, caches, source normalization and all other E002b settings fixed. This adds two source-validation attempts; it does not replace or change the completed0.01/0.1 runs and does not access held-out tests.
+
+| Source | Arm / variant | Weight decay | Seed | Status |
+|---|---|---:|---:|---|
+| ROAD-Waymo | `g-rgb / temporal-small` | 1.0 | 0 | Ready for user launch |
+| LOKI | `g-rgb / temporal-small` | 1.0 | 0 | Ready for user launch |
+
+Reuse Aalto's existing accepted profile `outputs/experiments/E002b/calibration-e002e-wd-20261102-185738/profile.json` (SHA-256 `211376f40ccb6d5fcc3458df4b584b0b4619966a3b8163d362855cda4775aef1`) and RGB preparation `outputs/experiments/E002a/rgb-cache-preparation-03/cache.json`. The model/execution modules covered by calibration are unchanged; this option only supplies a different copied optimizer weight-decay value to `e002e_run.py`. The [two-run command](../../README.md#e002e-weight-decay-10-follow-up) runs ROAD then LOKI in fresh output directories. No training has been started for this follow-up.

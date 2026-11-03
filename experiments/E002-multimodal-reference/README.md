@@ -32,6 +32,28 @@ The [E002c dropout result](../E002c-rgb-regularization/README.md#selected-source
 
 The [E002e weight-decay result](../E002e-weight-decay-sensitivity/README.md#results) finds essentially unchanged ROAD selected F1 and a0.58–0.77 pp LOKI decrease at weight decay0.01/0.1. Weight decay0.1 lowers the late validation CE gap modestly on both sources while selected F1 remains flat or slightly lower. E002e train F1 is far above validation F1; historical controls lack train-F1 logging. This is still one seed per setting.
 
+## Single-axis regularization comparison (2026-11-03)
+
+This matched view compares seven seed0 `g-rgb / temporal-small` settings per source: the E002b temporal-dropout0.1 / weight-decay0.0001 control; E002c temporal dropout0.3/0.5 and RGB-descriptor dropout0.3/0.5; and E002e weight decay0.01/0.1. Each setting changes one knob only; no combinations were run. The E002b `norm`-width models are excluded because they change temporal capacity. Values are selected source-validation track-weighted macro-F1 and track CE; ΔF1 is versus the matched control within source.
+
+| Setting | ROAD F1 (%) | ΔF1 (pp) | CE | LOKI F1 (%) | ΔF1 (pp) | CE |
+|---|---:|---:|---:|---:|---:|---:|
+| Control: temporal dropout0.1, WD0.0001 | 62.29 | — | 0.801 | 67.63 | — | 0.755 |
+| Temporal dropout0.3 | 62.18 | −0.11 | 1.403 | 67.38 | −0.25 | 0.708 |
+| Temporal dropout0.5 | 63.02 | +0.74 | 1.140 | 66.24 | −1.39 | 0.554 |
+| RGB descriptor dropout0.3 | 64.21 | +1.93 | 1.377 | 67.83 | +0.20 | 0.548 |
+| RGB descriptor dropout0.5 | 64.37 | +2.08 | 0.805 | 68.20 | +0.57 | 0.520 |
+| Weight decay0.01 | 62.29 | +0.00 | 0.800 | 66.86 | −0.77 | 0.683 |
+| Weight decay0.1 | 62.26 | −0.02 | 0.797 | 67.05 | −0.59 | 0.742 |
+
+![Selected source-validation F1 and CE across the seven single-axis settings](../../outputs/experiments/E002-regularization-comparison-20261103/selected-metrics.png)
+
+Both RGB-descriptor dropout settings have higher selected F1 than the control on both sources. At0.5, the gain is +2.08 pp ROAD with essentially unchanged CE and +0.57 pp LOKI with lower CE. Stronger temporal dropout and weight decay are less consistent across sources and F1 versus CE. The curves show validation F1 plateauing while validation CE often rises; the available train F1 traces also remain well above validation, but historical E002b controls did not log train F1. Training metrics are online with changing weights and active dropout, so these traces do not measure the final selected checkpoint. This is single-seed validation evidence, not a robust winner or test/transfer result.
+
+![Online training and source-validation CE and F1 for four representative single-axis settings](../../outputs/experiments/E002-regularization-comparison-20261103/training-validation-curves.png)
+
+The curve figure uses the control, the largest tested temporal dropout, the largest tested RGB-descriptor dropout and the largest tested weight decay to keep it readable; it does not cherry-pick the best settings. Train-F1 curves are absent for the historical controls. Full-precision numerical rows, W&B links and the small regeneration script are in ignored local `outputs/experiments/E002-regularization-comparison-20261103/`; all source-specific settings, epochs, full result tables and run evidence remain with [E002c](../E002c-rgb-regularization/README.md) and [E002e](../E002e-weight-decay-sensitivity/README.md).
+
 ## Exploratory cross-dataset validation transfer
 
 Agreed **2026-11-02**: evaluate the frozen eight-checkpoint list in [transfer-comparison.json](transfer-comparison.json) once on the opposite source's validation split, using each checkpoint's training-source normalization. Compare with its already saved source-validation metrics; do not rerun source inference. The eight models cover geometry, geometry + RGB, geometry + LiDAR, and all three inputs for ROAD and LOKI training sources. The original within-source selected-F1 checkpoint rule is retained; CE is reported alongside F1.

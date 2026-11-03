@@ -91,3 +91,5 @@ Every run's final validation F1 is below its selected F1, and final validation C
 ### Evidence
 
 The four new attempts are at `aalto:/home/user20/projects/pedestrian-behavior-labeling-e002b-evaluation/outputs/experiments/E002c/runs/rgb-branch-20261028-150200-{road-waymo,loki}-rgbdrop{30,50}/`. They used code revision `e201ebf`, the completed RTX4080 calibration `E002b/calibration-rgb-branch-20261028/profile.json`, and the shared E002a RGB preparation. Each local attempt retains status, history, checkpoint, validation predictions/metrics and plots; W&B links are in the result table. The launch recorded no source diff. These runs add no new E002 held-out evidence.
+
+For a compact comparison against temporal dropout and E002e weight decay, see the E002 umbrella's [single-axis regularization view](../E002-multimodal-reference/README.md#single-axis-regularization-comparison-2026-11-03).

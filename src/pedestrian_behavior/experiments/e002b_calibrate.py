@@ -86,10 +86,11 @@ def _stress_sample(slots, arm):
 
 
 def _measure(sample, arm, variant, profile, device, *, tracks=64, shape_stress=False,
-             lidar_branch_dropout=0.):
+             lidar_branch_dropout=0., rgb_branch_dropout=0.):
     seed_run(0)
     batch = collate_multimodal([sample] * tracks)
-    model = e002b.build_model(arm, variant, profile, lidar_branch_dropout=lidar_branch_dropout).to(device)
+    model = e002b.build_model(arm, variant, profile, rgb_branch_dropout=rgb_branch_dropout,
+                              lidar_branch_dropout=lidar_branch_dropout).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), **e002a_calibrate.SETTINGS["optimizer"])
     timings = []
     torch.cuda.empty_cache()
@@ -116,7 +117,8 @@ def _measure(sample, arm, variant, profile, device, *, tracks=64, shape_stress=F
               "peak_allocated_bytes": torch.cuda.max_memory_allocated(device),
               "peak_reserved_bytes": torch.cuda.max_memory_reserved(device),
               "trainable_parameters": sum(p.numel() for p in model.parameters() if p.requires_grad),
-              "shape_stress": shape_stress, "status": "complete"}
+              "shape_stress": shape_stress, "rgb_branch_dropout": rgb_branch_dropout,
+              "lidar_branch_dropout": lidar_branch_dropout, "status": "complete"}
     del model, optimizer, batch
     gc.collect()
     torch.cuda.empty_cache()

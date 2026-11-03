@@ -28,7 +28,7 @@ class PreparedRGB:
         with self.lock:
             return self._get(identity, validate)
 
-    def _get(self, identity, validate):
+    def _read(self, identity, fields=None):
         begin = time.perf_counter()
         serialized, key = canonical(identity), identity_digest(identity)
         row = self.db.execute("SELECT identity, bytes, sha256 FROM entries WHERE key=?", (key,)).fetchone()
@@ -43,13 +43,30 @@ class PreparedRGB:
         with np.load(BytesIO(raw), allow_pickle=False) as archive:
             if str(archive["__identity__"]) != serialized:
                 raise ValueError("Prepared RGB payload identity mismatch")
-            arrays = {k: archive[k] for k in archive.files if k != "__identity__"}
+            names = fields or (k for k in archive.files if k != "__identity__")
+            arrays = {k: archive[k] for k in names}
+        return arrays, len(raw), time.perf_counter() - begin
+
+    def _get(self, identity, validate):
+        arrays, size, elapsed = self._read(identity)
         validate_arrays(arrays)
         validate(arrays)
         self.stats["hits"] += 1
-        self.stats["read_bytes"] += len(raw)
-        self.stats["read_seconds"] += time.perf_counter() - begin
+        self.stats["read_bytes"] += size
+        self.stats["read_seconds"] += elapsed
         return arrays
+
+    def valid(self, identity):
+        """Read only the cached availability vector before a model view is selected."""
+        with self.lock:
+            arrays, size, elapsed = self._read(identity, ("valid",))
+            valid = arrays["valid"]
+            if valid.ndim != 1 or valid.dtype != np.bool_:
+                raise ValueError("Invalid prepared RGB validity metadata")
+            self.stats["validity_reads"] = self.stats.get("validity_reads", 0) + 1
+            self.stats["read_bytes"] += size
+            self.stats["read_seconds"] += elapsed
+            return valid.copy()
 
     def snapshot(self):
         return self.stats | {"root": str(self.root), "read_only": True}

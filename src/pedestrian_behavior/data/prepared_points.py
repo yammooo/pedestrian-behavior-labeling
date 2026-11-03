@@ -180,22 +180,29 @@ class PreparedPoints:
         self.stats["scene_opens"] += 1
         return reader
 
-    def iter_track(self, locator):
+    def iter_track(self, locator, keep_mask=None):
         t = self.require_track(locator)
+        keep = None if keep_mask is None else np.asarray(keep_mask)
+        if keep is not None and (keep.shape != (t["slots"],) or keep.dtype != np.bool_):
+            raise ValueError("Point keep mask must be one Boolean per track slot")
         self.stats["track_reads"] += 1
-        reader = self._reader(t["group"]) if any(ref is not None for ref in t["point_frames"]) else None
+        reader = self._reader(t["group"]) if any(
+            ref is not None and (keep is None or keep[slot]) for slot, ref in enumerate(t["point_frames"])) else None
         slots = iter(enumerate(t["point_frames"]))
         if self.frame_workers == 1:
             for slot, ref in slots:
-                yield self._frame(reader, locator, slot, ref)
+                yield self._frame(reader, locator, slot, ref) if keep is None or keep[slot] else np.zeros((0, 68), np.float32)
             return
         if self.pool is None:
             self.pool = ThreadPoolExecutor(max_workers=self.frame_workers, thread_name_prefix="point-frame")
         pending = deque()
+        def read(slot, ref):
+            return (np.zeros((0, 68), np.float32) if keep is not None and not keep[slot]
+                    else self._frame(reader, locator, slot, ref))
         def submit():
             item = next(slots, None)
             if item is not None:
-                pending.append(self.pool.submit(self._frame, reader, locator, *item))
+                pending.append(self.pool.submit(read, *item))
         try:
             for _ in range(min(self.frame_workers, t["slots"])):
                 submit()

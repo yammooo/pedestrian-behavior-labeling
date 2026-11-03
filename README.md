@@ -919,3 +919,28 @@ uv run --locked --extra cpu python scripts/simulate-e002a-cache.py \
 ```
 
 This replays six hypothetical source epochs without native reads, feature-cache construction, GPU inference or training. Sizes remain uncertain; the report separates cold/steady behavior and size sensitivities.
+
+## E003a structured observation masking
+
+The [agreed E003a comparison](experiments/E003a-structured-observation-masking/README.md) adds two sequential seed0 masked-training attempts against the existing E002d fusion controls. It retains one presentation per source track/epoch, natural source-validation checkpoint selection, and source normalization on opposite validation. Final source masking diagnostics compare both models using identical masks. No held-out test inference or cache preparation.
+
+Use the existing Aalto checkout and prepared-feature environment. First calibrate the changed execution code in a fresh directory; this performs bounded CUDA capacity checks, not full training or an efficiency guarantee:
+
+```bash
+cd /home/user20/projects/pedestrian-behavior-labeling-e002e
+export PYTHONPATH="$PWD/src" OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+e002a_root="$PWD/outputs/experiments/E002a"
+uv run --no-project --python "$e002a_root/extractor-env/bin/python" python scripts/calibrate-e003a.py \
+  --reference-profile outputs/experiments/E002d/calibration-20261030-sequential-ready/profile.json \
+  --output outputs/experiments/E003a/calibration
+```
+
+After successful calibration and bounded acceptance, launch ROAD-Waymo then LOKI:
+
+```bash
+bash scripts/run-e003a-sequential.sh
+```
+
+The launcher stops on failure and uses fresh timestamped directories under `outputs/experiments/E003a/runs/`. It fixes the agreed model, seed0 and masking recipe; the existing prepared RGB cache and both indexed point caches are read-only. Each attempt saves masks/history/checkpoints, natural source/opposite validation predictions/strata, final source diagnostics and its own W&B record. Checkpoints and full predictions remain local.
+
+`E003A_PROFILE` selects a separately completed exact-code profile if recalibration uses another directory. `scripts/train-e003a.py --help` exposes explicit paths for a single attempt. An explicit `--smoke --smoke-selection <json>` restricts training and both validation datasets to declared development tracks; smoke outputs are integration evidence, never comparison results.

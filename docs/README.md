@@ -14,9 +14,9 @@ Updated **2026-11-03**. We are developing a reliable **offline, given-track pede
 
 ## Next work
 
-1. Review the completed [E002d LiDAR descriptor-dropout controls](../experiments/E002d-rgb-lidar-complementarity/README.md) against the matched E002b controls; then decide whether to proceed with the draft [E003a temporal masking comparison](../experiments/E003a-structured-observation-masking/README.md). Preserve source-validation versus held-out access labels.
+1. Implement and verify the agreed [E003a observation-masking comparison](../experiments/E003a-structured-observation-masking/README.md): two seed0 masked fusion runs against existing E002d controls; natural opposite-validation F1 is primary, source performance and fixed source masking diagnostics are reported alongside it. Full training remains user-launched; tests stay closed.
 2. Arrange a separate backup for valuable checkpoints/predictions; external storage is **TBD**. Original interrupted attempts and all earlier evidence remain preserved.
-3. Review the [E003a masking draft](../experiments/E003a-structured-observation-masking/README.md): agreed block/subset/resampling structure, with proposed probabilities and exact severity limits explicitly marked. Audit the finalized sampler before implementation. The unused retrieval proposal is deferred; E004 remains conditional.
+3. Inspect E003a source/transfer trade-offs after training, without a fixed source-F1 cutoff. Masking does not claim independent sensor outages or architectural novelty. The unused retrieval proposal is deferred; E004 remains conditional.
 
 ## Navigation and ownership
 

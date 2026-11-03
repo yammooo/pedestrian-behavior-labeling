@@ -209,6 +209,70 @@ class PreparedInputsTest(unittest.TestCase):
             points.close()
             self.assertEqual(before, {p: (p.stat().st_size, p.stat().st_mtime_ns) for p in before})
 
+    def test_keep_mask_skips_payload_reads_and_retains_worker_order(self):
+        with tempfile.TemporaryDirectory() as folder:
+            catalog = Catalog()
+            root = prepared_fixture(Path(folder)/"points", catalog)
+            points = open_points(root, catalog, frame_workers=4)
+            expected = list(points.iter_track("a"))
+            keep = np.array([False, True, False], dtype=bool)
+            with patch.object(points, "_frame", wraps=points._frame) as frame:
+                actual = list(points.iter_track("a", keep_mask=keep))
+            self.assertEqual(frame.call_count, 1)
+            self.assertEqual(frame.call_args.args[2], 1)
+            np.testing.assert_array_equal(actual[0], np.zeros((0, 68), np.float32))
+            np.testing.assert_array_equal(actual[1], expected[1])
+            np.testing.assert_array_equal(actual[2], np.zeros((0, 68), np.float32))
+            with patch.object(points, "_reader", side_effect=AssertionError("empty LiDAR view opened a shard")):
+                empty = list(points.iter_track("a", keep_mask=np.zeros(3, dtype=bool)))
+            self.assertEqual([len(frame) for frame in empty], [0, 0, 0])
+            points.close()
+            self.assertFalse(any(thread.name.startswith("point-frame") for thread in threading.enumerate()))
+            with self.assertRaisesRegex(ValueError, "Boolean per track slot"):
+                list(points.iter_track("a", keep_mask=np.ones(2, dtype=bool)))
+
+    def test_rgb_validity_reads_only_the_metadata_field(self):
+        import hashlib
+        import sqlite3
+        from io import BytesIO
+        from pedestrian_behavior.data.feature_cache import canonical, identity_digest
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder) / "rgb"
+            (root / "entries").mkdir(parents=True)
+            identity = {"track": "a"}
+            serialized, key = canonical(identity), identity_digest(identity)
+            path = root / "entries" / f"{key}.npz"
+            np.savez_compressed(path, __identity__=np.array(serialized),
+                                valid=np.array([True, False], dtype=bool), cls=np.ones((2, 768), np.float32))
+            raw = path.read_bytes()
+            db = sqlite3.connect(root / "index.sqlite3")
+            db.execute("CREATE TABLE format (version INTEGER)")
+            db.execute("INSERT INTO format VALUES (1)")
+            db.execute("CREATE TABLE entries (key TEXT, identity TEXT, bytes INTEGER, sha256 TEXT)")
+            db.execute("INSERT INTO entries VALUES (?, ?, ?, ?)", (key, serialized, len(raw), hashlib.sha256(raw).hexdigest()))
+            db.commit()
+            db.close()
+            cache = PreparedRGB(root)
+            loaded = []
+            original = np.load
+            def track_fields(*args, **kwargs):
+                archive = original(*args, **kwargs)
+                class Fields:
+                    def __getitem__(self, name):
+                        loaded.append(name)
+                        return archive[name]
+                    def __enter__(self):
+                        return self
+                    def __exit__(self, *_):
+                        archive.close()
+                return Fields()
+            with patch("pedestrian_behavior.data.prepared_rgb.np.load", side_effect=track_fields):
+                np.testing.assert_array_equal(cache.valid(identity), [True, False])
+            self.assertEqual(loaded, ["__identity__", "valid"])
+            self.assertEqual(cache.stats["validity_reads"], 1)
+            cache.close()
+
     def test_incomplete_wrong_population_encoder_and_partial_tracks_fail(self):
         with tempfile.TemporaryDirectory() as folder:
             catalog = Catalog()

@@ -1,6 +1,6 @@
 # E002d — RGB–LiDAR complementarity
 
-**Status: the four-run fusion comparison is complete; two LiDAR-dropout controls are calibrated and ready for manual launch.** The original comparison used source validation for selection. The later [E002 umbrella cross-dataset validation](../E002-multimodal-reference/transfer-results.md) is exploratory; no held-out test inference was run.
+**Status: four fusion runs and two LiDAR-dropout controls complete.** The original comparison used source validation for selection. The later [E002 umbrella cross-dataset validation](../E002-multimodal-reference/transfer-results.md) is exploratory; no held-out test inference was run.
 
 ## Question and comparison
 
@@ -42,10 +42,24 @@ See the [concise comparison and overfitting review](results-review.md) for the m
 
 ## Follow-up: LiDAR branch regularization
 
-The four fusion attempts above are complete. The two-run control is now prepared and calibrated. It tests whether dropout on the **normalized LiDAR descriptor** changes the geometry + LiDAR model's generalization: `g-dditr / temporal-small`, LiDAR descriptor dropout0.5, ROAD-Waymo and LOKI, seed0. No RGB branch is present. This is motivated by the remaining train/validation gap; it is not a broader dropout search or a replacement for the completed fusion comparison.
+The four fusion attempts above are complete. The two-run control is complete. It tests whether dropout on the **normalized LiDAR descriptor** changes the geometry + LiDAR model's generalization: `g-dditr / temporal-small`, LiDAR descriptor dropout0.5, ROAD-Waymo and LOKI, seed0. No RGB branch is present. This is motivated by the remaining train/validation gap; it is not a broader dropout search or a replacement for the completed fusion comparison.
 
 Apply `Dropout1d(0.5)` after LayerNorm of the LiDAR descriptor, with one channel mask shared across all time steps in each track. The LiDAR validity flag is appended unchanged; missing/padded descriptors are zeroed after dropout. Geometry receives no descriptor dropout. Spatial and temporal dropout stay 0.1. Keep the E002d 100-epoch, patience-15 source-validation recipe, seed, model widths, normalization, optimizer and caches unchanged. Names end in `lidardrop50`.
 
 After the two runs, compare their best source-selected checkpoints on the opposite dataset's **validation** split, labeled exploratory/target-informed development. Do not run held-out test evaluation as part of this follow-up.
 
 The completed CUDA calibration uses the accepted four-frame E002a profile at `/home/user20/projects/e002a-execution-optimizations-20261023/calibration-chunk4-final/profile.json` only as its packing-limit reference. The calibrated profile is `/home/user20/projects/pedestrian-behavior-labeling-e002b-evaluation/outputs/experiments/E002d/calibration-lidar-dropout-20261102/profile.json`, SHA-256 `d7ffef873d6947612af3f3a29999d122ccbe31abb7b296b2dd4fc4f4bd6cc2a5`. It covers only `g-dditr / temporal-small / LiDAR dropout 0.5` on the RTX 4080 at code revision `89b38e2`. The bounded one-track forward/backward updates peaked at 317,553,664 bytes for the 100-slot ROAD fixture and 2,997,184,512 bytes for the 102-slot LOKI fixture; the 64-track/102-slot shape check peaked at 289,374,720 bytes. The conservative packing preflight was 5,300,867,072 bytes against the 9,711,719,546-byte ceiling. These are calibration checks, not full-batch training peaks or epoch-time estimates. The exact single-run trainer accepts this profile. The older two-frame E002d profile is not valid for this follow-up.
+
+
+### LiDAR-dropout source-validation review (2026-11-03)
+
+Both seed0 descriptor-dropout0.5 runs completed with patience stopping. Compared with E002b `g-dditr / temporal-small` at dropout0:
+
+| Source | Dropout0 F1 | Dropout0.5 F1 | ΔF1 (pp) | Selected CE, 0→0.5 | Selected/stopped epoch, dropout0.5 |
+|---|---:|---:|---:|---|---|
+| ROAD-Waymo | 66.05% | 65.36% | −0.69 | 0.7191→0.8033 | 27/42 |
+| LOKI | 76.41% | 76.06% | −0.35 | 0.3764→0.4128 | 21/36 |
+
+Matched later-epoch validation CE is lower with dropout0.5 (ROAD epoch32:1.0688→0.8280; LOKI epoch23:0.5073→0.4511), but selected F1 and selected CE are worse on both. Dropout does not remove overfitting: at stopping, online train/validation F1 is86.78%/60.01% ROAD and90.68%/72.55% LOKI. Online training scores use changing weights and active dropout. The original LOKI control was interrupted after23 epochs; do not compare terminal epochs as matched budgets. One seed and sequential-versus-grouped execution limit attribution.
+
+Evidence on Aalto: `outputs/experiments/E002d/runs/lidardrop-20261102-081008-road-waymo-lidardrop50` ([W&B](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/4cgzo4cx)) and `lidardrop-20261102-081008-loki-lidardrop50` ([W&B](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/02i4aw8a)); configs, histories and source-validation metrics were inspected read-only. Opposite-validation inference for these two follow-ups has not been run. These results do not justify changing [E003a's](../E003a-structured-observation-masking/README.md) combined reference or implying a transfer benefit from LiDAR dropout.

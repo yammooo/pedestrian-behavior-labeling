@@ -233,9 +233,25 @@ def run_attempt(source, configuration, variant, output, device, smoke=False, *, 
             if "runtime_snapshot" in prepared:
                 provenance["runtime"] = prepared["runtime_snapshot"]()
             write_json(output/"provenance.json", provenance)
-            run.log({"epoch": row["epoch"], "train/loss_epoch": row["training_ce"],
+            metrics = {"epoch": row["epoch"], "train/loss_epoch": row["training_ce"],
                      "train/macro_f1": row["training_f1"],
-                     "val/loss": row["validation_ce"], "val/macro_f1": row["validation_f1"]})
+                     "val/loss": row["validation_ce"], "val/macro_f1": row["validation_f1"]}
+            masking = row.get("masking")
+            if masking:
+                for key in ("tracks", "augmented", "changed", "fallback", "clean_fraction",
+                            "changed_augmented_fraction", "fallback_fraction",
+                            "candidate_draws", "unchanged_augmented_accepted", "unchanged_fallback",
+                            "natural_observable_slots", "effective_observable_slots",
+                            "newly_hidden_observable_slots", "effective_observable_fraction"):
+                    value = masking.get(key)
+                    if value is not None:
+                        metrics[f"details/masking/{key}"] = value
+                for branch, value in masking.get("branch_retention_fraction", {}).items():
+                    if value is not None:
+                        metrics[f"details/masking/branch_retention/{branch}"] = value
+                for reason, count in masking.get("rejection_reasons", {}).items():
+                    metrics[f"details/masking/rejections/{reason}"] = count
+            run.log(metrics)
         optimizer = torch.optim.AdamW((p for p in model.parameters() if p.requires_grad), **settings["optimizer"])
         fitted = fit(model, SmokeBatches() if smoke and not prepared.get("custom_smoke") else training,
                      lambda m: prediction_metrics(validation_predictions(m), len(classes)),
@@ -249,7 +265,12 @@ def run_attempt(source, configuration, variant, output, device, smoke=False, *, 
         for d, split in evaluation_splits:
             destination = output/(d+"-"+split)
             destination.mkdir()
-            tracks = validation_predictions(model) if split.startswith("validation") else predict(model, batching(dataset(d, split), seed=settings["seed"]), device, prepared.get("forward_batch"))
+            if split.startswith("validation") and d == source:
+                tracks = validation_predictions(model)
+            elif split.startswith("validation") and "evaluation_predictions" in prepared:
+                tracks = prepared["evaluation_predictions"](model, d, split, device)
+            else:
+                tracks = predict(model, batching(dataset(d, split), seed=settings["seed"]), device, prepared.get("forward_batch"))
             for t in tracks:
                 metadata, arrays = load_track(t["archive"])
                 identity = json.loads(t["locator"])
@@ -264,6 +285,8 @@ def run_attempt(source, configuration, variant, output, device, smoke=False, *, 
                       "strata": stratified_metrics(tracks, len(classes), axes)}
             write_json(destination/"metrics.json", result)
             evaluations[d] = result
+        if "post_evaluation" in prepared:
+            prepared["post_evaluation"](model, evaluations, fitted, output, device, run)
         history = fitted["history"]
         provenance.update(selection=fitted["selection"], stopping_reason=fitted["stopping_reason"], completed_epochs=len(history),
             exposure={k: sum(r[k] for r in history) for k in ("optimizer_steps", "processed_tracks", "context_slots", "gt_slots", "padding_slots", "batch_slots")},

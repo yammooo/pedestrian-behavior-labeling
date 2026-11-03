@@ -1,76 +1,97 @@
 # E003a — Structured observation masking
 
-**Draft specification, 2026-11-02.** The user agreed the masking structure and bounded resampling. The probability weights, exact severity limits and model reference below are **proposed defaults, not frozen settings**. No implementation or training has started. This draft replaces the unused E003 scene-retrieval placeholder as the immediate proposed direction; retrieval remains a deferred hypothesis in the [literature review](../../docs/literature/offline-labeling-research-direction.md).
+**Specification agreed 2026-11-03; implementation and acceptance in progress.** Two new seed0 training attempts, one per source, will compare against the completed E002d controls. Full training remains user-launched. No E003a performance results exist yet.
 
-## Question and fixed contract
+## Question and comparison
 
-Does training with varied branch availability and temporal persistence improve missing-input robustness and ROAD-Waymo↔LOKI generalization? Keep the complete given-track timeline, source-only normalization, frozen feature caches, original accepted behavior GT and equal-track CE. Predict every accepted GT slot, including slots where augmentation removes all inputs. This is supervised state prediction under input corruption; no reconstruction decoder, teacher, new labels or auxiliary loss is introduced. [ModDrop/ActionMAE precedents](../../docs/literature/README.md#observation-masking-precedents).
+Does training with varied branch availability and temporal persistence improve **natural-availability cross-dataset validation F1**, while retaining useful source performance? Source changes are reported alongside transfer, without a numerical pass/fail cutoff. Missing-input diagnostics are secondary. These validation populations already informed development; this is **target-informed exploratory development**, not held-out or strict zero-shot evidence. Test sets remain closed.
 
-The [training-only feasibility audit](../E002-multimodal-reference/README.md#training-gt-runs-and-temporal-mask-feasibility-2026-11-02) supplies the descriptive evidence. Observed constant-label runs have median 15 ROAD /20 LOKI slots. GT gaps break runs. The common grid is 5 Hz; LOKI physical timing remains nominal. The policy uses no per-track GT to choose, place or accept masks.
+Compare the E002d `g-rgb-dditr / temporal-small / rgbdrop50` reference with the same model trained using observation masking. Present each original training track **once per epoch** in both conditions. No doubled population, extra masked samples, reconstruction objective, teacher or auxiliary labels. Whole-modality removal has established [ModDrop/ActionMAE precedents](../../docs/literature/README.md#observation-masking-precedents); this experiment does not claim architectural novelty.
 
-## First comparison
+## Fixed reference
 
-**Fixed-N only:** every source track is presented exactly once per epoch in both conditions.
+Retain frozen E002 populations/splits, accepted four-state GT, source-only normalization, E001b geometry, 3× DINOv3 CLS crops and indexed D-DITR features. Preserve missing-RGB/3D-only pedestrians. Initialize trainable layers freshly at seed0; encoders remain frozen. The source controls are:
 
-| Condition | Presentations per source epoch | Status |
-|---|---:|---|
-| No observation masking | N original tracks | Existing matching control, subject to configuration verification |
-| E003a masking | N tracks, each presented once with a fresh clean-or-masked view | First proposed increment: one new seed 0 run per source |
+| Training source | E002d attempt under `outputs/experiments/E002d/runs/` | Selected epoch | Source F1 | Source CE |
+|---|---|---:|---:|---:|
+| ROAD-Waymo | `fusion-20261030-140937-road-waymo-rgbdrop50` | 17 | 66.07% | 0.8027 |
+| LOKI | `fusion-20261030-140937-loki-rgbdrop50` | 12 | 74.68% | 0.3853 |
 
-Proposed reference: E002d `g-rgb-dditr / temporal-small`, branch LayerNorm, geometry/RGB/LiDAR widths 64/128/128, temporal width 128, two blocks, temporal/spatial dropout 0.1, RGB descriptor dropout 0.5 and LiDAR descriptor dropout 0.0. This has completed controls on both sources. Keep that model, E002 optimizer/warmup, effective batch 64, maximum 100 epochs/patience 15 and seed 0 fixed. Confirm the reference before implementation; changing descriptor dropout requires a matching control. Inputs, targets, populations and splits remain those of E002.
+Their checkpoint hashes and original transfer metrics are frozen in [the E002 transfer manifest](../E002-multimodal-reference/transfer-comparison.json). Keep the following settings unchanged:
 
-Fresh views are generated online, not stored as duplicate tracks. Every training track retains one presentation per E003a epoch; reshuffle assignments and redraw masks across epochs. Rejected candidates do not add optimizer updates or replace a track with another track.
+| Component | Setting |
+|---|---|
+| Branch descriptors | Geometry64, RGB128, LiDAR128; affine LayerNorm per branch |
+| LiDAR readout | One learned cross-attention query, 20m target-centered point features, width128, four heads, one spatial block |
+| Fusion / temporal | 323→128; two bidirectional RoPE blocks, four heads, FFN512 |
+| Dropout | Spatial/temporal0.1; normalized RGB descriptor0.5; LiDAR/geometry descriptor0 |
+| Optimizer | AdamW, LR3e-4, weight decay1e-4, betas(0.9,0.999), epsilon1e-8 |
+| Training | Float32, whole-track effective batch64, three-epoch warmup, clip1.0, maximum100 epochs, patience15, seed0 |
+| Selection | Full natural source-validation four-class track-weighted macro-F1; exact ties use lower CE, then earlier epoch |
 
-## Sampler
+Patience and aggregation retain the existing shared implementation. Different packing may change stochastic dropout draws, so this is not a promise of identical control training trajectories. E002e does not silently change this reference recipe.
 
-| Choice | Value | Status |
-|---|---|---|
-| Available branches | Geometry G, RGB R, LiDAR L | Agreed |
-| Candidate persistence lengths | 1, 5, 10, 20 slots, or the full track T | Agreed working set from discussion |
-| Probability of original view | 0.5 per track presentation | Proposed |
-| Probability of full-track persistence | 0.25, conditional on drawing an augmented view | Proposed |
-| Finite persistence distribution | Remaining 0.75 uniformly over distinct candidates in {1, 5, 10, 20} strictly less than T | Proposed |
-| Retained branch count k | Draw independently per block from {1, 2, 3}, uniformly | Count choices agreed; uniform probabilities proposed |
-| Selected branches | Uniform subset of size k from {G,R,L}, constant within that block | Proposed explicit distribution |
-| Candidate-mask draws | At most 3 total for an augmented presentation | Agreed working limit |
-| After three failures | Use the original view of the same track | Agreed |
+## Mask sampler
 
-An original view keeps all naturally available inputs. For an augmented view, sample one persistence length for that track, partition its timeline into consecutive blocks from the first slot, and truncate the last block at T. Choose k and its subset independently in each block. At length1 the subset can change each frame; at length T it stays constant for the whole track. Fixed first-slot alignment is the simple proposed implementation; random phase is not included in this draft.
+Natural availability is `A[t,m]`, with branches geometry G, RGB R and LiDAR L. G is the OR of the six existing geometry validity groups, not a guarantee that every geometry field exists.
 
-Never clamp an oversized candidate to T or count T twice. If no finite candidate exists (T=1), the full-track case is the only realizable length. Full-track and finite probabilities are conditional on an augmented draw; retries redraw length, counts and subsets, but not the original/augmented coin flip. Even k=3 can produce an unchanged view; accept it and record its actual unchanged status.
+| Choice | Fixed value |
+|---|---|
+| Clean versus augmented | 0.5 / 0.5 per track presentation |
+| Full-track persistence | Probability0.25 conditional on augmentation |
+| Other persistence lengths | Remaining0.75 uniformly over `{1,5,10,20}` strictly less than track length T |
+| Shortest track | If no finite length exists, use full-track persistence only |
+| Retained branch count per block | `P(k=0,1,2,3)=(0.1,0.3,0.3,0.3)` |
+| Branch subset | Uniform among subsets of the selected size; independent per block |
+| Blocks | Start at first slot; truncate final block; no random phase |
+| Candidate attempts | At most3 complete draws; then restore the original view of the same track |
 
-Let A[t,m] be natural availability and S[b,m] the selected branches for block b:
+Sample one persistence length per augmented track. The chosen branch subset is constant within a block, including full-track blocks. Define effective availability `E[t,m] = A[t,m] AND S[block(t),m]`. Never invent observations or switch to an available branch when a selected branch is absent. k=0 deliberately permits short complete outages; k=3 and intersection with natural missingness may yield unchanged views. Accept unchanged candidates and record them.
 
-`E[t,m] = A[t,m] AND S[block(t),m]`
+Training masks use an independent seed0 RNG keyed by source, epoch and track identity. They do not consume shuffle/model-dropout RNG or depend on cache hits, loading order or worker scheduling. Resampling redraws length/subsets, without redrawing the clean/augmented coin or adding presentations/updates.
 
-k is the number of allowed branches, not guaranteed observed branches. A selected RGB-only block may therefore contain empty timesteps. Keep those timesteps and their labels. Do not switch branches automatically when the selected branch is absent. No deliberate k=0 draw is included in the proposed first policy; such outages remain a separate unresolved extension needed to explicitly enforce sparse all-branch snapshots.
+## Severity checks
 
-## Severity checks and resampling
+Use the full unpadded context, **never GT**, to accept a candidate. Let `O[t]=any(A[t,:])` and `V[t]=any(E[t,:])`.
 
-The numerical limits below make the previous discussion concrete and require agreement before freezing:
+1. Require `sum(V) >= ceil(0.25 * sum(O))`.
+2. For each contiguous interval where V is false, count the originally observable slots O within that interval. This newly hidden count must be at most `min(10, floor(T/4))`. Natural gaps consume no budget but can connect hidden observations into one resulting gap. T<4 permits no newly fully hidden timestep.
+3. After three rejected candidates, restore E=A for that same track; do not relax limits.
 
-1. Let `O[t] = any_m A[t,m]` and `V[t] = any_m E[t,m]`. Require `sum(V) >= ceil(0.25 * sum(O))`: retain some input on at least 25% of originally observable timesteps. No GT enters this check.
-2. Define `c(T) = min(10, floor(T/4))` slots. For **each contiguous zero-input interval of V**, count how many slots in that interval originally had O=true. Require that added-hidden count to be at most c(T). Natural empty slots consume no budget but can connect removed observations into one interval; do not check only separate runs of newly hidden slots. T<4 permits no newly fully hidden timestep, although branch removal is still possible.
-3. If either check fails, draw a fresh candidate mask, up to 3 candidates total. After three failures use E=A. Do not relax limits or change track identity. The original view always passes by construction; frozen eligible tracks have some natural input.
+The ten-slot cap is2 seconds of grid coverage, not a bound on physical empty-interval duration: existing natural gaps can extend the interval. Record both the resulting interval length and newly hidden count. Retaining25% of observable context cannot guarantee behavioral identifiability. A candidate may retain unlabeled context while hiding every accepted-GT slot; do not use GT to reject it.
 
-The cap is at most 10 newly hidden slots (2 s of grid coverage), with a quarter-track cap for shorter tracks. It does **not** guarantee that every actual empty interval is shorter than 2 s: existing natural gaps can extend it. Record both actual empty-interval length and added-hidden count. No observed-input count can guarantee behavioral identifiability.
+The preceding [training-only feasibility audit](../E002-multimodal-reference/README.md#training-gt-runs-and-temporal-mask-feasibility-2026-11-02) motivated finite lengths. A disposable five-presentation NumPy simulation with these agreed limits changed44.8% ROAD /42.6% LOKI presentations and fell back on about0.6% /0.8% of augmented draws. It retained roughly82.6% /82.9% of naturally available LiDAR slots overall. These approximate metadata-only draws are feasibility signals, not the final sampler audit, runtime estimates or training results.
 
-The checks use full unpadded context, not accepted-GT positions. A view with no input at any GT slot may still have useful unlabeled context and is not automatically rejected. Filtering would change the intended sampling distribution, so actual accepted/fallback frequencies must be reported rather than assuming the nominal probabilities survived.
+## Input semantics and loading
 
-## Data flow and observation meaning
+Choose the accepted mask before packing/loading. Reuse it through forward/backward recomputation. Pack using retained LiDAR point counts, skip masked point-feature reads/readout, and preserve track lengths, timestamps/RoPE positions, padding, targets and GT masks. Existing caches stay immutable.
 
-Sample the accepted mask once from metadata before feature loading and packing; use a separate seeded mask RNG so cache hits, thread scheduling and model dropout do not affect mask draws. Reuse that mask through forward/backward recomputation. Keep track length, timestamps/RoPE positions, padding and GT masks unchanged. Skip masked LiDAR feature reads/readout where possible; this is an efficiency hypothesis, not a measured speedup.
+Mask G by zeroing all20 inputs, including its six internal validity flags. Masked branch descriptors remain zero after projections, affine normalization and existing dropout; effective branch validity is0. Retained branches keep their original partial-validity structure. Observation masking has no inverse-keep scaling. Existing descriptor/attention dropout keeps its usual implementation.
 
-Masked branches have zero descriptors and effective validity 0; retained inputs are not rescaled by inverse keep probability. Whole-G masking also removes its six input-validity groups; partial natural geometry validity is preserved when G is retained. Keep persistent caches untouched. Store natural and effective masks separately in local evidence; the model receives effective validity, not a flag identifying synthetic masking.
+This masks **model branches**, not independent physical sensors. Geometry contains 2D bbox fields; retained RGB/LiDAR still use supplied target localization. Cached velocities may depend on adjacent observations. Do not recompute velocities or claim a raw-sensor outage. Keep natural/effective masks separately in local evidence; the model sees only effective validity, without an artificial-mask indicator.
 
-This masks **branch representations**, not independent physical sensors. G includes 2D bbox features; target-centered RGB/LiDAR still use the supplied track localization. Cached velocities can contain information derived from adjacent observations. No raw-sensor outage, motion recomputation or RGB/LiDAR appearance augmentation is claimed.
+## Evaluation and logging
 
-## Evaluation, evidence and acceptance
+Every epoch uses existing online training CE/F1 and **natural full source-validation** CE/F1. No new validation metric or additional epoch-level inference pass. Training scores remain changing-weight, dropout-active scores, now on clean/masked observations; they are not fixed-checkpoint train scores directly matched to natural validation difficulty.
 
-- Select checkpoints on the full source validation split at natural availability, using the existing four-class track-weighted macro-F1/CE/earlier-epoch rule. Do not select on opposite validation or a newly optimized masked-validation score.
-- Compare natural source and opposite validation F1/CE; then replay identical fixed diagnostic masks for control and augmented models. Exact stress cases/mask seeds are TBD before execution. This is target-informed exploratory development following E002 inspection, not an untouched zero-shot comparison. Held-out tests remain closed.
-- Report actual clean/changed/fallback shares, draws per accepted view, rejection reasons, accepted lengths/counts/subsets by source, per-branch coverage, retained observable-time coverage and empty-gap distributions. Log masked versus retained GT support and class/transition diagnostics post hoc, without changing GT or mask selection.
-- Existing online train CE/F1 remain dropout-active, changing-weight metrics, now also measured on augmented observations. They are not fixed-checkpoint train scores or directly matched to natural validation difficulty. No extra train inference pass is added.
-- Readable acceptance checks: natural availability is never invented; kept inputs and source statistics are unchanged; masking does not delete slots/GT; full-track k=1 stays on one branch; invalid finite lengths never create duplicate full-track cases; seeded draws are repeatable; severity checks handle natural gaps and mask-bridged gaps correctly; exactly 3 failed candidates restore the original without extra track presentations; masked inputs remain zero after branch biases/LayerNorm; cached inputs remain unchanged; control and augmented models use identical diagnostic masks.
+Add compact epoch masking statistics: clean/changed/fallback shares, candidate/rejection counts, accepted lengths/subsets, branch coverage, observable-time retention, and resulting empty-gap/newly-hidden summaries. Save detailed masks and post-hoc retained/hidden GT support locally. GT/class/transition summaries never enter the sampler. Keep W&B tidy: existing main curves, compact masking scalars and final tables; checkpoints and full predictions stay local.
 
-**Remaining decisions:** approve or revise the proposed probability weights, exact severity limits and model reference; decide whether deliberate k=0 intervals belong in the first comparison; freeze diagnostic evaluation masks and repeat the metadata-only sampler audit with the accepted constraints. Then implementation, a bounded GPU check and the two-run command can be prepared.
+Reload `best.pt` and evaluate:
+
+| Evaluation | Models | Availability | Purpose |
+|---|---|---|---|
+| Source validation | Masked model; existing control metrics | Natural | Source trade-off |
+| Opposite validation | Masked model; existing frozen control transfer | Natural, source normalization | Primary transfer comparison |
+| Source diagnostics | Masked model and matched E002d control | G-only, RGB-only, LiDAR-only, fixed mixed masks | Secondary missing-input robustness |
+
+The three single-branch diagnostics gate directly, **without fallback or severity repair**. Keep all tracks and GT, including tracks with no remaining input; report the no-input cohort separately. The mixed diagnostic forces the augmented path of the exact training sampler, with the same three-draw checks/fallback, but diagnostic seed10000. Hold these masks fixed across models. Evaluation mode disables ordinary dropout. No diagnostic or target result participates in checkpoint selection.
+
+Retain existing per-class/confusion/observation-stratum outputs for natural evaluations and a compact diagnostic comparison table. Save predictions and mask evidence so numerical results can be reconstructed without inference. Do not modify historical run artifacts.
+
+## Implementation and acceptance
+
+Use thin E003a assembly/launcher code over existing preparation, model, accumulation, lifecycle and evaluation operations. Fresh attempts live under ignored `outputs/experiments/E003a/`; one W&B run per new attempt. Do not resume or automatically retry training. Exact-code CUDA resource verification remains required; masking is not permission to bypass calibrated limits.
+
+Acceptance covers deterministic source/epoch/track draws; no invented availability; finite/full-track boundaries; short tracks; bridged natural gaps; three-failure fallback; unchanged accepted GT/times/context; zero descriptors after affine normalization; consistent point counts; skipped masked point reads; immutable caches; shared diagnostic masks; and prediction-to-metric reconstruction. Run focused tests, the required full CPU suite, bounded checks on both CUDA sources, dependency/link checks where affected, and `git diff --check`. Measure masked/unmasked throughput on matched inputs; do not infer speedup from retained-token ratios.
+
+Execution paths, measured checks and the final manual command will be recorded here after verification. Full comparison training is not part of implementation acceptance. Single-seed evidence will remain exploratory.

@@ -10,6 +10,7 @@ import torch
 
 from pedestrian_behavior.data.loading import collate_tracks
 from pedestrian_behavior.experiments.e001 import build_model
+from pedestrian_behavior.training import seed_run
 
 
 class E001ModelTest(unittest.TestCase):
@@ -144,6 +145,7 @@ class E001ModelTest(unittest.TestCase):
 
     @unittest.skipUnless(torch.cuda.is_available(), "CUDA acceptance runs on aalto")
     def test_cuda_predictions_padding_and_gradients(self):
+        seed_run(0)  # Use the same FP32 backend settings as experiment runs.
         lengths = torch.tensor([1, 3])
         for feature, dimension in (("K", 3), ("K+T", 6), ("K+T+R", 12), ("RAW", 12)):
             for variant in ("A", "B"):

@@ -924,15 +924,17 @@ This replays six hypothetical source epochs without native reads, feature-cache 
 
 The [agreed E003a comparison](experiments/E003a-structured-observation-masking/README.md) adds two sequential seed0 masked-training attempts against the existing E002d fusion controls. It retains one presentation per source track/epoch, natural source-validation checkpoint selection, and source normalization on opposite validation. Final source masking diagnostics compare both models using identical masks. No held-out test inference or cache preparation.
 
-Use the existing Aalto checkout and prepared-feature environment. First calibrate the changed execution code in a fresh directory; this performs bounded CUDA capacity checks, not full training or an efficiency guarantee:
+Use the existing Aalto checkout and prepared-feature environment. The current code already has a completed profile at `outputs/experiments/E003a/calibration/profile.json`, so the launcher below is ready. To recalibrate changed code, use a fresh directory; this performs bounded CUDA capacity checks, not full training or an efficiency guarantee:
 
 ```bash
 cd /home/user20/projects/pedestrian-behavior-labeling-e002e
 export PYTHONPATH="$PWD/src" OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
 e002a_root="$PWD/outputs/experiments/E002a"
+e003a_profile_dir="$PWD/outputs/experiments/E003a/calibration-$(date -u +%Y%m%d-%H%M%S)"
 uv run --no-project --python "$e002a_root/extractor-env/bin/python" python scripts/calibrate-e003a.py \
   --reference-profile outputs/experiments/E002d/calibration-20261030-sequential-ready/profile.json \
-  --output outputs/experiments/E003a/calibration
+  --output "$e003a_profile_dir"
+export E003A_PROFILE="$e003a_profile_dir/profile.json"
 ```
 
 After successful calibration and bounded acceptance, launch ROAD-Waymo then LOKI:

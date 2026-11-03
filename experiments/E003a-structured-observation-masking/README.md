@@ -1,8 +1,8 @@
 # E003a — Structured observation masking
 
-**Specification agreed 2026-11-03; implementation and acceptance in progress.** Two new seed0 training attempts, one per source, will compare against the completed E002d controls. Full training remains user-launched. No E003a performance results exist yet.
+**Specification agreed and implemented 2026-11-03; CPU/CUDA and bounded GPU/W&B acceptance complete.** Two new seed0 training attempts, one per source, will compare against the completed E002d controls. Full training remains user-launched. No E003a performance results exist yet.
 
-## Question and comparison
+## First comparison
 
 Does training with varied branch availability and temporal persistence improve **natural-availability cross-dataset validation F1**, while retaining useful source performance? Source changes are reported alongside transfer, without a numerical pass/fail cutoff. Missing-input diagnostics are secondary. These validation populations already informed development; this is **target-informed exploratory development**, not held-out or strict zero-shot evidence. Test sets remain closed.
 
@@ -94,4 +94,25 @@ Use thin E003a assembly/launcher code over existing preparation, model, accumula
 
 Acceptance covers deterministic source/epoch/track draws; no invented availability; finite/full-track boundaries; short tracks; bridged natural gaps; three-failure fallback; unchanged accepted GT/times/context; zero descriptors after affine normalization; consistent point counts; skipped masked point reads; immutable caches; shared diagnostic masks; and prediction-to-metric reconstruction. Run focused tests, the required full CPU suite, bounded checks on both CUDA sources, dependency/link checks where affected, and `git diff --check`. Measure masked/unmasked throughput on matched inputs; do not infer speedup from retained-token ratios.
 
-Execution paths, measured checks and the final manual command will be recorded here after verification. Full comparison training is not part of implementation acceptance. Single-seed evidence will remain exploratory.
+### Acceptance evidence (2026-11-03)
+
+Implementation revision `47170a4` was transferred through Git and verified on Aalto. Local CPU suite: **253 tests pass, 12 expected skips**; Aalto CUDA suite: **all253 pass**. Dependency lock/installed-package checks, local documentation targets/anchors and `git diff --check` pass. The [metadata-only sampler audit](../../outputs/experiments/E003a/sampler-audit-20261103/summary.json) covers all4,380 ROAD /8,574 LOKI training tracks at mask seed0/epoch1, with repeated-draw equality and no invented-availability, retained-coverage or added-gap violations. Changed views:1,922 /3,651; fallbacks:15 /36; natural LiDAR slots retained:82.80% /82.86%. Counts are realized draws, not assumed sampling probabilities; the input hash and regeneration script remain beside the summary.
+
+Aalto calibration: `outputs/experiments/E003a/calibration/profile.json`, completed on the RTX4080 Laptop GPU using the existing E002 feature environment (PyTorch2.7.1+cu126 /CUDA12.6). Both-source full-track fixture and64-track/102-slot temporal-bound updates pass; peak allocations were312,635,392 ROAD /2,785,686,528 LOKI /325,294,080 shape bytes. These are bounded capacity checks, not full-batch/epoch memory or throughput claims. Packing retains the reference's two-frame spatial chunks and existing token/temporal ceilings. No model, feature or test-set change.
+
+Two separately labeled one-epoch smoke attempts completed under `outputs/experiments/E003a/acceptance-20261103/smoke/`: three source training tracks, two source validation tracks and two opposite-validation tracks per attempt. [ROAD W&B smoke](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/6p4sp4vi) / [LOKI W&B smoke](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/wv6qarsa). Each produced best/last checkpoints,42 PNG/SVG plot pairs, natural source/opposite predictions and all eight source diagnostic model/view cells. Ten prediction archives per source reconstruct saved confusion/CE/accuracy, and control/model effective masks match in all diagnostics. Source/target protected-file checks report no changes. `acceptance-20261103/selection.json` and `verification.json` pin scope and checks. These are integration artifacts, not comparison scores. The ROAD training draws happened to be clean for all three tracks; LOKI changed one. Both sources exercised masked diagnostic inference.
+
+The original CUDA-suite run exposed a pre-existing E001 test that set the RNG but omitted experiment FP32/TF32 backend settings: batch/single logits differed by about4e-6 against its1e-6 tolerance. Applying existing `seed_run(0)` made the test and complete CUDA suite pass; no tolerance or model was changed. Revision `8bfdb79` adds that test setup and the bounded timing script; calibrated training source remains identical to `47170a4`.
+
+### Matched bounded timing
+
+At revision `8bfdb79`, [the disposable timing script](../../scripts/benchmark-e003a.py) opened the full source/opposite/control-transfer assembly, verified existing control evidence, then used the same three short/typical/long **training** fixtures per source. One warmup and two measured updates per natural/masked view; fresh seed0 model/optimizer each time, weights discarded. Each timed update includes warm-cache reads, CPU preparation/packing, transfers, forward/backward and AdamW; model/optimizer creation and initial assembly are reported separately. No W&B or validation/test inference.
+
+| Source | Natural→effective point tokens | Changed tracks | Natural median update | E003a median update | Initial assembly |
+|---|---:|---:|---:|---:|---:|
+| ROAD | 652,968→652,968 | 0/3 | 0.252s | 0.249s | 30.85s |
+| LOKI | 712,568→573,892 | 1/3 | 0.205s | 0.180s | 26.98s |
+
+ROAD happened to draw three clean views at epoch1, so it measures adapter overhead, not a masking speedup. LOKI's measured update is about12% shorter here. These tiny warm-cache single-physical-batch results **do not estimate full-epoch time, cold disk throughput or worst-case speedup**. Two repeats are descriptive only. Raw timings, cache counters, masks and allocation peaks are in Aalto `acceptance-20261103/benchmark-road-waymo/benchmark.json` and `benchmark-loki/benchmark.json`. The metadata audit's roughly83% retained LiDAR slots is not a runtime prediction.
+
+Full comparison training is not part of implementation acceptance. Single-seed evidence will remain exploratory. The [manual launch command](../../README.md#e003a-structured-observation-masking) runs ROAD then LOKI using fresh timestamped attempts; calibration must match the current code.

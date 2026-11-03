@@ -30,7 +30,7 @@ The [joint 26-model review](../E002b-normalization-capacity/results-review.md) i
 
 The [E002c dropout result](../E002c-rgb-regularization/README.md#selected-source-validation-results) finds no consistent RGB F1 improvement from stronger temporal dropout. The only gain over a matched0.1 control is +0.74 pp on ROAD `temporal-small`; all LOKI higher-dropout variants lose F1. This remains single-seed validation development.
 
-The [E002e weight-decay result](../E002e-weight-decay-sensitivity/README.md#results) finds essentially unchanged ROAD selected F1 and a0.58–0.77 pp LOKI decrease at weight decay0.01/0.1. Weight decay0.1 lowers the late validation CE gap modestly on both sources while selected F1 remains flat or slightly lower. E002e train F1 is far above validation F1; historical controls lack train-F1 logging. This is still one seed per setting.
+The [E002e weight-decay result](../E002e-weight-decay-sensitivity/README.md#results) finds essentially unchanged ROAD selected F1 and a0.59–0.77 pp LOKI decrease at weight decay0.01/0.1. Weight decay0.1 lowers the late validation CE gap modestly on both sources while selected F1 remains flat or slightly lower. E002e train F1 is far above validation F1; historical controls lack train-F1 logging. This is still one seed per setting.
 
 ## Single-axis regularization comparison (2026-11-03)
 
@@ -45,6 +45,8 @@ This matched view compares seven seed0 `g-rgb / temporal-small` settings per sou
 | RGB descriptor dropout0.5 | 64.37 | +2.08 | 0.805 | 68.20 | +0.57 | 0.520 |
 | Weight decay0.01 | 62.29 | +0.00 | 0.800 | 66.86 | −0.77 | 0.683 |
 | Weight decay0.1 | 62.26 | −0.02 | 0.797 | 67.05 | −0.59 | 0.742 |
+
+ΔF1 is calculated from unrounded saved metrics; displayed F1 is rounded to two decimals.
 
 ![Selected source-validation F1 and CE across the seven single-axis settings](../../outputs/experiments/E002-regularization-comparison-20261103/selected-metrics.png)
 

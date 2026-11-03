@@ -65,11 +65,13 @@ F1 is the four-class track-weighted macro-F1; CE is mean per-track CE at the **F
 | Source | RGB branch dropout | F1 (%) | ΔF1 (pp) | CE | Epochs |
 |---|---:|---:|---:|---:|---:|
 | ROAD | 0 (E002b control) | [62.29](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/m2ov73kt) | — | 0.801 | 9/24 |
-| ROAD | 0.3 | [64.21](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/tzr354j7) | +1.92 | 1.377 | 40/55 |
+| ROAD | 0.3 | [64.21](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/tzr354j7) | +1.93 | 1.377 | 40/55 |
 | ROAD | 0.5 | [64.37](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/iqsomnq7) | +2.08 | 0.805 | 16/31 |
 | LOKI | 0 (E002b control) | [67.63](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/0cvhe1n1) | — | 0.755 | 28/43 |
 | LOKI | 0.3 | [67.83](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/m5nqlrf0) | +0.20 | 0.548 | 12/27 |
 | LOKI | 0.5 | [68.20](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/ck3vsjb4) | +0.57 | 0.520 | 11/26 |
+
+ΔF1 values are calculated from the unrounded saved metrics; displayed F1 is rounded to two decimals.
 
 All four new runs completed with patience stopping, no recorded failures or changed protected inputs. Their validation denominators match the controls: ROAD78 groups /1,110 tracks /45,388 accepted GT frames; LOKI93 /1,861 /60,231. No held-out or cross-dataset test was opened.
 
@@ -86,7 +88,7 @@ These are **last-epoch** traces, separate from the selected-checkpoint table. Tr
 | LOKI | 0.3 | 89.69 /64.35 | 0.176 /0.740 |
 | LOKI | 0.5 | 88.09 /67.40 | 0.200 /0.612 |
 
-Every run's final validation F1 is below its selected F1, and final validation CE is above its selected CE. The train/validation classification gap remains substantial, especially on ROAD, despite the lower final training F1 at0.5. RGB branch dropout appears more promising than increasing temporal dropout in this seed0 comparison, but these are validation-guided, single-seed results. The0.16 pp ROAD and0.37 pp LOKI differences between0.5 and0.3 do not establish a preferred probability. A matched repeated-seed control versus branch-dropout comparison is the minimal confirmation before changing the reference model; preserve the current controls meanwhile.
+Every run's final validation F1 is below its selected F1, and final validation CE is above its selected CE. The train/validation classification gap remains substantial, especially on ROAD, despite the lower final training F1 at0.5. RGB branch dropout appears more promising than increasing temporal dropout in this seed0 comparison, but these are validation-guided, single-seed results. The0.16 pp ROAD and0.38 pp LOKI differences between0.5 and0.3 do not establish a preferred probability. A matched repeated-seed control versus branch-dropout comparison is the minimal confirmation before changing the reference model; preserve the current controls meanwhile.
 
 ### Evidence
 

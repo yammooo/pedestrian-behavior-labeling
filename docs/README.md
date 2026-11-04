@@ -16,7 +16,7 @@ Updated **2026-11-04**. We are developing a reliable **offline, given-track pede
 
 ## Next work
 
-1. Discuss the completed [E003a masking comparison](../experiments/E003a-structured-observation-masking/README.md#results) before selecting a next experiment: natural-transfer F1 does not consistently improve. Distinguish robustness to forced missing inputs from natural cross-dataset performance; no further training is launched by this review.
+1. Prepare [E003b target-head adaptation](../experiments/E003b-target-head-adaptation/README.md): freeze each E002d/E003a fusion body, fit a new linear classifier on opposite training tracks, and select on opposite validation. Keep original source normalization on both splits. Four sequential seed0 attempts; full training remains user-launched and tests closed. This diagnoses representation adaptability without attributing recovery solely to label differences.
 2. Arrange a separate backup for valuable checkpoints/predictions; external storage is **TBD**. Original interrupted attempts and all earlier evidence remain preserved.
 3. Choose at most one justified representation or supervision follow-up after reviewing the remaining failures and cost. Masking does not claim independent sensor outages or architectural novelty. The unused retrieval proposal is deferred; E004 remains conditional.
 

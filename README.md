@@ -946,3 +946,18 @@ bash scripts/run-e003a-sequential.sh
 The launcher stops on failure and uses fresh timestamped directories under `outputs/experiments/E003a/runs/`. It fixes the agreed model, seed0 and masking recipe; the existing prepared RGB cache and both indexed point caches are read-only. Each attempt saves masks/history/checkpoints, natural source/opposite validation predictions/strata, final source diagnostics and its own W&B record. Checkpoints and full predictions remain local.
 
 `E003A_PROFILE` selects a separately completed exact-code profile if recalibration uses another directory. `scripts/train-e003a.py --help` exposes explicit paths for a single attempt. An explicit `--smoke --smoke-selection <json>` restricts training and both validation datasets to declared development tracks; smoke outputs are integration evidence, never comparison results.
+
+## E003b target-head adaptation
+
+The [E003b protocol](experiments/E003b-target-head-adaptation/README.md) freezes the complete E002d/E003a fusion networks and trains only a new516-parameter linear classifier on the opposite dataset. Original source normalization applies to target training and validation. Test sets remain closed for this diagnostic.
+
+After the implementation revision and bounded checks below are verified on Aalto:
+
+```bash
+cd /home/user20/projects/pedestrian-behavior-labeling-e002e
+bash scripts/run-e003b-sequential.sh
+```
+
+The launcher runs four seed0 adaptations sequentially: ROAD→LOKI E002d/E003a, then LOKI→ROAD E002d/E003a. For each source checkpoint it first caches frozen128-dimensional target train/validation representations using the existing RGB/indexed-point inputs. Subsequent head-training epochs read only those compact representations. The original classifier and adapted classifier are compared on identical target-validation tracks.
+
+Fresh outputs, local head checkpoints/predictions, curves and one W&B run per adaptation live under `outputs/experiments/E003b/`. The original model checkpoints, normalization and feature caches remain read-only. A head checkpoint references its original frozen source model. The launcher stops on failure without retry/resume; full runs remain user-launched. Bounded acceptance and exact runnable revision are recorded in the experiment owner.

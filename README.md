@@ -951,7 +951,7 @@ The launcher stops on failure and uses fresh timestamped directories under `outp
 
 The [E003b protocol](experiments/E003b-target-head-adaptation/README.md) freezes the complete E002d/E003a fusion networks and trains only a new516-parameter linear classifier on the opposite dataset. Original source normalization applies to target training and validation. Test sets remain closed for this diagnostic.
 
-After the implementation revision and bounded checks below are verified on Aalto:
+The implementation is synced to Aalto; the259-test CPU suite and all four bounded CUDA/W&B checks pass. Run:
 
 ```bash
 cd /home/user20/projects/pedestrian-behavior-labeling-e002e

@@ -1,6 +1,6 @@
 # E003b — Target-head adaptation
 
-**Agreed 2026-11-04; implementation and bounded acceptance in progress.** Full training remains user-launched. This diagnostic follows the [E003a masking results](../E003a-structured-observation-masking/README.md#results).
+**Agreed, implemented and bounded GPU/W&B smoke checks complete 2026-11-04.** Full training remains user-launched. This diagnostic follows the [E003a masking results](../E003a-structured-observation-masking/README.md#results).
 
 ## Question and comparison
 
@@ -50,4 +50,17 @@ The [launch command](../../README.md#e003b-target-head-adaptation) runs all four
 
 Verify frozen parameters and evaluation mode, original-logit reproduction from cached representations, source normalization on both target splits, unchanged GT/lengths, equal-track loss, padding/unlabeled exclusion, the516-parameter head and head-only gradients, feature-cache round trips, selection and head-checkpoint reload. Run the CPU suite and bounded CUDA checks through the actual four-checkpoint extraction/training/logging path. Full target-training comparisons remain user-launched; acceptance fixtures are not experimental results.
 
-Acceptance status and exact runnable revision: **TBD**. No E003b comparison result exists yet.
+Implementation revision **`da9b6de`** was transferred through Git and verified on Aalto. Local CPU suite: **259 tests pass,12 expected skips**, including six focused E003b tests. CLI help, launcher shell syntax and `git diff --check` pass. The original sandbox suite could not bind the existing viewer test’s localhost socket; the complete rerun with localhost access passed without changing that test.
+
+All four one-epoch CUDA/W&B smoke attempts completed with empty failure lists under Aalto `outputs/experiments/E003b/acceptance-20261104/smoke-02/`. They exercised existing prepared target features, original-head logit reproduction, compact feature caches, fresh-head fitting, selected/last head checkpoints, predictions and plots. These are bounded integration fixtures, not E003b comparison results. The initial noninteractive SSH launch found no `uv` on PATH and exited before Python; its shell log is preserved as `acceptance-20261104/smoke.log`. Adding Aalto’s existing uv directory resolved it; the user’s interactive launcher is unchanged.
+
+Read-only artifact verification passes for all four cases: each uses3 target-training /2 target-validation tracks and trains only516 parameters. Original/adapted metrics reconstruct from saved predictions; reloading the selected head reproduces cached-feature logits; both feature splits retain source normalization; protected-input changes are empty. Each attempt has best/last checkpoints and12 PNG/SVG plot pairs. Aalto `outputs/experiments/E003b/acceptance-20261104/verification.json` records these checks.
+
+| Bounded smoke | W&B record |
+|---|---|
+| ROAD→LOKI, E002d representation | [arx82owt](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/arx82owt) |
+| ROAD→LOKI, E003a representation | [eh6egi9q](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/eh6egi9q) |
+| LOKI→ROAD, E002d representation | [k8uc4eg2](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/k8uc4eg2) |
+| LOKI→ROAD, E003a representation | [x7n28ue8](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/x7n28ue8) |
+
+Full adaptation training remains user-launched using [the sequential command](../../README.md#e003b-target-head-adaptation). No target test preparation or inference occurred.

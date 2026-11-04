@@ -1,0 +1,196 @@
+\RequirePackage{fix-cm}
+\documentclass[10pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[scaled=0.96]{helvet}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta}
+\renewcommand{\familydefault}{\sfdefault}
+\pagestyle{empty}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0pt}
+\setlength{\paperwidth}{180mm}
+\setlength{\paperheight}{215mm}
+\setlength{\textwidth}{180mm}
+\setlength{\textheight}{215mm}
+\setlength{\oddsidemargin}{-1in}
+\setlength{\evensidemargin}{-1in}
+\setlength{\topmargin}{-1in}
+\setlength{\headheight}{0pt}
+\setlength{\headsep}{0pt}
+\setlength{\footskip}{0pt}
+\pdfpagewidth=180mm
+\pdfpageheight=215mm
+
+\definecolor{ink}{HTML}{26343D}
+\definecolor{geom}{HTML}{6FABA3}
+\definecolor{rgbbranch}{HTML}{82A8CC}
+\definecolor{lidar}{HTML}{D2A45D}
+\definecolor{temporal}{HTML}{B993A4}
+\definecolor{frozenfill}{HTML}{ECEFF1}
+
+\begin{document}
+\thispagestyle{empty}
+\null
+\begin{tikzpicture}[remember picture,overlay,x=1mm,y=0.85mm]
+\begin{scope}[shift={(current page.south west)}]
+  \tikzset{
+    flow/.style={-{Latex[length=0.9mm]},draw=ink,line width=0.42pt},
+    branchbox/.style={draw=ink,line width=0.38pt,rounded corners=0.35mm},
+    mainfont/.style={font=\sffamily\fontsize{9}{10}\selectfont},
+    bodyfont/.style={font=\sffamily\fontsize{8.2}{9.2}\selectfont},
+    smallfont/.style={font=\sffamily\fontsize{8}{9}\selectfont},
+    token/.style={draw=ink!70,line width=0.28pt,rounded corners=0.3mm}
+  }
+
+  % Geometry input and learned branch.
+  \node[anchor=north,mainfont,text=ink] at (28,10) {Geometry};
+  \node[anchor=north,smallfont,text=ink] at (28,14) {motion / ego / 2D box};
+  \foreach \x in {20,24,28,32,36}{
+    \draw[fill=geom!25,draw=ink!65,line width=0.25pt] (\x,17) rectangle +(3.2,5.2);
+  }
+  \node[anchor=east,smallfont,text=ink] at (16,19.5) {$g_t\;[20]$};
+  \draw[branchbox,fill=geom!18] (9,55) rectangle (47,73);
+  \node[mainfont,text=ink] at (28,67.4) {MLP};
+  \node[bodyfont,text=ink] at (28,60.7) {$20\to64\to64$};
+
+  % RGB input is one centered expanded crop.
+  \node[anchor=north,mainfont,text=ink] at (88,10) {RGB crop};
+  \node[anchor=north,smallfont,text=ink] at (88,14) {$3\times$ box side};
+  \draw[draw=rgbbranch!90!ink,fill=rgbbranch!14,line width=0.4pt] (82,17) rectangle (94,29);
+  \draw[draw=ink,line width=0.35pt] (86.3,18.5) rectangle (89.7,27.1);
+  \fill[ink] (88,26.1) circle (0.48mm);
+  \draw[ink,line width=0.45pt] (88,25.5) -- (88,21.8);
+  \draw[ink,line width=0.4pt] (88,24.6) -- (86.8,23.2);
+  \draw[ink,line width=0.4pt] (88,24.6) -- (89.2,23.2);
+  \draw[ink,line width=0.4pt] (88,21.8) -- (86.9,20.1);
+  \draw[ink,line width=0.4pt] (88,21.8) -- (89.1,20.1);
+  \node[anchor=east,smallfont,text=ink] at (78,23) {$I_t\;[3\times256\times256]$};
+  \draw[branchbox,fill=frozenfill] (68,36) rectangle (108,51);
+  \node[mainfont,text=ink] at (88,45.4) {DINOv3};
+  \node[bodyfont,text=ink] at (88,39.8) {ViT-B/16 $\cdot$ frozen};
+  \draw[token,fill=rgbbranch!25] (72,57) rectangle (104,63);
+  \node[bodyfont,text=ink] at (88,60) {CLS token (768)};
+  \draw[branchbox,fill=rgbbranch!17] (68,68) rectangle (108,83);
+  \node[mainfont,text=ink] at (88,77.6) {Linear};
+  \node[bodyfont,text=ink] at (88,71.9) {$768\to128$};
+
+  % Full-sweep LiDAR path; selection follows the frozen encoder.
+  \node[anchor=north,mainfont,text=ink] at (148,10) {Full LiDAR sweep};
+  \foreach \x/\y in {137/18,140/23,143/19,146/25,149/17,152/22,155/19,158/24,161/18,164/22,139/27,145/28,153/27,160/28}{
+    \fill[ink!62] (\x,\y) circle (0.48mm);
+  }
+  \node[anchor=east,smallfont,text=ink] at (133,23) {$\mathcal{P}_t\;[N_t\times4]$};
+  \draw[branchbox,fill=frozenfill] (124,32) rectangle (172,46);
+  \node[mainfont,text=ink] at (148,41.2) {D-DITR $\cdot$ frozen};
+  \node[smallfont,text=ink] at (148,35.9) {64-D features};
+  \draw[branchbox,fill=lidar!20] (124,50) rectangle (172,63);
+  % Small target-centered cylinder and 3D box glyph.
+  \draw[draw=ink!80,line width=0.3pt] (128,54.5) ellipse [x radius=2.4mm,y radius=0.85mm];
+  \draw[ink!80,line width=0.3pt] (125.6,54.5) -- (125.6,59.2);
+  \draw[ink!80,line width=0.3pt] (130.4,54.5) -- (130.4,59.2);
+  \draw[draw=ink!80,line width=0.3pt] (128,59.2) ellipse [x radius=2.4mm,y radius=0.85mm];
+  \draw[draw=rgbbranch!90!ink,line width=0.45pt] (127.3,55.5) rectangle (128.7,58.4);
+  \node[anchor=west,mainfont,text=ink] at (133.5,58.6) {20 m target ROI};
+  \draw[branchbox,fill=lidar!18] (124,66) rectangle (172,79);
+  \node[mainfont,text=ink] at (148,75.2) {Point projection};
+  \node[bodyfont,text=ink] at (148,69.7) {$68\to128$};
+  \draw[branchbox,fill=lidar!18] (124,86) rectangle (172,100);
+  \node[mainfont,text=ink] at (148,95.7) {Cross-attention};
+  \node[bodyfont,text=ink] at (148,90.8) {1 query $\cdot$ 4 heads};
+  % The unconditioned query is separate; projected points provide K and V.
+  \draw[token,fill=lidar!38] (116,90.5) rectangle (120,94.5);
+  \node[smallfont,text=ink] at (118,92.5) {Q};
+  \node[anchor=east,smallfont,text=ink] at (115.5,92.5) {learned};
+  \node[anchor=west,smallfont,text=ink] at (154,82.5) {K,V};
+
+  % Per-frame descriptors and the three separate branch-availability inputs.
+  \begin{scope}[shift={(0,6)}]
+  \draw[branchbox,fill=geom!35] (9,98) rectangle (42,103);
+  \foreach \x in {13,17,21,25,29,33,37}{\draw[ink!50,line width=0.25pt] (\x,98) -- (\x,103);}
+  \node[anchor=west,bodyfont,text=ink] at (44,100.5) {64};
+  \draw[branchbox,fill=rgbbranch!34] (68,98) rectangle (102,103);
+  \foreach \x in {72,76,80,84,88,92,96}{\draw[ink!50,line width=0.25pt] (\x,98) -- (\x,103);}
+  \node[anchor=west,bodyfont,text=ink] at (104,100.5) {128};
+  \draw[branchbox,fill=lidar!38] (126,98) rectangle (160,103);
+  \foreach \x in {130,134,138,142,146,150,154}{\draw[ink!50,line width=0.25pt] (\x,98) -- (\x,103);}
+  \node[anchor=west,bodyfont,text=ink] at (162,100.5) {128};
+
+  \draw[ink,line width=0.42pt] (28,108) -- (148,108);
+  \draw[branchbox,fill=temporal!12] (59,111) rectangle (117,126);
+  \node[mainfont,text=ink] at (88,121) {Concatenate};
+  \node[bodyfont,text=ink] at (88,115.6) {input 323};
+  \foreach \x/\c in {130/geom,134/rgbbranch,138/lidar}{
+    \draw[draw=ink!60,line width=0.25pt,fill=\c!50] (\x,115) rectangle +(2.7,3.7);
+  }
+  \node[anchor=west,smallfont,text=ink] at (142,116.8) {flags};
+  \draw[branchbox,fill=temporal!16] (68,132) rectangle (108,146);
+  \node[mainfont,text=ink] at (88,141.6) {Linear};
+  \node[bodyfont,text=ink] at (88,136.2) {$323\to128$};
+
+  % Each small token is one frame embedding; the full sequence remains intact.
+  \foreach \x in {32,45,58,71,84,97,110,123,136}{
+    \draw[token,fill=temporal!25] (\x,150) rectangle +(7,7);
+  }
+  \node[smallfont,text=ink] at (35.5,147) {$z_1$};
+  \node[smallfont,text=ink] at (139.5,147) {$z_T$};
+  \node[anchor=west,smallfont,text=ink] at (146,153.5) {$T\times128$};
+
+  % A vertical Transformer block with residual skips, repeated twice.
+  \draw[draw=ink,line width=0.42pt,fill=temporal!12,rounded corners=0.5mm] (44,160) rectangle (132,224);
+  \draw[branchbox,fill=temporal!22] (77,167) rectangle (99,174);
+  \node[bodyfont,text=ink] at (88,170.5) {Pre-LN};
+  \draw[branchbox,fill=temporal!22] (65,178) rectangle (111,187);
+  \node[mainfont,text=ink] at (88,182.5) {Bidirectional self-attention};
+  \node[anchor=west,smallfont,text=ink] at (113,182.5) {RoPE};
+  \draw[draw=ink,line width=0.4pt,fill=white] (88,191.5) circle (2.1mm);
+  \node[mainfont,text=ink] at (88,191.5) {$+$};
+  \draw[branchbox,fill=temporal!22] (77,197) rectangle (99,204);
+  \node[bodyfont,text=ink] at (88,200.5) {Pre-LN};
+  \draw[branchbox,fill=temporal!22] (73,207) rectangle (103,212);
+  \node[bodyfont,text=ink] at (88,209.5) {Feed-forward};
+  \draw[draw=ink,line width=0.4pt,fill=white] (88,218.2) circle (2.1mm);
+  \node[mainfont,text=ink] at (88,218.2) {$+$};
+  \node[anchor=west,mainfont,text=ink] at (136,192) {Transformer $\times2$};
+
+  \draw[branchbox,fill=temporal!18] (44,229) rectangle (132,241);
+  \node[mainfont,text=ink] at (88,235) {LayerNorm + Linear $128\to4$};
+  \end{scope}
+
+  % Data-flow arrows are layered above module fills and point to each node edge.
+  \draw[flow] (28,23) -- (28,54.5);
+  \draw[flow] (28,73.5) -- (28,103.5);
+  \draw[flow] (88,29.5) -- (88,35.5);
+  \draw[flow] (88,51.5) -- (88,56.5);
+  \draw[flow] (88,63.5) -- (88,67.5);
+  \draw[flow] (88,83.5) -- (88,103.5);
+  \draw[flow] (148,29.5) -- (148,31.5);
+  \draw[flow] (148,46.5) -- (148,49.5);
+  \draw[flow] (148,63.5) -- (148,65.5);
+  \draw[flow] (148,79.5) -- (148,85.5);
+  \draw[flow] (120.5,92.5) -- (123.5,92.5);
+  \draw[flow] (148,100.5) -- (148,103.5);
+  \begin{scope}[shift={(0,6)}]
+  \draw[flow] (28,103.5) -- (28,108);
+  \draw[flow] (88,103.5) -- (88,108);
+  \draw[flow] (148,103.5) -- (148,108);
+  \draw[flow] (88,108) -- (88,110.5);
+  \draw[flow] (129,116.8) -- (117.5,116.8);
+  \draw[flow] (88,126.5) -- (88,131.5);
+  \draw[flow] (88,146.5) -- (88,150);
+  \draw[flow] (88,157.5) -- (88,166.5);
+  \draw[flow] (88,174.5) -- (88,177.5);
+  \draw[flow] (88,187.5) -- (88,189.3);
+  \draw[flow] (88,194) -- (88,196.5);
+  \draw[flow] (88,204.5) -- (88,206.5);
+  \draw[flow] (88,212.5) -- (88,215.7);
+  \draw[flow] (88,220.7) -- (88,228.5);
+  % Two residual paths bypass attention and feed-forward in turn.
+  \draw[ink,line width=0.42pt] (88,164) -- (51,164) -- (51,191.5);
+  \draw[flow] (51,191.5) -- (85.5,191.5);
+  \draw[ink,line width=0.42pt] (88,194) -- (59,194) -- (59,218.2);
+  \draw[flow] (59,218.2) -- (85.5,218.2);
+  \end{scope}
+\end{scope}
+\end{tikzpicture}
+\end{document}

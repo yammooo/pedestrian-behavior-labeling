@@ -1,6 +1,6 @@
 # E003a — Structured observation masking
 
-**Specification agreed and implemented 2026-11-03; CPU/CUDA and bounded GPU/W&B acceptance complete.** Two new seed0 training attempts, one per source, will compare against the completed E002d controls. Full training remains user-launched. No E003a performance results exist yet.
+**Specification agreed and implemented 2026-11-03; CPU/CUDA and bounded GPU/W&B acceptance complete.** The first-comparison seed0 attempts have completed; results and their limitations are recorded under [Results](#results).
 
 ## First comparison
 
@@ -28,6 +28,8 @@ Their checkpoint hashes and original transfer metrics are frozen in [the E002 tr
 | Optimizer | AdamW, LR3e-4, weight decay1e-4, betas(0.9,0.999), epsilon1e-8 |
 | Training | Float32, whole-track effective batch64, three-epoch warmup, clip1.0, maximum100 epochs, patience15, seed0 |
 | Selection | Full natural source-validation four-class track-weighted macro-F1; exact ties use lower CE, then earlier epoch |
+
+Architecture illustration: [vector SVG](../../docs/figures/multimodal-model.svg), [print PDF](../../outputs/experiments/E003a/model-figure/multimodal-model.pdf) and [TikZ source](../../docs/figures/multimodal-model.tex). It shows the combined smaller-temporal reference: frozen RGB/full-sweep LiDAR features, target-local spatial readout, availability-aware fusion and bidirectional temporal classification. The drawing abstracts per-branch normalization/gating, the spatial readout's residual/FFN sublayers, and E003a training masking; exact operations remain in the experiment specification. The PDF has embedded fonts and no raster images, suitable for scaling in papers/posters. Build the TikZ source with two LaTeX passes to resolve page-relative positioning.
 
 Patience and aggregation retain the existing shared implementation. Different packing may change stochastic dropout draws, so this is not a promise of identical control training trajectories. E002e does not silently change this reference recipe.
 
@@ -116,3 +118,48 @@ At revision `8bfdb79`, [the disposable timing script](../../scripts/benchmark-e0
 ROAD happened to draw three clean views at epoch1, so it measures adapter overhead, not a masking speedup. LOKI's measured update is about12% shorter here. These tiny warm-cache single-physical-batch results **do not estimate full-epoch time, cold disk throughput or worst-case speedup**. Two repeats are descriptive only. Raw timings, cache counters, masks and allocation peaks are in Aalto `acceptance-20261103/benchmark-road-waymo/benchmark.json` and `benchmark-loki/benchmark.json`. The metadata audit's roughly83% retained LiDAR slots is not a runtime prediction.
 
 Full comparison training is not part of implementation acceptance. Single-seed evidence will remain exploratory. The [manual launch command](../../README.md#e003a-structured-observation-masking) runs ROAD then LOKI using fresh timestamped attempts; calibration must match the current code.
+
+## Results
+
+**Both seed0 runs completed with patience stopping and no recorded failures.** Masking improves several fixed missing-branch diagnostics, but does not improve natural cross-dataset validation consistently: ROAD→LOKI loses6.24 F1 points, while LOKI→ROAD gains0.25. These are exploratory validation results, not held-out test or strict zero-shot evidence.
+
+The E003a attempts are `20261103-105614/road-waymo` and `20261103-105614/loki` under Aalto `/home/user20/projects/pedestrian-behavior-labeling/outputs/experiments/E003a/runs/`. Provenance records launch from the `pedestrian-behavior-labeling-e002e` checkout at code revision `0be4a70`, with an empty working diff. The ROAD run trained39 epochs, selected epoch24, and stopped at epoch39 after15 non-improving epochs; the LOKI run trained27 epochs, selected epoch12, and stopped at epoch27 after15 non-improving epochs. Both record complete status and no failures. Their [ROAD W&B run](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/0k4mt0rd) and [LOKI W&B run](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/i7ln8dxq) preserve training logs. Matching E002d RGB-dropout0.5 controls selected epochs17/12 and stopped at32/27, respectively; their run links and artifacts remain in the [E002d review](../E002d-rgb-lidar-complementarity/results-review.md).
+
+| Training source | Selected epoch: online train F1 / CE → natural source-val F1 / CE | Final epoch | Final online train F1 / CE → natural source-val F1 / CE |
+|---|---:|---:|---:|
+| ROAD-Waymo | 24: 80.50% /0.3898 →65.46% /0.8002 | 39, patience15 | 87.11% /0.2817 →63.62% /0.9488 |
+| LOKI | 12: 80.39% /0.3100 →76.08% /0.3859 | 27, patience15 | 87.66% /0.2032 →71.20% /0.4589 |
+
+Online training CE/F1 accumulates predictions made with changing weights and active dropout. E003a additionally trains on clean and masked views, while source validation is natural and in evaluation mode. The curves show online training CE falling and F1 rising after selection as natural-validation CE worsens and F1 falls. A smaller train/validation gap than E002d would not by itself establish less overfitting because the training input difficulty changed.
+
+![E002d control and E003a online training and source-validation curves](../../outputs/experiments/E003a/results-review-20261104/figures/training-validation-curves.png) ([SVG](../../outputs/experiments/E003a/results-review-20261104/figures/training-validation-curves.svg))
+
+### Natural validation comparison
+
+Each cell is track-weighted four-class macro-F1 (%) / mean track CE at the source-F1-selected checkpoint. Deltas use unrounded scores. E002d values are the matching RGB-descriptor-dropout0.5 controls. Opposite validation uses the source-trained model's normalization; it did not select checkpoints. The support is **ROAD:78 groups /1,110 tracks /45,388 GT frames** and **LOKI:93 /1,861 /60,231**. F1 deltas use full-precision records before rounding.
+
+| Training source → evaluation validation | Tracks / groups / GT frames | E003a F1 / CE | E002d F1 / CE | ΔF1 (pp) |
+|---|---:|---:|---:|---:|
+| ROAD-Waymo → ROAD-Waymo | 1,110 /78 /45,388 | 65.46 /0.8002 | 66.07 /0.8027 | −0.61 |
+| ROAD-Waymo → LOKI | 1,861 /93 /60,231 | 40.26 /1.1923 | 46.50 /1.2573 | −6.24 |
+| LOKI → LOKI | 1,861 /93 /60,231 | 76.08 /0.3859 | 74.68 /0.3853 | +1.41 |
+| LOKI → ROAD-Waymo | 1,110 /78 /45,388 | 45.28 /1.2708 | 45.02 /1.3485 | +0.25 |
+
+![Selected natural source and opposite-validation comparison](../../outputs/experiments/E003a/results-review-20261104/figures/natural-validation-comparison.png) ([SVG](../../outputs/experiments/E003a/results-review-20261104/figures/natural-validation-comparison.svg))
+
+Natural transfer CE improves in both directions:1.192 vs1.257 for ROAD→LOKI and1.271 vs1.349 for LOKI→ROAD. This does not translate into consistent transfer F1 gains; LOKI’s source-F1 gain is also much larger than its transfer gain. Both validation populations informed development, so these are target-informed exploratory results. No test set was accessed.
+
+### Fixed branch-view diagnostics
+
+These source-validation diagnostics use fixed masks shared by the models, without checkpoint selection. Every validation track remains in each denominator. Cells show E003a / E002d track-weighted macro-F1 (%), with the change in percentage points.
+
+| Training source | Geometry-only | RGB-only | LiDAR-only | Fixed mixed |
+|---|---:|---:|---:|---:|
+| ROAD-Waymo | 53.93 /42.80 (+11.13) | 36.58 /27.85 (+8.72) | 31.78 /29.14 (+2.64) | 62.10 /56.18 (+5.91) |
+| LOKI | 44.29 /48.27 (−3.98) | 37.29 /24.79 (+12.50) | 40.22 /40.01 (+0.20) | 69.97 /68.24 (+1.73) |
+
+![Fixed branch-view diagnostic F1 on source validation](../../outputs/experiments/E003a/results-review-20261104/figures/fixed-mask-diagnostics.png) ([SVG](../../outputs/experiments/E003a/results-review-20261104/figures/fixed-mask-diagnostics.svg))
+
+The LOKI RGB-only view has **717 no-input tracks of1,861**; they remain in the reported full-population metric and are reported separately in the saved diagnostics. These are branch-view checks on existing feature inputs, not independent physical sensor outages or sensor-content-only efficacy. Geometry, localization and cached velocity dependencies remain as specified above. Better fixed-mask scores in several views do not imply better natural transfer.
+
+The copied numeric evidence stays in ignored `outputs/experiments/E003a/results-review-20261104/evidence/`. Rebuild all three PNG/SVG pairs with `UV_CACHE_DIR=/tmp/uv-e003a-results-review MPLCONFIGDIR=/tmp/mpl-e003a-results-review uv run --locked --extra cpu python scripts/summarize-e003a-results.py`; the script asserts completion, selected metrics, matching support and diagnostic denominators before plotting.

@@ -1,6 +1,6 @@
 # Research dashboard
 
-Updated **2026-11-03**. We are developing a reliable **offline, given-track pedestrian behavior labeler**. Final architecture and publication contribution remain provisional. Deadline **17 December 2026**; **7–17 December** is protected for buffer and handover. The [literature review](literature/offline-labeling-research-direction.md) supports an empirical study first, with one conditional retrieval or supervision comparison.
+Updated **2026-11-04**. We are developing a reliable **offline, given-track pedestrian behavior labeler**. Final architecture and publication contribution remain provisional. Deadline **17 December 2026**; **7–17 December** is protected for buffer and handover. The [literature review](literature/offline-labeling-research-direction.md) supports an empirical study first, with one conditional retrieval or supervision comparison.
 
 ## Current evidence
 
@@ -12,13 +12,13 @@ Updated **2026-11-03**. We are developing a reliable **offline, given-track pede
 - **[Data and pretrained features](../experiments/E002a-feature-feasibility/README.md):** frozen populations/splits,3× DINO crops and indexed D-DITR features remain unchanged. The [packed spatial-readout benchmark](../experiments/E002a-feature-feasibility/README.md#packed-spatial-readout-benchmark--2026-10-29) rejects one segmented PyTorch implementation: model updates are 2.15–2.25× slower on matched ROAD/LOKI inputs. Earlier native/PCA/semantic probes, storage revisions, throughput measurements and failures stay in that owner. [ROAD split verification](datasets/road-waymo.md#official-download-verification-2026-10-16) retains the documented paper/release mismatch; experiment splits remain frozen.
 - **[Prediction viewer](../README.md#inspect-model-predictions):** compares E001-family test or E002 validation predictions, including the recovered LOKI models. The [E002a RGB seed curves](../experiments/E002a-feature-feasibility/README.md#geometry--rgb-repeat--seeds-14-prepared-2026-10-28) show online training F1 and source validation for eight completed repeats; historical seed0 has no training-F1 curve.
 
-- **[E003a structured observation masking](../experiments/E003a-structured-observation-masking/README.md):** implemented over the fixed E002d fusion reference. CPU and CUDA suites pass253 tests; both bounded GPU/W&B smoke attempts complete with reconstructed prediction metrics and identical control diagnostic masks. Full-population sampler audit passes. Two full seed0 attempts are prepared; no E003a comparison result yet.
+- **[E003a structured observation masking](../experiments/E003a-structured-observation-masking/README.md#results):** both seed0 attempts complete. Against matched E002d controls, natural ROAD→LOKI validation F1 falls **46.50%→40.26%**, while LOKI→ROAD is nearly unchanged (**45.02%→45.28%**). Source F1 changes **66.07%→65.46% ROAD /74.68%→76.08% LOKI**. Several fixed missing-input diagnostics improve, but this sampler does not show a consistent natural-transfer gain; overfitting remains in both sources. Curves and diagnostics stay in the experiment owner. Target-informed validation development; held-out tests remain closed.
 
 ## Next work
 
-1. Run the prepared [E003a observation-masking comparison](../experiments/E003a-structured-observation-masking/README.md): two seed0 masked fusion runs against existing E002d controls; natural opposite-validation F1 is primary, source performance and fixed source masking diagnostics are reported alongside it. Full training remains user-launched; tests stay closed. The bounded checks do not establish generalization or a full-epoch speedup.
+1. Discuss the completed [E003a masking comparison](../experiments/E003a-structured-observation-masking/README.md#results) before selecting a next experiment: natural-transfer F1 does not consistently improve. Distinguish robustness to forced missing inputs from natural cross-dataset performance; no further training is launched by this review.
 2. Arrange a separate backup for valuable checkpoints/predictions; external storage is **TBD**. Original interrupted attempts and all earlier evidence remain preserved.
-3. Inspect E003a source/transfer trade-offs after training, without a fixed source-F1 cutoff. Masking does not claim independent sensor outages or architectural novelty. The unused retrieval proposal is deferred; E004 remains conditional.
+3. Choose at most one justified representation or supervision follow-up after reviewing the remaining failures and cost. Masking does not claim independent sensor outages or architectural novelty. The unused retrieval proposal is deferred; E004 remains conditional.
 
 ## Navigation and ownership
 

@@ -46,6 +46,49 @@ One W&B run per adaptation uses readable direction/reference names. Keep ordinar
 
 The [launch command](../../README.md#e003b-target-head-adaptation) runs all four adaptations sequentially. Feature extraction remains the expensive stage; no full-run runtime claim is made before measurement.
 
+## Frozen validation embedding diagnostic (2026-11-05)
+
+Compare the original E002d RGB-dropout0.5 ROAD and LOKI checkpoints on both complete validation datasets using their frozen post-final-LayerNorm 128-D features. Reuse the existing opposite-dataset E003b feature caches; extract only the two missing own-source validation caches, with full-track context and source normalization. Each extraction must reproduce its saved own-validation logits, targets and accepted-GT masks before the cache is retained. No training, adaptation, held-out test access or target-based selection is used.
+
+For each source model, fit PCA and UMAP separately to the pooled ROAD/LOKI points. Select accepted-GT frames deterministically: evenly spaced in each sorted track, at most10 per track, then evenly subsample the larger dataset to the same total count as the smaller. Do not class-balance; report sampled track/frame and class counts. Each PCA/UMAP coordinate array is reused in both behavior-colored and dataset-colored panels. PCA reports PC1/PC2 variance explained. UMAP uses Euclidean distance, `min_dist=0.1`, neighbors15/50 and seeds0/1 (four fits per source model). The separate sensitivity figure shows the three settings beyond the main neighbors15/seed0 view. These are descriptive validation-set projections, not separability metrics or evidence from independent test data.
+
+Run the two own-source extractions on Aalto after syncing the implementation and verifying its revision. Existing opposite-source validation caches are copied unchanged into the same `input/` directory:
+
+```bash
+base=outputs/experiments/E003b/embedding-diagnostic-20261105
+mkdir -p "$base/input"
+cp -n outputs/experiments/E003b/runs/20261104-092202/e002d-road-waymo-to-loki/features-validation.npz \
+  "$base/input/road-waymo-on-loki.npz"
+cp -n outputs/experiments/E003b/runs/20261104-092202/e002d-loki-to-road-waymo/features-validation.npz \
+  "$base/input/loki-on-road-waymo.npz"
+uv run --locked --extra cu118 python scripts/extract-e003b-own-validation.py \
+  --source road-waymo --device cuda --output "$base/input/road-waymo-on-road-waymo.npz"
+uv run --locked --extra cu118 python scripts/extract-e003b-own-validation.py \
+  --source loki --device cuda --output "$base/input/loki-on-loki.npz"
+```
+
+Fit the projections locally; this optional environment installs only the diagnostic libraries in addition to project base dependencies:
+
+```bash
+uv run --locked --extra cpu --extra embedding-diagnostic python scripts/analyze-e003b-embeddings.py
+```
+
+The ignored `outputs/experiments/E003b/embedding-diagnostic-20261105/analysis/` directory contains `projection-coordinates.npz`, cache/checkpoint/sampling/settings provenance, and PCA, UMAP-main and UMAP-sensitivity PNG/SVG pairs. Pins follow the official [scikit-learn 1.9.1 release](https://scikit-learn.org/stable/whats_new/v1.9.html) and [umap-learn 0.5.12 release](https://github.com/lmcinnes/umap/releases/tag/release-0.5.12).
+
+### Diagnostic results
+
+Both missing own-validation caches were extracted on Aalto at revision `0fa1b3f`; original saved logits, targets and GT masks reproduce. Full caches cover ROAD **1,110 tracks /45,388 GT timesteps** and LOKI **1,861 /60,231** for each frozen model. The projections use the same **10,400 sampled timesteps per dataset** in both models: all1,110 ROAD tracks and1,850 LOKI tracks are represented after balancing. Sampling is track-capped, not exact equal-track weighting or class balancing; sampled class counts are in [provenance](../../outputs/experiments/E003b/embedding-diagnostic-20261105/analysis/provenance.json).
+
+- **PCA:** the first two components explain **49.67%** of pooled variance for the ROAD-trained model and **59.92%** for the LOKI-trained model. Both show broad behavior organization and considerable dataset overlap, with different dataset concentrations inside the shared space.
+- **UMAP:** many local neighborhoods are dominated by one dataset in both models, despite broad behavior organization across the projection. This qualitative pattern persists across neighbors15/50 and seeds0/1; exact shapes and cluster placements change.
+- **Interpretation:** E003b's recoverable target information does not imply a dataset-invariant representation. The views are compatible with useful behavior information coexisting with dataset structure. They do not establish that a particular behavior is encoded incompatibly, or isolate annotation rules, class mix, missing modalities or scene differences as causes. Nonlinear UMAP clusters do not establish linear separability; head adaptation remains the stronger performance evidence.
+
+![Joint PCA, colored by behavior and dataset](../../outputs/experiments/E003b/embedding-diagnostic-20261105/analysis/pca.png) ([SVG](../../outputs/experiments/E003b/embedding-diagnostic-20261105/analysis/pca.svg))
+
+![Joint UMAP, colored by behavior and dataset](../../outputs/experiments/E003b/embedding-diagnostic-20261105/analysis/umap.png) ([SVG](../../outputs/experiments/E003b/embedding-diagnostic-20261105/analysis/umap.svg)); [sensitivity PNG](../../outputs/experiments/E003b/embedding-diagnostic-20261105/analysis/umap-sensitivity.png) /[SVG](../../outputs/experiments/E003b/embedding-diagnostic-20261105/analysis/umap-sensitivity.svg).
+
+CPU suite: **261 tests pass,12 expected skips**, including deterministic balanced sampling and unlabeled-context cache checks. The first sandbox run blocked the existing viewer's localhost socket; rerunning with localhost access passes. Lock consistency, installed dependencies and `git diff --check` pass. No adaptation training, new W&B runs or held-out test access occurred.
+
 ## Acceptance
 
 Verify frozen parameters and evaluation mode, original-logit reproduction from cached representations, source normalization on both target splits, unchanged GT/lengths, equal-track loss, padding/unlabeled exclusion, the516-parameter head and head-only gradients, feature-cache round trips, selection and head-checkpoint reload. Run the CPU suite and bounded CUDA checks through the actual four-checkpoint extraction/training/logging path. Full target-training comparisons remain user-launched; acceptance fixtures are not experimental results.

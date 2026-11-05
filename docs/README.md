@@ -1,6 +1,6 @@
 # Research dashboard
 
-Updated **2026-11-04**. We are developing a reliable **offline, given-track pedestrian behavior labeler**. Final architecture and publication contribution remain provisional. Deadline **17 December 2026**; **7–17 December** is protected for buffer and handover. The [literature review](literature/offline-labeling-research-direction.md) supports an empirical study first, with one conditional retrieval or supervision comparison.
+Updated **2026-11-05**. We are developing a reliable **offline, given-track pedestrian behavior labeler**. Final architecture and publication contribution remain provisional. Deadline **17 December 2026**; **7–17 December** is protected for buffer and handover. The [literature review](literature/offline-labeling-research-direction.md) supports an empirical study first, with one conditional retrieval or supervision comparison.
 
 ## Current evidence
 
@@ -14,6 +14,8 @@ Updated **2026-11-04**. We are developing a reliable **offline, given-track pede
 
 - **[E003a structured observation masking](../experiments/E003a-structured-observation-masking/README.md#results):** both seed0 attempts complete. Against matched E002d controls, natural ROAD→LOKI validation F1 falls **46.50%→40.26%**, while LOKI→ROAD is nearly unchanged (**45.02%→45.28%**). Source F1 changes **66.07%→65.46% ROAD /74.68%→76.08% LOKI**. Several fixed missing-input diagnostics improve, but this sampler does not show a consistent natural-transfer gain; overfitting remains in both sources. Curves and diagnostics stay in the experiment owner. Target-informed validation development; held-out tests remain closed.
 - **[E003b target-head adaptation](../experiments/E003b-target-head-adaptation/README.md#results):** four seed0 attempts complete. With the complete source-trained body frozen, a new target-trained linear head raises validation F1 from40–47% to63–64% on LOKI and45% to59–60% on ROAD. Against same-family models trained on the target, remaining gaps are **10.52–13.32pp ROAD→LOKI /4.97–6.58pp LOKI→ROAD**; source-versus-target score similarity is not a transfer-gap measure. E003a has no consistent adaptation advantage. Two heads reach the100-epoch budget. Full target-label access and changed normalization/training qualify the comparison; recovery does not isolate annotation mismatch. Tests remain closed.
+
+- **[E003b embedding diagnostic](../experiments/E003b-target-head-adaptation/README.md#diagnostic-results):** pooled PCA and UMAP of both original E002d bodies on both validation datasets are complete. UMAP shows dataset-dominated neighborhoods across the checked seeds/settings despite shared broad behavior structure; recoverable target information does not imply dataset invariance. No adaptation training or test access.
 
 ## Next work
 

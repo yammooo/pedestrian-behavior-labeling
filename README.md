@@ -961,3 +961,13 @@ bash scripts/run-e003b-sequential.sh
 The launcher runs four seed0 adaptations sequentially: ROAD→LOKI E002d/E003a, then LOKI→ROAD E002d/E003a. For each source checkpoint it first caches frozen128-dimensional target train/validation representations using the existing RGB/indexed-point inputs. Subsequent head-training epochs read only those compact representations. The original classifier and adapted classifier are compared on identical target-validation tracks.
 
 Fresh outputs, local head checkpoints/predictions, curves and one W&B run per adaptation live under `outputs/experiments/E003b/`. The original model checkpoints, normalization and feature caches remain read-only. A head checkpoint references its original frozen source model. The launcher stops on failure without retry/resume; full runs remain user-launched. Bounded acceptance and exact runnable revision are recorded in the experiment owner.
+
+## E003b frozen validation embeddings
+
+After the two own-source E002d validation extractions and the existing opposite-source caches are in `outputs/experiments/E003b/embedding-diagnostic-20261105/input/`, fit and save the pooled PCA/UMAP coordinates and figures locally:
+
+```bash
+uv run --locked --extra cpu --extra embedding-diagnostic python scripts/analyze-e003b-embeddings.py
+```
+
+The [E003b diagnostic protocol](experiments/E003b-target-head-adaptation/README.md#frozen-validation-embedding-diagnostic-2026-11-05) records the CUDA extraction commands, sampled population and projection settings. The optional dependency extra does not change the CUDA extraction environment.

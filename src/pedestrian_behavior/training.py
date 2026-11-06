@@ -90,8 +90,24 @@ def train_epoch(model, batches, optimizer, device, clip_norm, on_step=None, step
 
 
 def fit(model, batches, validate, optimizer, device, output, checkpoint_references, on_epoch,
-        epochs, patience, clip_norm, on_step=None, epoch_operation=train_epoch):
+        epochs, patience, clip_norm, on_step=None, epoch_operation=train_epoch, initial_candidate=False):
     history, best, stale, step_offset = [], None, 0, 0
+    if initial_candidate:
+        validation = validate(model)
+        best, stale, selected = select_epoch(None, validation["track_weighted"]["macro_f1"],
+            validation["track_ce"], 0, 0)
+        row = {"epoch": 0, "training_ce": None, "training_f1": None,
+            "optimizer_steps": 0, "processed_tracks": 0, "context_slots": 0, "gt_slots": 0,
+            "padding_slots": 0, "batch_slots": 0,
+            "validation_ce": validation["track_ce"],
+            "validation_f1": validation["track_weighted"]["macro_f1"],
+            "selected": selected, "non_improving_epochs": stale, "stopping_reason": None}
+        history.append(row)
+        evidence = checkpoint_references | {"epoch": 0, "selection": best, "validation": validation,
+                                            "stopping_reason": None}
+        save_checkpoint(Path(output)/"best.pt", model, evidence)
+        save_checkpoint(Path(output)/"last.pt", model, evidence)
+        on_epoch(row, history)
     for epoch in range(1, epochs+1):
         row = {"epoch": epoch} | epoch_operation(model, batches, optimizer, device, clip_norm, on_step=on_step, step_offset=step_offset)
         step_offset += row["optimizer_steps"]

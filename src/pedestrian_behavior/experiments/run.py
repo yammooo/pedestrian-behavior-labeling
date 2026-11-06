@@ -53,8 +53,10 @@ def plots(output, history, selection, evaluations, classes):
         plt.close(figure)
     epochs = [r["epoch"] for r in history]
     fig, ax = plt.subplots(figsize=(7, 4))
-    ax.plot(epochs, [r["training_ce"] for r in history], marker="o", label="training (changing weights)")
-    ax.plot(epochs, [r["validation_ce"] for r in history], marker="o", label="source validation")
+    training = [r for r in history if r["training_ce"] is not None]
+    ax.plot([r["epoch"] for r in training], [r["training_ce"] for r in training], marker="o",
+            label="training (changing weights)")
+    ax.plot(epochs, [r["validation_ce"] for r in history], marker="o", label="validation")
     ax.set(xlabel="Epoch", ylabel="Track CE")
     ax.legend()
     save("loss", fig)
@@ -228,14 +230,15 @@ def run_attempt(source, configuration, variant, output, device, smoke=False, *, 
                     ({"train/learning_rate": row["learning_rate"]} if "learning_rate" in row else {}))
         def on_epoch(row, history):
             write_json(output/"history.json", history)
-            provenance.update(completed_epochs=len(history), last_completed_epoch=row["epoch"],
+            provenance.update(completed_epochs=sum(r["epoch"] > 0 for r in history), last_completed_epoch=row["epoch"],
                 exposure={k: sum(r[k] for r in history) for k in ("optimizer_steps", "processed_tracks", "context_slots", "gt_slots", "padding_slots", "batch_slots")})
             if "runtime_snapshot" in prepared:
                 provenance["runtime"] = prepared["runtime_snapshot"]()
             write_json(output/"provenance.json", provenance)
-            metrics = {"epoch": row["epoch"], "train/loss_epoch": row["training_ce"],
-                     "train/macro_f1": row["training_f1"],
-                     "val/loss": row["validation_ce"], "val/macro_f1": row["validation_f1"]}
+            metrics = {"epoch": row["epoch"], "val/loss": row["validation_ce"],
+                       "val/macro_f1": row["validation_f1"]}
+            if row["training_ce"] is not None:
+                metrics.update({"train/loss_epoch": row["training_ce"], "train/macro_f1": row["training_f1"]})
             masking = row.get("masking")
             if masking:
                 for key in ("tracks", "augmented", "changed", "fallback", "clean_fraction",
@@ -252,13 +255,15 @@ def run_attempt(source, configuration, variant, output, device, smoke=False, *, 
                 for reason, count in masking.get("rejection_reasons", {}).items():
                     metrics[f"details/masking/rejections/{reason}"] = count
             run.log(metrics)
-        optimizer = torch.optim.AdamW((p for p in model.parameters() if p.requires_grad), **settings["optimizer"])
+        optimizer = (prepared["optimizer_factory"](model) if "optimizer_factory" in prepared else
+                     torch.optim.AdamW((p for p in model.parameters() if p.requires_grad), **settings["optimizer"]))
         fitted = fit(model, SmokeBatches() if smoke and not prepared.get("custom_smoke") else training,
                      lambda m: prediction_metrics(validation_predictions(m), len(classes)),
                      optimizer, device, output,
                      {"config": config, "normalization": statistics, "provenance_file": "provenance.json"}, on_epoch,
                      epochs=1 if smoke else settings["epochs"], patience=settings["patience"], clip_norm=settings["clip_norm"], on_step=on_step,
-                     **({"epoch_operation": prepared["epoch_operation"]} if "epoch_operation" in prepared else {}))
+                     **({"epoch_operation": prepared["epoch_operation"]} if "epoch_operation" in prepared else {}),
+                     initial_candidate=prepared.get("initial_candidate", False))
         selected = reload_checkpoint(output/"best.pt", model, device)
         evaluations = {}
         evaluation_splits = prepared.get("evaluation_splits", [(d, "validation-smoke" if smoke else "test") for d in ([source] if smoke else list(prepared["datasets"]))])
@@ -288,7 +293,8 @@ def run_attempt(source, configuration, variant, output, device, smoke=False, *, 
         if "post_evaluation" in prepared:
             prepared["post_evaluation"](model, evaluations, fitted, output, device, run)
         history = fitted["history"]
-        provenance.update(selection=fitted["selection"], stopping_reason=fitted["stopping_reason"], completed_epochs=len(history),
+        provenance.update(selection=fitted["selection"], stopping_reason=fitted["stopping_reason"],
+            completed_epochs=sum(r["epoch"] > 0 for r in history),
             exposure={k: sum(r[k] for r in history) for k in ("optimizer_steps", "processed_tracks", "context_slots", "gt_slots", "padding_slots", "batch_slots")},
             selected_checkpoint_epoch=selected["epoch"])
         provenance["exposure"]["padding_fraction"] = provenance["exposure"]["padding_slots"]/provenance["exposure"]["batch_slots"]

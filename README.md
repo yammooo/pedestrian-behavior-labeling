@@ -971,3 +971,14 @@ uv run --locked --extra cpu --extra embedding-diagnostic python scripts/analyze-
 ```
 
 The [E003b diagnostic protocol](experiments/E003b-target-head-adaptation/README.md#frozen-validation-embedding-diagnostic-2026-11-05) records the CUDA extraction commands, sampled population and projection settings. The optional dependency extra does not change the CUDA extraction environment.
+
+## E003c head versus temporal adaptation
+
+Continue the same E003b ROAD→LOKI adapted checkpoint in two ways: head only, then temporal blocks + final LayerNorm + head. Source branches/fusion and input normalization remain frozen; dropout is off in both arms. The [E003c protocol](experiments/E003c-temporal-adaptation/README.md) fixes initialization, learning rates, budget and epoch0 checkpoint selection.
+
+```bash
+cd /home/user20/projects/pedestrian-behavior-labeling-e002b-evaluation
+bash scripts/run-e003c-sequential.sh
+```
+
+The launcher uses the existing E002a extraction environment and RGB/indexed-point inputs to cache frozen128-dimensional fusion outputs once, then trains the two continuations sequentially. All LOKI training/validation tracks are retained; held-out tests remain closed. Fresh artifacts live under `outputs/experiments/E003c/runs/temporal-adaptation-<timestamp>/`. Existing E002d/E003b checkpoints, statistics and feature caches are read-only. The script stops on failure without automatic retry or resume.

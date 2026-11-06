@@ -1,6 +1,6 @@
 # Research dashboard
 
-Updated **2026-11-05**. We are developing a reliable **offline, given-track pedestrian behavior labeler**. Final architecture and publication contribution remain provisional. Deadline **17 December 2026**; **7–17 December** is protected for buffer and handover. The [literature review](literature/offline-labeling-research-direction.md) supports an empirical study first, with one conditional retrieval or supervision comparison.
+Updated **2026-11-06**. We are developing a reliable **offline, given-track pedestrian behavior labeler**. Final architecture and publication contribution remain provisional. Deadline **17 December 2026**; **7–17 December** is protected for buffer and handover. The [literature review](literature/offline-labeling-research-direction.md) supports an empirical study first, with one conditional retrieval or supervision comparison.
 
 ## Current evidence
 
@@ -19,7 +19,7 @@ Updated **2026-11-05**. We are developing a reliable **offline, given-track pede
 
 ## Next work
 
-1. Discuss the [E003b recovery and remaining gap](../experiments/E003b-target-head-adaptation/README.md#results) before choosing another training change. Useful target information survives in the frozen full-track representation; neither masking nor head adaptation establishes the cause of the remaining generalization gap. No new follow-up is fixed yet.
+1. Launch the [E003c head-versus-temporal continuations](../experiments/E003c-temporal-adaptation/README.md#launch): same E003b-adapted ROAD→LOKI checkpoint, continued head-only versus temporal blocks/final LayerNorm/head. CPU/CUDA suites and both bounded GPU/W&B checks pass; full runs remain user-launched. Test sets stay closed.
 2. Arrange a separate backup for valuable checkpoints/predictions; external storage is **TBD**. Original interrupted attempts and all earlier evidence remain preserved.
 3. Choose at most one justified representation or supervision follow-up after reviewing the remaining failures and cost. Masking does not claim independent sensor outages or architectural novelty. The unused retrieval proposal is deferred; E004 remains conditional.
 

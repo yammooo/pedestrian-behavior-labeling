@@ -431,6 +431,8 @@ def assembly(args):
     train_steps = math.ceil(len(datasets["training"]) / SETTINGS["batch_size"])
     return {"config": {"experiment": "E003c", "original_source": SOURCE, "target": TARGET,
             "reference": "E002d ROAD→LOKI + E003b head epoch87", "arm": args.arm,
+            "dropout_enabled": False, "optimizer_reset": True,
+            "training_order": "locator-sorted before persistent seeded shuffle",
             "source_checkpoint": frozen["identity"], "source_checkpoint_sha256": frozen["sha256"],
             "adapted_head_checkpoint": {"path": str(head_root / "best.pt"), "sha256": ADAPTED["sha256"],
                 "selected_epoch": ADAPTED["epoch"], "selection": adapted["selection"]},

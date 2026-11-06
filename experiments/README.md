@@ -16,9 +16,12 @@ Shared evaluation safeguards and comparison index. The [joint five-seed E001/E00
 | [E003](../docs/research.md#tentative-experiment-direction) | Generalization under incomplete observations; revised proposal2026-11-02 | First structured-masking comparison complete; retrieval deferred | See E003a; no consistent natural-transfer gain |
 | [E003a](E003a-structured-observation-masking/README.md) | Does bounded temporal/branch masking improve robustness and transfer at fixed track presentations? | Two seed0 trainings and natural/source-diagnostic evaluations complete2026-11-04 | [Results](E003a-structured-observation-masking/README.md#results): ROAD→LOKI F1 falls6.24pp; LOKI→ROAD changes+0.25pp versus matched E002d controls; tests closed |
 | [E003b](E003b-target-head-adaptation/README.md) | Can a new target-trained linear head recover information in frozen E002d/E003a representations? | Four seed0 adaptations complete2026-11-04 | [Results](E003b-target-head-adaptation/README.md#results): adapted F1 62.77–64.16% LOKI /59.49–60.49% ROAD; no consistent masking advantage; full target-label access, tests closed |
+| [E003c](E003c-temporal-adaptation/README.md) | Does temporal-block adaptation improve over continued target-head training from the same adapted checkpoint? | Implemented; CPU/CUDA and bounded GPU/W&B acceptance pass; full runs ready for user launch | Two ROAD→LOKI seed0 continuations planned; E002d body only, target training/validation, tests closed |
 | [E004](../docs/research.md#tentative-experiment-direction) | One complementary supervision source with an additional-data control | Tentative | Not run |
 
 [Research](../docs/research.md#tentative-experiment-direction) owns the tentative direction, branches and schedule. E002 owns the direction overview; E002a owns the first behavior pilot, its branch specification and preparatory evidence; E002b owns the normalization/capacity follow-up; E002c owns the targeted RGB dropout diagnostic; E002d owns the bounded fusion comparison; E002e owns the weight-decay sensitivity check. Source-validation development results are distinct from held-out within/cross-dataset comparisons. E003a owns the agreed masking specification/results; E003b owns target-head adaptation; E004 remains tentative.
+
+E003a tests source-trained masking; E003b and E003c use target labels for adaptation. Their access regimes differ, and the shared ID prefix does not make their scores matched comparisons. E003c owns its separate continuation protocol.
 
 ## Before execution
 

@@ -1,6 +1,6 @@
 # E003c — Head versus temporal adaptation
 
-**Original-source protocol implemented and verified, 2026-11-06. Full comparison results pending.**
+**Original-source comparison complete, 2026-11-06.** Both arms start from the original E002d checkpoint, including its original head.
 
 ## Question and scope
 
@@ -62,3 +62,24 @@ At revision `3e12e23`, both paths reproduce **46.4960% F1** on all1,861 LOKI val
 CPU suite:269 tests with13 expected skips; CUDA suite:all269 pass, including the64×102 temporal update. The sequential launcher passed one-epoch source-initialized GPU/W&B fixtures on3 training /2 validation tracks, both complete with empty failure lists: [head-only](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/3bssp2wc), [temporal + head](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/gzzqp3yx). These fixtures are not comparison results.
 
 The complete source-feature cache is ready for reuse. No full source-initialized training run was launched by acceptance. CLI help, shell syntax, current document links and diff checks pass.
+
+### Full source-initialized results (2026-11-06)
+
+At revision `1961a17`, both runs started from the same original E002d checkpoint and reproduced its LOKI direct-transfer validation predictions: **46.4960% F1 / 1.257273 CE** on the same 1,861 tracks. Saved predictions reconstruct the selected metrics and selected checkpoint epochs54/45 were verified. No held-out test predictions were made. Both used all 8,574 LOKI training tracks and full target-validation selection.
+
+| Model | Validation F1 (%) / CE | Selected / stopped |
+|---|---:|---:|
+| Original E002d source model (shared epoch0) |46.50% /1.257273 |e0 /— |
+| E003c `head` |63.90% /0.519937 |e54 /e69 |
+| E003c `temporal-head` |**68.17% /0.524578** |e45 /e60 |
+| Same-family LOKI-trained reference |74.68% /0.385282 |Separate E002d run |
+
+Temporal adaptation adds **4.27 pp validation F1**, with slightly higher selected CE (**0.5246 versus0.5199**). Gains are largest for Crossing (**+11.71 pp**) and Stopped (**+6.59 pp**); Moving improves1.52 pp and Waiting to cross falls2.76 pp.
+
+**Training behavior:** at the selected temporal epoch45, online training/validation F1 is84.45/68.17%, with CE0.2418/0.5246. At stopping, F1 is88.24/66.44% and CE0.1924/0.5959. Validation CE reaches its minimum0.4674 at epoch21, then rises while training fit continues improving. The head-only arm has a much smaller gap: selected training/validation F1 is62.13/63.90%, with CE0.5107/0.5199; its minimum validation CE is0.5189 at epoch68. Training metrics use changing weights, with dropout disabled.
+
+The same-family LOKI-trained reference is **74.68% F1 /0.3853 CE**, using LOKI training normalization. The selected temporal-head remains6.51pp below it; head-only is10.78pp below. The reference trains the full task model on LOKI, so these gaps are descriptive rather than a matched isolation of temporal adaptation or an upper bound. This comparison uses full target labels and validation selection; it does not establish that temporal mismatch or frozen branches caused the remaining gap.
+
+![E003c training and target-validation curves](../../outputs/experiments/E003c/results-review/figures/training-validation-curves.png) ([SVG](../../outputs/experiments/E003c/results-review/figures/training-validation-curves.svg); [summary JSON](../../outputs/experiments/E003c/results-review/summary.json))
+
+Runs are preserved under `outputs/experiments/E003c/runs/source-adaptation-20261106-121040/{head,temporal-head}/`; cache preparation is excluded from the **49.2 s** head and **84.3 s** temporal run times. W&B records: [head](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/27vi7vgw), [temporal-head](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/h1yg4q96).

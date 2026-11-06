@@ -1,6 +1,6 @@
 # E003c — Head versus temporal adaptation
 
-**Protocol: original-source initialization, 2026-11-06. Corrected comparison not run yet.**
+**Original-source protocol implemented and verified, 2026-11-06. Full comparison results pending.**
 
 ## Question and scope
 
@@ -54,3 +54,11 @@ The launcher uses `outputs/experiments/E003c/fusion-features-road-waymo/` by def
 Verify exact original-head initialization in both arms, original direct-transfer epoch0 logits/F1, trainable parameter sets (516 /397,316), disabled dropout, LR warmup ratio, shared loader order, GT/padding, checkpoint reload and a64×102 CUDA update. Check both actual cache paths with short GPU/W&B fixtures before the user launches full training.
 
 No results from a target-adapted-head initialization belong to this comparison. Non-comparison artifacts remain outside active run/review paths under ignored `outputs/experiments/E003c/superseded/`.
+
+### Verified source initialization (2026-11-06)
+
+At revision `3e12e23`, both paths reproduce **46.4960% F1** on all1,861 LOKI validation tracks; initial CE is1.25727344 in both within float32 tolerance. Classifier weight and bias tensors exactly equal the original E002d checkpoint. Evidence is on Aalto under `outputs/experiments/E003c/acceptance-source-20261106/`.
+
+CPU suite:269 tests with13 expected skips; CUDA suite:all269 pass, including the64×102 temporal update. The sequential launcher passed one-epoch source-initialized GPU/W&B fixtures on3 training /2 validation tracks, both complete with empty failure lists: [head-only](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/3bssp2wc), [temporal + head](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/gzzqp3yx). These fixtures are not comparison results.
+
+The complete source-feature cache is ready for reuse. No full source-initialized training run was launched by acceptance. CLI help, shell syntax, current document links and diff checks pass.

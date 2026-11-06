@@ -20,7 +20,7 @@ Updated **2026-11-06**. We are developing a reliable **offline, given-track pede
 
 ## Next work
 
-1. Run [E003c original-source adaptation](../experiments/E003c-temporal-adaptation/README.md): fine-tune the original E002d source head alone versus that head plus temporal blocks/final LayerNorm. Both start from the same source checkpoint (46.50% ROAD→LOKI validation F1). Corrected comparison results are pending; tests remain closed.
+1. Run [E003c original-source adaptation](../experiments/E003c-temporal-adaptation/README.md): fine-tune the original E002d source head alone versus that head plus temporal blocks/final LayerNorm. Both start from the same source checkpoint (46.50% ROAD→LOKI validation F1). Source initialization and CPU/CUDA/GPU acceptance pass; the complete feature cache is ready for reuse. Full comparison results are pending; tests remain closed.
 2. Arrange a separate backup for valuable checkpoints/predictions; external storage is **TBD**. Original interrupted attempts and all earlier evidence remain preserved.
 3. Choose at most one justified representation or supervision follow-up after reviewing the remaining failures and cost. Masking does not claim independent sensor outages or architectural novelty. The unused retrieval proposal is deferred; E004 remains conditional.
 

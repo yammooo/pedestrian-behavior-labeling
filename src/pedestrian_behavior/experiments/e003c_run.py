@@ -230,6 +230,8 @@ def _read_identity(path):
 
 
 def _load_attempt_cache(root, split, *, stage, source_normalization, source_sha):
+    if stage == "pre-temporal-fusion" and json.loads((root / "status.json").read_text()).get("status") != "complete":
+        raise ValueError("Pre-temporal feature preparation must be complete")
     manifest = json.loads((root / "feature-cache.json").read_text())
     entry = manifest[split]
     path = root / entry["path"]
@@ -294,6 +296,13 @@ def _check_records(first, second, split):
                 or any(not np.array_equal(row["source_flags"][key], other["source_flags"][key])
                        for key in row["source_flags"])):
             raise ValueError(f"E003b/E003c {split} track labels/availability differ: {locator}")
+
+
+def _canonical_records(records):
+    ordered = sorted(records, key=lambda row: row["locator"])
+    if len({row["locator"] for row in ordered}) != len(ordered):
+        raise ValueError("Duplicate cached track locator")
+    return ordered
 
 
 def _check_adapted_predictions(actual, path, *, expected_metrics=None, require_all=True):
@@ -379,10 +388,10 @@ def assembly(args):
         expected_ids = {entry["locator"] for entry in target_data[split].entries}
         if {row["locator"] for row in first} != expected_ids:
             raise ValueError(f"E003b/E003c {split} cache differs from frozen LOKI population")
-    fusion_records = sorted(fusion_records, key=lambda row: row["locator"])
-    head_records = sorted(head_records, key=lambda row: row["locator"])
-    fusion_val = sorted(fusion_val, key=lambda row: row["locator"])
-    head_val = sorted(head_val, key=lambda row: row["locator"])
+    fusion_records = _canonical_records(fusion_records)
+    head_records = _canonical_records(head_records)
+    fusion_val = _canonical_records(fusion_val)
+    head_val = _canonical_records(head_val)
     if selected:
         for split, entries in target_data.items():
             entries.entries = [entry for entry in entries.entries if entry["locator"] in selected[split]]

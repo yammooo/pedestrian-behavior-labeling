@@ -1,6 +1,6 @@
 # E003c — Head versus temporal adaptation
 
-**Protocol agreed and implemented, 2026-11-06. Full comparisons remain user-launched.** This follows [E003b target-head adaptation](../E003b-target-head-adaptation/README.md#results), not the E003a masking method.
+**Both seed0 continuations complete; results reviewed 2026-11-06.** This follows [E003b target-head adaptation](../E003b-target-head-adaptation/README.md#results), not the E003a masking method.
 
 ## Question and scope
 
@@ -71,4 +71,43 @@ Bounded extraction and one-epoch continuation checks completed at revision `1fe6
 | Head only | [08v3gumy](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/08v3gumy) |
 | Temporal + final LayerNorm + head | [ezm6422k](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/ezm6422k) |
 
-Launcher shell syntax, CLI help, local documentation links and `git diff --check` pass. Full cache preparation and the two full continuations remain user-launched. No held-out test inference occurred.
+Launcher shell syntax, CLI help, local documentation links and `git diff --check` pass. Full comparisons below were launched separately after acceptance. No held-out test inference occurred.
+
+## Results (2026-11-06)
+
+**Temporal-block/final-LayerNorm/head adaptation improves LOKI validation F1 by2.34pp over continued head-only optimization.** Both attempts completed without failures at revision `868bf1a`, under Aalto `outputs/experiments/E003c/runs/temporal-adaptation-20261106-103803/`. Both start from the same64.16% model and retain ROAD normalization. Support is unchanged: **93 validation scenarios /1,861 tracks /60,231 GT timesteps**; training uses all8,574 tracks.
+
+| Model on LOKI validation | Track-weighted macro-F1 (%) | Mean track CE | Selected /final continuation epoch |
+|---|---:|---:|---|
+| Shared E003b starting checkpoint | 64.16 | 0.5162 | 0 |
+| Continue head only | 64.44 | 0.5127 | 27 /42; patience |
+| Adapt temporal + final LayerNorm + head | **66.78** | **0.4861** | 5 /20; patience |
+| E002d trained on LOKI, contextual reference | 74.68 | 0.3853 | — |
+
+Head-only continuation adds0.28pp over the starting point; temporal adaptation adds2.62pp. The remaining gap to the target-trained reference is7.90pp. That reference also differs in front-end training, normalization, regularization and optimization history; it is not an isolated upper bound, and this comparison does not establish that frozen branches cause the remaining gap.
+
+Per-class track-weighted F1 (%) at the selected checkpoints:
+
+| Class | Continued head | Temporal + head | Difference (pp) |
+|---|---:|---:|---:|
+| Moving | 89.31 | 89.99 | +0.68 |
+| Stopped | 52.44 | 58.19 | +5.75 |
+| Waiting to cross | 69.50 | 69.09 | −0.41 |
+| Crossing | 46.52 | 49.85 | +3.33 |
+
+![Matched E003c training and validation CE/F1](../../outputs/experiments/E003c/results-review-20261106/figures/training-validation-curves.png) ([SVG](../../outputs/experiments/E003c/results-review-20261106/figures/training-validation-curves.svg)).
+
+**Training behavior:** at the selected temporal epoch5, online training/validation F1 is67.10/66.78%, with CE0.4565/0.4861. By epoch20, training F1 reaches76.44% while validation is65.70%; CE is0.3418/0.4716. Validation CE reaches its minimum0.4602 at epoch13 before rebounding, but remains below its starting and selected-F1 values. Thus classification generalization plateaus early while training fit continues; this is not the earlier large validation-CE divergence. The head-only arm stays near63.9% training /64.4% validation F1. Training metrics accumulate with changing weights; dropout is off throughout.
+
+**Interpretation:** adapting beyond the linear readout helps under this recipe, but the gain is modest and does not close the matched-target performance gap. Neither temporal mismatch nor annotation differences are isolated: the diagnostic also adds trainable capacity and changes optimization. This remains one direction, one seed and previously inspected validation data with full target-label access. Test sets stay closed.
+
+### Evidence
+
+Selected metrics reconstruct from saved predictions and match reloaded checkpoint selection evidence. Both arms share parent checkpoints, normalization, settings, initial predictions and per-epoch track/context/GT/padding/update counts through their common20 epochs. Initial CE differs only within float32 tolerance. Runtime is36.5s for the head continuation and36.2s for temporal continuation, including each arm's setup/logging/evaluation but excluding the one-time fusion-feature preparation; these are actual attempt times, not general throughput estimates.
+
+| Attempt | W&B |
+|---|---|
+| `head` | [ncf8hsoc](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/ncf8hsoc) |
+| `temporal-head` | [jgwrlluc](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/jgwrlluc) |
+
+Small JSON evidence and the summary/figure remain under ignored `outputs/experiments/E003c/results-review-20261106/`; full checkpoints, feature caches and predictions remain on Aalto. Rebuild the numerical summary and PNG/SVG with `uv run --locked --extra cpu python scripts/summarize-e003c-results.py`. No new training or inference was needed for this review.

@@ -17,11 +17,10 @@ Updated **2026-11-06**. We are developing a reliable **offline, given-track pede
 
 - **[E003b embedding diagnostic](../experiments/E003b-target-head-adaptation/README.md#diagnostic-results):** pooled PCA and UMAP of both original E002d bodies on both validation datasets are complete. UMAP shows dataset-dominated neighborhoods across the checked seeds/settings despite shared broad behavior structure; recoverable target information does not imply dataset invariance. No adaptation training or test access.
 
-- **[E003c adaptation depth](../experiments/E003c-temporal-adaptation/README.md#results-2026-11-06):** both ROAD→LOKI seed0 continuations complete. Temporal/final-LayerNorm/head adaptation reaches **66.78%** validation F1 versus **64.44%** for continued head-only training (+2.34pp); the target-trained reference is74.68%. Stopped/Crossing improve most. The temporal training/validation F1 gap grows after its epoch5 selection; tests remain closed.
 
 ## Next work
 
-1. Discuss the completed [E003c adaptation-depth result](../experiments/E003c-temporal-adaptation/README.md#results-2026-11-06) and remaining7.90pp target-reference gap before choosing another training change. Additional temporal adaptation helps modestly; it does not isolate the cause of transfer failure. No further experiment is fixed.
+1. Run [E003c original-source adaptation](../experiments/E003c-temporal-adaptation/README.md): fine-tune the original E002d source head alone versus that head plus temporal blocks/final LayerNorm. Both start from the same source checkpoint (46.50% ROAD→LOKI validation F1). Corrected comparison results are pending; tests remain closed.
 2. Arrange a separate backup for valuable checkpoints/predictions; external storage is **TBD**. Original interrupted attempts and all earlier evidence remain preserved.
 3. Choose at most one justified representation or supervision follow-up after reviewing the remaining failures and cost. Masking does not claim independent sensor outages or architectural novelty. The unused retrieval proposal is deferred; E004 remains conditional.
 

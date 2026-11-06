@@ -974,11 +974,11 @@ The [E003b diagnostic protocol](experiments/E003b-target-head-adaptation/README.
 
 ## E003c head versus temporal adaptation
 
-Continue the same E003b ROAD→LOKI adapted checkpoint in two ways: head only, then temporal blocks + final LayerNorm + head. Source branches/fusion and input normalization remain frozen; dropout is off in both arms. The [E003c protocol](experiments/E003c-temporal-adaptation/README.md) fixes initialization, learning rates, budget and epoch0 checkpoint selection.
+Fine-tune the **original E002d ROAD network and original source head** on LOKI: head only, then temporal blocks + final LayerNorm + head. Both start at46.50% target-validation F1. Source branches/fusion and input normalization remain frozen; dropout is off. No E003b target-trained head is loaded. The [E003c protocol](experiments/E003c-temporal-adaptation/README.md) fixes the comparison.
 
 ```bash
 cd /home/user20/projects/pedestrian-behavior-labeling-e002b-evaluation
 bash scripts/run-e003c-sequential.sh
 ```
 
-The launcher uses the existing E002a extraction environment and RGB/indexed-point inputs to cache frozen128-dimensional fusion outputs once, then trains the two continuations sequentially. All LOKI training/validation tracks are retained; held-out tests remain closed. Fresh artifacts live under `outputs/experiments/E003c/runs/temporal-adaptation-<timestamp>/`. Existing E002d/E003b checkpoints, statistics and feature caches are read-only. The script stops on failure without automatic retry or resume.
+The command reuses the completed original-source fusion cache, then runs the two target fits sequentially. Fresh outputs live under `outputs/experiments/E003c/runs/source-adaptation-<timestamp>/`. All LOKI training/validation tracks are retained; held-out tests remain closed. Parent checkpoints, statistics and caches stay read-only. The script stops on failure without automatic retry or resume.

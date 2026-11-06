@@ -10,14 +10,13 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 
 ROOT = Path(__file__).resolve().parents[1]
-REVIEW = ROOT / "outputs/experiments/E003c/results-review-20261106"
-EVIDENCE = REVIEW / "evidence/temporal-adaptation-20261106-103803"
+REVIEW = ROOT / "outputs/experiments/E003c/results-review"
+EVIDENCE = REVIEW / "evidence"
 E003B = ROOT / "outputs/experiments/E003b/results-review-20261104/summary.json"
 FIGURES = REVIEW / "figures"
 ARMS = ("head", "temporal-head")
 POPULATION = {"training": 8574, "validation": 1861}
 SOURCE_SHA = "d1f83183dcff61f8d9925a74c2c76811d1eca225119e588df8aa3770720e42a8"
-HEAD_SHA = "fbf040490036aeca09014b5a595beb824b3fad1f118c6ec3c9ed1093a161a8b1"
 COLORS = {"head": "#4c78a8", "temporal-head": "#f58518"}
 
 
@@ -37,8 +36,8 @@ def load_arm(arm, normalization=None):
     assert (config["experiment"], config["arm"], config["original_source"], config["target"]) == ("E003c", arm, "road-waymo", "loki")
     assert not config["dropout_enabled"] and config["optimizer_reset"] and not config["held_out_tests"] and config["smoke_limits"] is None
     assert config["source_checkpoint_sha256"] == config["source_checkpoint"]["sha256"] == SOURCE_SHA and config["source_checkpoint"]["selected_epoch"] == 17
-    assert config["adapted_head_checkpoint"]["sha256"] == HEAD_SHA
-    assert config["adapted_head_checkpoint"]["selected_epoch"] == 87
+    assert config.get("initialization") == "source-checkpoint"
+    assert "adapted_head_checkpoint" not in config
     assert config["normalization_source"] == "road-waymo" and config["population"] == POPULATION
     assert normalization is None or config["normalization"] == normalization
     settings = config["settings"]
@@ -60,18 +59,19 @@ def load_arm(arm, normalization=None):
     close(selected["validation_f1"], provenance["selection"]["f1"]); close(selected["validation_ce"], provenance["selection"]["ce"])
     assert validation["denominators"]["tracks"] == POPULATION["validation"]
     close(validation["track_weighted"]["macro_f1"], selected["validation_f1"]); close(validation["track_ce"], selected["validation_ce"])
-    adapted = config["adapted_head_validation"]
-    close(initial["validation_f1"], adapted["track_weighted"]["macro_f1"]); close(initial["validation_ce"], adapted["track_ce"], 1e-8)
+    original = config["initial_validation"]
+    close(initial["validation_f1"], original["track_weighted"]["macro_f1"]); close(initial["validation_ce"], original["track_ce"], 1e-6)
+    close(initial["validation_f1"], 0.46496012823104105, 1e-6)
     minimum_ce = min(history, key=lambda r: (r["validation_ce"], r["epoch"]))
     return {"arm": arm, "config": config, "provenance": provenance, "history": history,
         "validation": validation, "initial": initial, "selected": selected, "minimum_ce": minimum_ce}
 
 
 def main():
-    FIGURES.mkdir(parents=True, exist_ok=True)
     first = load_arm(ARMS[0])
     rows = [first, load_arm(ARMS[1], first["config"]["normalization"])]
-    assert rows[0]["config"]["adapted_head_checkpoint"] == rows[1]["config"]["adapted_head_checkpoint"]
+    assert rows[0]["config"]["initialization_checkpoint"] == rows[1]["config"]["initialization_checkpoint"]
+    FIGURES.mkdir(parents=True, exist_ok=True)
     close(rows[0]["initial"]["validation_f1"], rows[1]["initial"]["validation_f1"]); close(rows[0]["initial"]["validation_ce"], rows[1]["initial"]["validation_ce"], 1e-8)
     reference = next(r for r in read(E003B)["cases"] if (r["source"], r["target"], r["reference"]) == ("road-waymo", "loki", "e002d"))
     initial_f1 = rows[0]["initial"]["validation_f1"]
@@ -93,10 +93,10 @@ def main():
                 for e in row["history"]]})
     class_delta = {name: 100 * (output_rows[1]["selected_validation"]["class_f1"][name]
         - output_rows[0]["selected_validation"]["class_f1"][name]) for name in output_rows[0]["selected_validation"]["class_f1"]}
-    source, head = rows[0]["config"]["source_checkpoint"], rows[0]["config"]["adapted_head_checkpoint"]
+    source = rows[0]["config"]["source_checkpoint"]
     summary = {"scope": "E003c seed0 ROAD-Waymo→LOKI; full validation selection; no held-out test access",
         "population": POPULATION, "source_checkpoint": {k: source[k] for k in ("path", "sha256", "selected_epoch")},
-        "adapted_head_checkpoint": {k: head[k] for k in ("path", "sha256", "selected_epoch")},
+        "initialization": "source-checkpoint",
         "source_normalization": "ROAD-Waymo (retained for both target splits)", "dropout_enabled": False,
         "shared_epoch0": {"track_weighted_macro_f1": initial_f1, "track_ce": rows[0]["initial"]["validation_ce"]},
         "target_trained_reference": {"track_weighted_macro_f1": reference["target_trained_macro_f1"],
@@ -131,7 +131,7 @@ def main():
         Line2D([0], [0], marker="o", color="none", markerfacecolor="#777", markeredgecolor="black", label="selected checkpoint"),
         Line2D([0], [0], color="#777", ls=":", label="shared epoch 0 F1")]
     fig.legend(handles=legend, loc="upper center", bbox_to_anchor=(.5, .945), ncol=3, frameon=False, fontsize=8)
-    fig.suptitle("E003c · ROAD-Waymo → LOKI continuation curves", y=.99, fontsize=13)
+    fig.suptitle("E003c · ROAD-Waymo → LOKI source-checkpoint fine-tuning", y=.99, fontsize=13)
     fig.text(.5, .025, f"Shared starting F1: {100*initial_f1:.2f}%. Dropout is disabled; training is online under changing weights. "
         f"Target-trained LOKI reference: {100*reference['target_trained_macro_f1']:.2f}% F1 / "
         f"{reference['target_trained_ce']:.3f} CE (trained and normalized on LOKI).", ha="center", fontsize=8)

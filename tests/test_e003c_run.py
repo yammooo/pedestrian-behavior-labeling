@@ -10,18 +10,19 @@ from torch import nn
 from pedestrian_behavior.data.loading import collate_tracks
 from pedestrian_behavior.evaluation import save_predictions
 from pedestrian_behavior.experiments import e003b_run
-from pedestrian_behavior.experiments.e003c_run import (TemporalHead, _check_adapted_predictions,
+from pedestrian_behavior.experiments.e003c_run import (TemporalHead, _check_initial_predictions,
     _canonical_records, _load_attempt_cache, _model, _smoke_subset, _warmup_epoch, optimizer_factory)
 from pedestrian_behavior.models.multimodal import TemporalBlock
 from pedestrian_behavior.training import fit, seed_run, train_epoch
 
 
-class SourceStub:
+class SourceStub(nn.Module):
     def __init__(self):
+        super().__init__()
         self.front = nn.Linear(4, 4)
-        self.temporal = nn.ModuleList([TemporalBlock(4, 8, .1), TemporalBlock(4, 8, .1)])
-        self.final_norm = nn.LayerNorm(4)
-        self.head = nn.Linear(4, 4)
+        self.temporal = nn.ModuleList([TemporalBlock(128, 512, .1), TemporalBlock(128, 512, .1)])
+        self.final_norm = nn.LayerNorm(128)
+        self.head = nn.Linear(128, 4)
 
 
 def _prediction_tracks():
@@ -126,26 +127,29 @@ class E003cInitializationTest(unittest.TestCase):
         self.assertEqual(checkpoint["selection"]["epoch"], 0)
         self.assertEqual(float(checkpoint["model_state"]["weight"].item()), 0.)
 
-    def test_temporal_wrapper_reenables_only_temporal_and_disables_dropout(self):
+    def test_both_arms_start_from_original_source_head_and_reject_injected_head(self):
         source = SourceStub()
-        for parameter in source.front.parameters():
+        with torch.no_grad():
+            source.head.weight.copy_(torch.arange(512, dtype=torch.float32).reshape(4, 128))
+            source.head.bias.copy_(torch.arange(4, dtype=torch.float32))
+        for parameter in source.parameters():
             parameter.requires_grad_(False)
-        for parameter in source.temporal.parameters():
-            parameter.requires_grad_(False)
-        for parameter in source.final_norm.parameters():
-            parameter.requires_grad_(False)
-        for parameter in source.head.parameters():
-            parameter.requires_grad_(False)
-        weights = torch.arange(16, dtype=torch.float32).reshape(4, 4)
-        bias = torch.arange(4, dtype=torch.float32)
-        model = _model("temporal-head", source, {"model_state": {"linear.weight": weights,
-            "linear.bias": bias}}, "cpu")
-        model.train()
-        self.assertTrue(all(parameter.requires_grad for parameter in model.parameters()))
-        self.assertFalse(any(parameter.requires_grad for parameter in source.front.parameters()))
-        self.assertTrue(torch.equal(model.head.weight, weights))
-        self.assertTrue(torch.equal(model.head.bias, bias))
-        self.assertTrue(all(layer.p == 0. for layer in model.modules() if isinstance(layer, nn.Dropout)))
+        head_model = _model("head", source, "cpu")
+        temporal_model = _model("temporal-head", source, "cpu")
+        torch.testing.assert_close(head_model.linear.weight, source.head.weight)
+        torch.testing.assert_close(head_model.linear.bias, source.head.bias)
+        torch.testing.assert_close(temporal_model.head.weight, source.head.weight)
+        torch.testing.assert_close(temporal_model.head.bias, source.head.bias)
+        self.assertEqual([name for name, p in head_model.named_parameters() if p.requires_grad],
+            ["linear.weight", "linear.bias"])
+        self.assertTrue(all(p.requires_grad for p in temporal_model.parameters()))
+        self.assertFalse(any(p.requires_grad for p in source.front.parameters()))
+        temporal_model.train()
+        self.assertTrue(all(layer.p == 0. for layer in temporal_model.modules() if isinstance(layer, nn.Dropout)))
+        poison = {"model_state": {"linear.weight": torch.full_like(source.head.weight, 999.),
+            "linear.bias": torch.full_like(source.head.bias, 999.)}}
+        with self.assertRaises(TypeError):
+            _model("head", source, poison, "cpu")
 
     def test_optimizer_groups_keep_head_to_temporal_lr_ratio_during_warmup(self):
         model = TemporalHead(nn.ModuleList([TemporalBlock(8, 16, .1), TemporalBlock(8, 16, .1)]),
@@ -184,16 +188,16 @@ class E003cInitializationTest(unittest.TestCase):
             self.assertTrue(torch.isfinite(parameter.grad).all().item(), name)
             self.assertTrue(torch.isfinite(parameter).all().item(), name)
 
-    def test_epoch_zero_logits_reproduce_saved_adapted_predictions(self):
+    def test_epoch_zero_logits_reproduce_saved_original_source_predictions(self):
         tracks = _prediction_tracks()
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "predictions.npz"
             save_predictions(path, tracks)
-            metrics = _check_adapted_predictions(tracks, path)
+            metrics = _check_initial_predictions(tracks, path)
             self.assertEqual(metrics["denominators"]["tracks"], 4)
             changed = [dict(row, logits=row["logits"] + .1) for row in tracks]
             with self.assertRaises(ValueError):
-                _check_adapted_predictions(changed, path)
+                _check_initial_predictions(changed, path)
 
 
 if __name__ == "__main__":

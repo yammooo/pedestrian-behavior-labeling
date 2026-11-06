@@ -1,4 +1,4 @@
-"""E003c continuations from the pinned ROAD→LOKI E003b adaptation."""
+"""E003c source-head continuations from the pinned ROAD→LOKI E002d checkpoint."""
 
 import argparse
 import json
@@ -21,9 +21,8 @@ from pedestrian_behavior.training import seed_run, train_epoch
 
 SOURCE, TARGET = "road-waymo", "loki"
 ARM, VARIANT = "g-rgb-dditr", "temporal-small"
-ADAPTED = {"sha256": "fbf040490036aeca09014b5a595beb824b3fad1f118c6ec3c9ed1093a161a8b1",
-    "epoch": 87, "f1": 0.6415806253538071, "ce": 0.516183951283285,
-    "run": "20261104-092202/e002d-road-waymo-to-loki"}
+POSTNORM_CACHE_RUN = "20261104-092202/e002d-road-waymo-to-loki"
+SOURCE_DIRECT_F1 = 0.46496012823104105
 SETTINGS = {"seed": 0, "batch_size": 64, "epochs": 100, "patience": 15, "clip_norm": 1.,
     "precision": "float32", "warmup_epochs": 3,
     "optimizer": {"lr": .0003, "weight_decay": .0001, "betas": [.9, .999], "eps": 1e-8},
@@ -32,7 +31,7 @@ CLASSES = e003b_run.CLASSES
 
 
 class TemporalHead(nn.Module):
-    """The source temporal blocks/norm with the fixed E003b adapted head."""
+    """Source temporal blocks, final norm, and original source head."""
 
     def __init__(self, temporal, final_norm, head):
         super().__init__()
@@ -252,39 +251,6 @@ def _load_attempt_cache(root, split, *, stage, source_normalization, source_sha)
     return e003b_run._load_cache(path, identity), entry
 
 
-def _load_adapted_head(outputs_root, normalization, source_sha):
-    root = outputs_root / "experiments/E003b/runs" / ADAPTED["run"]
-    checkpoint_path = root / "best.pt"
-    if checksum(checkpoint_path) != ADAPTED["sha256"]:
-        raise ValueError("Pinned E003b target-adapted head checkpoint hash changed")
-    status, config = (json.loads((root / "status.json").read_text()),
-                      json.loads((root / "config.json").read_text()))
-    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
-    if (status.get("status") != "complete" or status.get("failures")
-            or config.get("experiment") != "E003b" or config.get("original_source") != SOURCE
-            or config.get("source") != TARGET or config.get("configuration") != "target-head"
-            or config.get("variant") != "e002d" or config.get("target") != TARGET
-            or config.get("reference") != "e002d" or config.get("held_out_tests") is not False
-            or config.get("normalization") != normalization
-            or config.get("source_checkpoint", {}).get("sha256") != source_sha
-            or config.get("target_population") != {"training": 8574, "validation": 1861}
-            or checkpoint.get("epoch") != ADAPTED["epoch"]
-            or checkpoint.get("selection", {}).get("epoch") != ADAPTED["epoch"]
-            or not math.isclose(checkpoint["selection"]["f1"], ADAPTED["f1"], rel_tol=1e-6, abs_tol=1e-8)
-            or not math.isclose(checkpoint["selection"]["ce"], ADAPTED["ce"], rel_tol=1e-6, abs_tol=1e-8)
-            or set(checkpoint.get("model_state", {})) != {"linear.weight", "linear.bias"}):
-        raise ValueError("Pinned E003b adapted-head run/configuration/selection mismatch")
-    cache_manifest = json.loads((root / "feature-cache.json").read_text())
-    if config.get("feature_cache") != cache_manifest:
-        raise ValueError("Pinned E003b cache manifest differs from its saved run configuration")
-    predictions = load_predictions(root / f"{TARGET}-validation/predictions.npz")
-    metrics = prediction_metrics(predictions, len(CLASSES))
-    e003a_run._same_metrics(checkpoint["validation"], metrics)
-    saved_metrics = json.loads((root / f"{TARGET}-validation/metrics.json").read_text())["primary"]
-    e003a_run._same_metrics(saved_metrics, metrics)
-    return root, checkpoint, config
-
-
 def _check_records(first, second, split):
     left, right = {row["locator"]: row for row in first}, {row["locator"]: row for row in second}
     if set(left) != set(right):
@@ -305,32 +271,30 @@ def _canonical_records(records):
     return ordered
 
 
-def _check_adapted_predictions(actual, path, *, expected_metrics=None, require_all=True):
+def _check_initial_predictions(actual, path, *, expected_metrics=None, require_all=True):
     expected = {row["locator"]: row for row in load_predictions(path)}
     actual_ids = {row["locator"] for row in actual}
     if not actual_ids.issubset(expected) or (require_all and actual_ids != set(expected)):
-        raise ValueError("E003c epoch0 predictions do not cover the exact E003b validation population")
+        raise ValueError("E003c epoch0 predictions do not cover the original E002d validation population")
     for row in actual:
         prior = expected[row["locator"]]
         if (not np.array_equal(row["targets"], prior["targets"])
                 or not np.array_equal(row["gt_valid"], prior["gt_valid"])
                 or not np.allclose(row["logits"], prior["logits"], rtol=1e-4, atol=1e-5)):
-            raise ValueError("E003c epoch0 logits differ from the pinned E003b adapted-head predictions")
+            raise ValueError("E003c epoch0 logits differ from the pinned E002d source predictions")
     metrics = prediction_metrics(actual, len(CLASSES))
     if expected_metrics is not None:
         e003a_run._same_metrics(expected_metrics, metrics)
     return metrics
 
 
-def _model(arm, source_model, adapted_checkpoint, device):
+def _model(arm, source_model, device):
     if arm == "head":
         model = e003b_run.AdaptationHead()
-        model.load_state_dict(adapted_checkpoint["model_state"], strict=True)
+        model.load_state_dict({"linear.weight": source_model.head.weight.detach().clone(),
+            "linear.bias": source_model.head.bias.detach().clone()}, strict=True)
     elif arm == "temporal-head":
-        head = source_model.head
-        head.load_state_dict({"weight": adapted_checkpoint["model_state"]["linear.weight"],
-                              "bias": adapted_checkpoint["model_state"]["linear.bias"]}, strict=True)
-        model = TemporalHead(source_model.temporal, source_model.final_norm, head)
+        model = TemporalHead(source_model.temporal, source_model.final_norm, source_model.head)
         for parameter in model.parameters():
             parameter.requires_grad_(True)
     else:
@@ -370,14 +334,14 @@ def assembly(args):
     if args.smoke != (args.smoke_selection is not None):
         raise ValueError("Smoke training requires exactly one explicit selection file")
     normalization, _source_ids, frozen, target_data, target_reference = _source_target_assembly(outputs_root)
-    head_root, adapted, adapted_config = _load_adapted_head(outputs_root, normalization, frozen["sha256"])
+    postnorm_cache_root = outputs_root / "experiments/E003b/runs" / POSTNORM_CACHE_RUN
     fusion_records, fusion_meta = _load_attempt_cache(args.feature_cache, "training",
         stage="pre-temporal-fusion", source_normalization=normalization, source_sha=frozen["sha256"])
     fusion_val, fusion_val_meta = _load_attempt_cache(args.feature_cache, "validation",
         stage="pre-temporal-fusion", source_normalization=normalization, source_sha=frozen["sha256"])
-    head_records, head_meta = _load_attempt_cache(head_root, "training",
+    head_records, head_meta = _load_attempt_cache(postnorm_cache_root, "training",
         stage="post-final-LayerNorm", source_normalization=normalization, source_sha=frozen["sha256"])
-    head_val, head_val_meta = _load_attempt_cache(head_root, "validation",
+    head_val, head_val_meta = _load_attempt_cache(postnorm_cache_root, "validation",
         stage="post-final-LayerNorm", source_normalization=normalization, source_sha=frozen["sha256"])
     selected = _smoke_subset(args.smoke_selection, target_data) if args.smoke else None
     if selected:
@@ -405,20 +369,20 @@ def assembly(args):
         dropout=.1, rgb_branch_dropout=.5)
     source_model.load_state_dict(frozen["checkpoint"]["model_state"], strict=True)
     e003b_run._freeze_source(source_model)
-    model = _model(args.arm, source_model, adapted, device)
+    model = _model(args.arm, source_model, device)
     del source_model
     datasets = {"training": e003b_run.CachedTracks(head_records if args.arm == "head" else fusion_records),
         "validation": e003b_run.CachedTracks(head_val if args.arm == "head" else fusion_val)}
     val_batches = e003b_run._batches(datasets["validation"], seed=0)
     initial_tracks = predict(model, val_batches, device)
-    metrics = _check_adapted_predictions(initial_tracks, head_root / f"{TARGET}-validation/predictions.npz",
-        expected_metrics=None if args.smoke else adapted["validation"], require_all=not args.smoke)
-    if not args.smoke and (not math.isclose(metrics["track_weighted"]["macro_f1"], ADAPTED["f1"], rel_tol=1e-6, abs_tol=1e-8)
-            or not math.isclose(metrics["track_ce"], ADAPTED["ce"], rel_tol=1e-6, abs_tol=1e-8)):
-        raise ValueError("E003c epoch0 metrics differ from the pinned E003b selected head")
+    source_predictions = e003b_run._source_prediction_path(frozen["root"], SOURCE, TARGET, "e002d", outputs_root)
+    metrics = _check_initial_predictions(initial_tracks, source_predictions, require_all=not args.smoke)
+    if not args.smoke and not np.isclose(metrics["track_weighted"]["macro_f1"], SOURCE_DIRECT_F1,
+            rtol=1e-6, atol=1e-8):
+        raise ValueError("E003c epoch0 F1 differs from the pinned E002d original source head")
     parameter_names = [name for name, parameter in model.named_parameters() if parameter.requires_grad]
     if args.arm == "head" and parameter_names != ["linear.weight", "linear.bias"]:
-        raise ValueError("Head control must train only the 516 adapted-head parameters")
+        raise ValueError("Head control must train only the 516 original source-head parameters")
     if args.arm == "temporal-head" and (not any(name.startswith("temporal.") for name in parameter_names)
             or not all(name.startswith(("temporal.", "final_norm.", "head.")) for name in parameter_names)):
         raise ValueError("Temporal-head must train only temporal blocks, final LayerNorm and head")
@@ -430,13 +394,12 @@ def assembly(args):
 
     train_steps = math.ceil(len(datasets["training"]) / SETTINGS["batch_size"])
     return {"config": {"experiment": "E003c", "original_source": SOURCE, "target": TARGET,
-            "reference": "E002d ROAD→LOKI + E003b head epoch87", "arm": args.arm,
+            "reference": "Original E002d ROAD→LOKI source head", "arm": args.arm,
+            "initialization": "source-checkpoint", "initialization_checkpoint": frozen["identity"],
             "dropout_enabled": False, "optimizer_reset": True,
             "training_order": "locator-sorted before persistent seeded shuffle",
             "source_checkpoint": frozen["identity"], "source_checkpoint_sha256": frozen["sha256"],
-            "adapted_head_checkpoint": {"path": str(head_root / "best.pt"), "sha256": ADAPTED["sha256"],
-                "selected_epoch": ADAPTED["epoch"], "selection": adapted["selection"]},
-            "adapted_head_validation": metrics, "normalization_source": SOURCE, "normalization": normalization,
+            "initial_validation": metrics, "normalization_source": SOURCE, "normalization": normalization,
             "population": {"training": len(datasets["training"]), "validation": len(datasets["validation"])},
             "feature_cache": {"pre_temporal": {"training": fusion_meta, "validation": fusion_val_meta},
                 "post_final_norm": {"training": head_meta, "validation": head_val_meta}},
@@ -450,7 +413,7 @@ def assembly(args):
         "epoch_operation": _warmup_epoch(args.arm, SETTINGS["warmup_epochs"] * train_steps),
         "log_learning_rate": True,
         "custom_smoke": True,
-        "run_name": f"e003c-road-waymo-to-loki-{args.arm}-s0" + ("-smoke" if args.smoke else "")}
+        "run_name": f"e003c-road-waymo-to-loki-source-{args.arm}-s0" + ("-smoke" if args.smoke else "")}
 
 
 def train(args):

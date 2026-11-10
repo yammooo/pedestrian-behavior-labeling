@@ -19,6 +19,50 @@ Frozen validation support is **78 ROAD groups / 1,110 tracks / 45,388 GT frames*
 
 [SVG version](../../outputs/experiments/E002/transfer-validation-20261102/figures/f1.svg).
 
+## Confusion-matrix pictures
+
+These matrices compare each selected checkpoint on source validation with its **direct target validation predictions before adaptation**. Rows are GT; columns are predictions. The class order is Moving, Stopped, Waiting to cross, Crossing. Each panel reports its matching raw or track-weighted macro-F1. `GT` is the accepted-frame denominator; `w` is track-weighted row mass, not a track count. Both row-normalized figures use the same fixed0–100% color scale.
+
+![ROAD-Waymo to LOKI track-weighted row-normalized confusion matrices](../../outputs/experiments/E002/transfer-validation-20261102/figures/confusions/road-waymo-to-loki-track-weighted-normalized.png)
+
+[SVG version](../../outputs/experiments/E002/transfer-validation-20261102/figures/confusions/road-waymo-to-loki-track-weighted-normalized.svg).
+
+![LOKI to ROAD-Waymo track-weighted row-normalized confusion matrices](../../outputs/experiments/E002/transfer-validation-20261102/figures/confusions/loki-to-road-waymo-track-weighted-normalized.png)
+
+[SVG version](../../outputs/experiments/E002/transfer-validation-20261102/figures/confusions/loki-to-road-waymo-track-weighted-normalized.svg).
+
+<details>
+<summary>Raw and count confusion views</summary>
+
+Each count figure uses one color range across its source and target panels. Raw counts are GT frames; track-weighted counts are weighted GT mass and sum to the number of evaluated tracks.
+
+![ROAD-Waymo to LOKI raw row-normalized confusion matrices](../../outputs/experiments/E002/transfer-validation-20261102/figures/confusions/road-waymo-to-loki-raw-normalized.png)
+
+[SVG version](../../outputs/experiments/E002/transfer-validation-20261102/figures/confusions/road-waymo-to-loki-raw-normalized.svg).
+
+![LOKI to ROAD-Waymo raw row-normalized confusion matrices](../../outputs/experiments/E002/transfer-validation-20261102/figures/confusions/loki-to-road-waymo-raw-normalized.png)
+
+[SVG version](../../outputs/experiments/E002/transfer-validation-20261102/figures/confusions/loki-to-road-waymo-raw-normalized.svg).
+
+| Direction | Weighting | View | PNG | SVG |
+|---|---|---|---|---|
+| ROAD-Waymo → LOKI | Raw | Counts | [PNG](../../outputs/experiments/E002/transfer-validation-20261102/figures/confusions/road-waymo-to-loki-raw-count.png) | [SVG](../../outputs/experiments/E002/transfer-validation-20261102/figures/confusions/road-waymo-to-loki-raw-count.svg) |
+| ROAD-Waymo → LOKI | Raw | Row-normalized | [PNG](../../outputs/experiments/E002/transfer-validation-20261102/figures/confusions/road-waymo-to-loki-raw-normalized.png) | [SVG](../../outputs/experiments/E002/transfer-validation-20261102/figures/confusions/road-waymo-to-loki-raw-normalized.svg) |
+| ROAD-Waymo → LOKI | Track-weighted | Counts | [PNG](../../outputs/experiments/E002/transfer-validation-20261102/figures/confusions/road-waymo-to-loki-track-weighted-count.png) | [SVG](../../outputs/experiments/E002/transfer-validation-20261102/figures/confusions/road-waymo-to-loki-track-weighted-count.svg) |
+| LOKI → ROAD-Waymo | Raw | Counts | [PNG](../../outputs/experiments/E002/transfer-validation-20261102/figures/confusions/loki-to-road-waymo-raw-count.png) | [SVG](../../outputs/experiments/E002/transfer-validation-20261102/figures/confusions/loki-to-road-waymo-raw-count.svg) |
+| LOKI → ROAD-Waymo | Raw | Row-normalized | [PNG](../../outputs/experiments/E002/transfer-validation-20261102/figures/confusions/loki-to-road-waymo-raw-normalized.png) | [SVG](../../outputs/experiments/E002/transfer-validation-20261102/figures/confusions/loki-to-road-waymo-raw-normalized.svg) |
+| LOKI → ROAD-Waymo | Track-weighted | Counts | [PNG](../../outputs/experiments/E002/transfer-validation-20261102/figures/confusions/loki-to-road-waymo-track-weighted-count.png) | [SVG](../../outputs/experiments/E002/transfer-validation-20261102/figures/confusions/loki-to-road-waymo-track-weighted-count.svg) |
+
+</details>
+
+Rebuild all eight PNG/SVG grids from the frozen manifest, [collected source-validation metrics](../../outputs/experiments/E002/transfer-validation-20261102/source-validation-metrics.json) and existing target-validation metric JSONs:
+
+```bash
+MPLCONFIGDIR=/tmp/mpl-e002-transfer uv run --locked --extra cpu python scripts/plot-e002-transfer-confusions.py
+```
+
+The script checks checkpoint lineage, source F1/CE against the manifest, target population/selection identity, finite nonnegative 4×4 matrices, class supports and confusion totals. It reads saved metrics only; no inference or training is run.
+
 ## Reading the result
 
 All eight checkpoints lose **16.6–33.0 F1 points** on the opposite validation set. The best input differs by direction: geometry + RGB + LiDAR for ROAD → LOKI (46.50%); geometry + RGB for LOKI → ROAD (46.33%). No package retains its source-validation F1 or wins both directions. The larger source-validation scores of LOKI LiDAR models do not carry over to ROAD; the LOKI geometry + LiDAR checkpoint loses 33.00 points.

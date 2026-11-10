@@ -1,6 +1,6 @@
 # Research dashboard
 
-Updated **2026-11-06**. We are developing a reliable **offline, given-track pedestrian behavior labeler**. Final architecture and publication contribution remain provisional. Deadline **17 December 2026**; **7–17 December** is protected for buffer and handover. The [literature review](literature/offline-labeling-research-direction.md) supports an empirical study first, with one conditional retrieval or supervision comparison.
+Updated **2026-11-10**. We are developing a reliable **offline, given-track pedestrian behavior labeler**. Final architecture and publication contribution remain provisional. Deadline **17 December 2026**; **7–17 December** is protected for buffer and handover. The [literature review](literature/offline-labeling-research-direction.md) supports an empirical study first, with one conditional retrieval or supervision comparison.
 
 ## Current evidence
 
@@ -17,12 +17,12 @@ Updated **2026-11-06**. We are developing a reliable **offline, given-track pede
 
 - **[E003b embedding diagnostic](../experiments/E003b-target-head-adaptation/README.md#diagnostic-results):** pooled PCA and UMAP of both original E002d bodies on both validation datasets are complete. UMAP shows dataset-dominated neighborhoods across the checked seeds/settings despite shared broad behavior structure; recoverable target information does not imply dataset invariance. No adaptation training or test access.
 - **[E003c source-checkpoint fine-tuning](../experiments/E003c-temporal-adaptation/README.md#full-source-initialized-results-2026-11-06):** both ROAD→LOKI seed0 full runs start from the original E002d head (46.50% validation F1). Fine-tuning temporal blocks + final LayerNorm reaches **68.17% F1**, +4.27 pp over head-only, but selected CE is slightly higher (**0.52458 vs0.51994**); validation CE bottoms at e21 then rebounds, with a large online-train/validation gap. Full target-label access and validation selection; tests remain closed.
-- **[E002f temporal architecture](../experiments/E002f-temporal-architecture/README.md):** approved bounded ROAD→LOKI seed0 check: parameter-matched one-layer Transformer/BiLSTM source training followed by direct transfer and head-only/temporal-head adaptation. Existing two-layer results supply the reference. Launcher preparation and acceptance are in progress; no full training started.
+- **[E002f temporal architecture](../experiments/E002f-temporal-architecture/README.md):** bounded ROAD→LOKI seed0 check is ready: parameter-matched one-layer Transformer/BiLSTM source training followed by direct transfer and head-only/temporal-head adaptation. CPU/CUDA acceptance and six logged GPU smokes pass. Existing two-layer results supply the reference; full runs remain user-launched and tests closed.
 
 
 ## Next work
 
-1. Review the completed [E003c source-initialized comparison](../experiments/E003c-temporal-adaptation/README.md#full-source-initialized-results-2026-11-06): temporal fine-tuning raises selected F1 by4.27 pp over head-only but has slightly higher CE and a widening train/validation gap. Inspect errors before deciding whether to repeat this comparison; no next model study is selected. Tests remain closed.
+1. Launch the bounded [E002f architecture check](../README.md#e002f-temporal-architecture-comparison) manually. Both smaller backbones passed CUDA/W&B acceptance; full ROAD→LOKI source/adaptation runs remain user-launched. Keep the comparison to one direction and seed, with tests closed.
 2. Arrange a separate backup for valuable checkpoints/predictions; external storage is **TBD**. Original interrupted attempts and all earlier evidence remain preserved.
 3. Choose at most one justified representation or supervision follow-up after reviewing the remaining failures and cost. Masking does not claim independent sensor outages or architectural novelty. The unused retrieval proposal is deferred; E004 remains conditional.
 

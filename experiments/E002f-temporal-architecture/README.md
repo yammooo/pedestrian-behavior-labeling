@@ -1,6 +1,6 @@
 # E002f — Temporal architecture on ROAD→LOKI
 
-**Status: implementation prepared; GPU calibration/smokes and full runs not yet recorded.** This comparison asks whether a one-layer Transformer or a one-layer BiLSTM changes source-trained and target-adapted behavior labeling when the shared E002d fusion input and training budgets stay fixed. It covers ROAD-Waymo → LOKI only, seed0. No reverse transfer or additional temporal variants are in scope.
+**Status: implemented and accepted, 2026-11-10; full comparison ready for user launch.** This comparison asks whether a one-layer Transformer or a one-layer BiLSTM changes source-trained and target-adapted behavior labeling when the shared E002d fusion input and training budgets stay fixed. It covers ROAD-Waymo → LOKI only, seed0. No reverse transfer or additional temporal variants are in scope.
 
 ## Fixed comparison
 
@@ -10,6 +10,9 @@ Both models use E002d's `g-rgb-dditr` input: geometry/RGB/LiDAR branches, branch
 |---|---|---:|
 | `transformer-1layer` | One 128-wide, 4-head RoPE block; FFN512; dropout0.1 |199,044 |
 | `bilstm-96` | Packed one-layer BiLSTM, hidden96/direction; output dropout0.1; 192→128 projection |199,044 |
+| Existing two-layer reference | Two 128-wide, 4-head RoPE blocks; FFN512; dropout0.1 |397,316 |
+
+The existing [E002d source model](../E002d-rgb-lidar-complementarity/README.md) and [E003c source-initialized adaptations](../E003c-temporal-adaptation/README.md#full-source-initialized-results-2026-11-06) supply the two-layer reference; the launcher does not retrain it. Its ROAD→LOKI validation F1 is46.50% before adaptation,63.90% after head-only fitting and68.17% after temporal/head fitting. Wider historical two-layer models are not additional launcher arms.
 
 The single-layer LSTM uses ordinary PyTorch biases; complete-track lengths are packed so backward recurrence never processes padded suffixes. Both fusion outputs are128-D. Each whole source model has552,196 trainable parameters, including the shared trainable branches/readout.
 
@@ -51,4 +54,13 @@ Standalone source, extraction and adaptation commands are available through `scr
 
 ## Acceptance and results
 
-Required checks: parameter counts and model specs; packed BiLSTM ignores suffix padding and returns zero padded outputs; source models train the branches/fusion end-to-end; direct target predictions reproduce epoch0 for both adaptation arms; exact source-head tensor equality; disabled adaptation dropout; identical target track order, GT, padding and batch boundaries; fresh optimizers and intended LR groups; checkpoint selection/reload; and a full64×102 CUDA update for both backbones. The bounded GPU smoke must execute the actual RGB/point path. Tests stay closed. Numerical results, run paths, checkpoint hashes, W&B references and deviations: **TBD**.
+At revision `76589ff`, the full CPU suite passes272 tests with13 expected CUDA skips; all272 CUDA tests pass. Both backbones pass64×102 forward/masked-CE/backward/AdamW probes. These synthetic probes omit point tokens; actual read-only RGB/LiDAR paths are exercised by the source smokes. They verify execution bounds, not optimal GPU utilization or full-epoch runtime.
+
+All six one-epoch GPU/W&B smokes complete with empty failure lists, using three training and two validation tracks per dataset. Source checkpoint comparisons confirm updates in geometry, RGB, spatial readout, fusion and temporal parameters. Saved predictions reconstruct selected metrics; both adaptation arms reproduce their source model's direct target predictions at epoch0 and retain ROAD normalization. Best/last checkpoints and PNG/SVG plots exist. W&B readback includes step loss, epoch CE/F1 and aggregate tables/plots; no model/checkpoint or full-prediction uploads. Original E002d checkpoint and protected inputs remain unchanged.
+
+| Architecture | Source smoke | Head smoke | Temporal/head smoke |
+|---|---|---|---|
+| Transformer ×1 |[9dgb5s09](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/9dgb5s09)|[jp9x5dr3](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/jp9x5dr3)|[2sjb6pix](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/2sjb6pix)|
+| BiLSTM |[ppyqf4ey](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/ppyqf4ey)|[ch2j6chl](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/ch2j6chl)|[woh9j6zm](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/woh9j6zm)|
+
+Aalto evidence: `outputs/experiments/E002f/acceptance-20261110/{cuda-tests.log,smoke.log,verification.json}`, `calibration/acceptance-20261110/profile.json`, `runs/acceptance-20261110/` and `features/acceptance-20261110/`. CLI/help, shell syntax, local documentation links and diff checks pass. No full comparison training or held-out evaluation was launched; scientific results remain **TBD**.

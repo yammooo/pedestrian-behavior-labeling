@@ -14,6 +14,8 @@ The study is framed under a concrete contract: **RGB + 2D pedestrian tracks + Li
 
 The current target ontology is motivated by [LOKI](datasets/loki.md): Moving, Stopped, Waiting to cross and Crossing. [E001's four-state projection](../experiments/E001-kinematic-transfer/README.md#accepted-four-state-projection) is accepted for that diagnostic, with native semantic differences retained. The longer-term endpoint may be a transferable shared representation with lightweight dataset-specific behavior heads; no universal hard-coded ontology is required. Native semantics stay in dataset notes.
 
+**Bounded architecture check agreed 2026-11-10:** [E002f](../experiments/E002f-temporal-architecture/README.md) compares a one-layer Transformer and parameter-matched BiLSTM against the existing two-layer reference, only ROAD→LOKI at seed0. Two end-to-end source trainings retain E002d's inputs and recipe, followed by direct target-validation transfer and E003c-style original-head-only/temporal-head adaptation. This checks dependence on temporal architecture; it does not replace the label-efficiency study or authorize a wider search. Full runs remain user-launched; held-out tests stay closed.
+
 ## Research questions
 
 **RQ1: Given RGB, LiDAR, 2D/3D pedestrian tracks, and ego motion, which pedestrian behaviors can be reliably labeled offline, what does each modality contribute, and under which observation conditions do the labels become ambiguous?**

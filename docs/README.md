@@ -17,6 +17,7 @@ Updated **2026-11-06**. We are developing a reliable **offline, given-track pede
 
 - **[E003b embedding diagnostic](../experiments/E003b-target-head-adaptation/README.md#diagnostic-results):** pooled PCA and UMAP of both original E002d bodies on both validation datasets are complete. UMAP shows dataset-dominated neighborhoods across the checked seeds/settings despite shared broad behavior structure; recoverable target information does not imply dataset invariance. No adaptation training or test access.
 - **[E003c source-checkpoint fine-tuning](../experiments/E003c-temporal-adaptation/README.md#full-source-initialized-results-2026-11-06):** both ROAD→LOKI seed0 full runs start from the original E002d head (46.50% validation F1). Fine-tuning temporal blocks + final LayerNorm reaches **68.17% F1**, +4.27 pp over head-only, but selected CE is slightly higher (**0.52458 vs0.51994**); validation CE bottoms at e21 then rebounds, with a large online-train/validation gap. Full target-label access and validation selection; tests remain closed.
+- **[E002f temporal architecture](../experiments/E002f-temporal-architecture/README.md):** approved bounded ROAD→LOKI seed0 check: parameter-matched one-layer Transformer/BiLSTM source training followed by direct transfer and head-only/temporal-head adaptation. Existing two-layer results supply the reference. Launcher preparation and acceptance are in progress; no full training started.
 
 
 ## Next work

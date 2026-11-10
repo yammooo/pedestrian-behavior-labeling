@@ -982,3 +982,14 @@ bash scripts/run-e003c-sequential.sh
 ```
 
 The command reuses the completed original-source fusion cache, then runs the two target fits sequentially. Fresh outputs live under `outputs/experiments/E003c/runs/source-adaptation-<timestamp>/`. All LOKI training/validation tracks are retained; held-out tests remain closed. Parent checkpoints, statistics and caches stay read-only. The script stops on failure without automatic retry or resume.
+
+## E002f temporal architecture comparison
+
+The [E002f protocol](experiments/E002f-temporal-architecture/README.md) compares ROAD-trained one-layer Transformer and BiLSTM fusion models, followed by source-head-only and temporal-head adaptation for each on LOKI. On Aalto, run the sequential launcher after pulling the reviewed revision:
+
+```bash
+cd /home/user20/projects/pedestrian-behavior-labeling-e002b-evaluation
+bash scripts/run-e002f-sequential.sh
+```
+
+It first checks both backbones at the inherited64×102 temporal bound, then runs two full ROAD source trainings, architecture-specific LOKI feature caches and four full target fits. For bounded GPU/W&B integration checks, use `E002F_SMOKE=1 bash scripts/run-e002f-sequential.sh`; this uses the explicit three-train/two-validation selection. Output roots are fresh and ignored under `outputs/experiments/E002f/`; failures stop without retry or resume.

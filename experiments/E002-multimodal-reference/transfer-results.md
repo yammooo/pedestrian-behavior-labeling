@@ -200,3 +200,61 @@ E003b head-only adaptation changes predicted labels on the same target-validatio
 Each percentage uses the weighted timesteps of the row's **GT class** as denominator. These are classification confusions, not observed behavior transitions. Recovery demonstrates accessible target information, not one universal fix. Different class frequencies can affect precision, but cannot alone explain the changing per-GT-class error rates. No single cause is established.
 
 [Numerical diagnostic](../../outputs/experiments/E002/transfer-confusion-diagnostic-20261110/summary.json). Reproduce on Aalto from the repository root with [analyze-e002-transfer-confusions.py](../../scripts/analyze-e002-transfer-confusions.py), using the existing E002a extractor Python environment and saved predictions/track arrays. No training, inference, native point-cache access, label correction or test-set access was performed.
+
+
+## Class-conditioned statistics and transfer failures
+
+This diagnostic uses the original E002d full-fusion geometry + RGB + LiDAR checkpoints (RGB branch dropout 0.5, seed 0), their own-source validation predictions, and direct opposite-source validation predictions. It uses the frozen ROAD-Waymo validation population (78 groups, 1,110 tracks, 45,388 accepted GT frames) and LOKI validation population (93 groups, 1,861 tracks, 60,231 accepted GT frames). Both validation sets already informed development; these statistics do not establish the physical speed or duration range in either training population.
+
+Every accepted GT frame keeps weight `1 / total accepted GT frames in its track` in every subset. Speed fractions are normalized within the valid speed subset; valid-velocity coverage is shown in raw and track-weighted terms, with the complement counted as invalid rather than imputed. The sustained proxy uses centered seven-slot windows with all seven consecutive grid slots labeled as the same GT class and valid positions, plus valid actual endpoint timestamps and positive elapsed time. The instantaneous and sustained quantiles use different eligible populations; their differences should not be attributed to smoothing alone. Sustained-window coverage is restricted to about 49–70%, and the motion tail remains. Run lengths are GT-timestep-weighted observed runs: each accepted GT timestep inherits its contiguous same-class run length; unlabeled frames and label changes split runs, and duration is nominal slots × 0.2 seconds. These observed runs are not true uncensored event durations. Velocity and displacement are proxies, not independently verified physical truth.
+
+| Dataset | GT class | GT share | Speed median [p10–p90], m/s | Net-speed median [p10–p90], m/s | Observed run median [p90], s |
+|---|---|---:|---:|---:|---:|
+| ROAD | Moving | 52.1% | 1.25 [0.48–1.62] | 1.25 [0.64–1.60] | 4.4 [13.4] |
+| ROAD | Stopped | 26.0% | 0.01 [0.00–1.06] | 0.01 [0.00–0.66] | 4.2 [16.2] |
+| ROAD | Waiting | 5.8% | 0.01 [0.00–0.54] | 0.01 [0.00–0.42] | 5.2 [11.2] |
+| ROAD | Crossing | 16.1% | 1.40 [0.90–1.72] | 1.39 [0.94–1.67] | 4.2 [8.6] |
+| LOKI | Moving | 70.6% | 1.29 [0.65–1.91] | 1.28 [0.74–1.67] | 3.8 [11.4] |
+| LOKI | Stopped | 8.8% | 0.15 [0.00–0.62] | 0.08 [0.00–0.32] | 3.0 [12.0] |
+| LOKI | Waiting | 10.1% | 0.14 [0.00–0.69] | 0.07 [0.00–0.25] | 5.6 [20.2] |
+| LOKI | Crossing | 10.5% | 1.34 [0.84–1.88] | 1.33 [0.95–1.72] | 6.0 [16.2] |
+
+<details>
+<summary>Full counts, validity coverage and fractions below 0.2 m/s</summary>
+
+| Dataset | GT class | Frames / tracks | GT share (weighted) | Valid ped speed coverage (raw / weighted) | Ped speed p10 / p50 / p90 (m/s) | Ped speed <0.2 | 1.2 s coverage (raw / weighted) | 1.2 s net speed p10 / p50 / p90 (m/s) | Net speed <0.2 | GT-timestep-weighted observed run p50 / p90 (s) |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| ROAD-Waymo | Moving | 24,018 / 658 | 52.1% | 19,688/24,018 (82.0% / 86.2%) | 0.48/1.25/1.62 | 6.3% | 14,497/24,018 (60.4% / 51.7%) | 0.64/1.25/1.60 | 4.1% | 4.4 / 13.4 |
+| ROAD-Waymo | Stopped | 11,232 / 306 | 26.0% | 9,473/11,232 (84.3% / 87.3%) | 0.00/0.01/1.06 | 76.2% | 7,129/11,232 (63.5% / 49.1%) | 0.00/0.01/0.66 | 82.8% | 4.2 / 16.2 |
+| ROAD-Waymo | Waiting to cross | 3,317 / 91 | 5.8% | 2,553/3,317 (77.0% / 80.0%) | 0.00/0.01/0.54 | 78.8% | 1,748/3,317 (52.7% / 49.9%) | 0.00/0.01/0.42 | 80.5% | 5.2 / 11.2 |
+| ROAD-Waymo | Crossing | 6,821 / 262 | 16.1% | 6,166/6,821 (90.4% / 92.1%) | 0.90/1.40/1.72 | 2.5% | 4,269/6,821 (62.6% / 52.3%) | 0.94/1.39/1.67 | 1.9% | 4.2 / 8.6 |
+| LOKI | Moving | 37,410 / 1,453 | 70.6% | 37,380/37,410 (99.9% / 97.7%) | 0.65/1.29/1.91 | 2.3% | 29,055/37,410 (77.7% / 57.6%) | 0.74/1.28/1.67 | 2.0% | 3.8 / 11.4 |
+| LOKI | Stopped | 4,206 / 181 | 8.8% | 4,204/4,206 (100.0% / 98.8%) | 0.00/0.15/0.62 | 58.4% | 3,193/4,206 (75.9% / 51.2%) | 0.00/0.08/0.32 | 78.3% | 3.0 / 12.0 |
+| LOKI | Waiting to cross | 8,320 / 226 | 10.1% | 8,318/8,320 (100.0% / 98.9%) | 0.00/0.14/0.69 | 61.7% | 6,992/8,320 (84.0% / 68.1%) | 0.00/0.07/0.25 | 85.0% | 5.6 / 20.2 |
+| LOKI | Crossing | 10,295 / 306 | 10.5% | 10,294/10,295 (100.0% / 99.5%) | 0.84/1.34/1.88 | 0.7% | 8,521/10,295 (82.8% / 69.8%) | 0.95/1.33/1.72 | 0.3% | 6.0 / 16.2 |
+
+</details>
+
+Moving and Crossing have similar median speeds across datasets, while Stopped has a lower ROAD median but a higher upper tail. Class support differs substantially (Stopped 26.0% ROAD /8.8% LOKI), and observed Crossing runs are longer in LOKI (median 6.0 s /p90 16.2 s versus 4.2 s /8.6 s in ROAD). These are distinct distribution differences, not one global speed shift.
+
+The clearest matched-speed difference is ROAD-Waymo GT Crossing at 1–2 m/s: across 5,082 frames in 235 tracks (track-weighted mass 138.6), the ROAD-trained model predicts Crossing on 73.5% of the weighted GT mass, while the LOKI-trained model predicts Crossing on 6.0% and Moving on 93.8%. Both summaries use the same target GT class and speed bin, so the prediction difference persists at comparable observed speed; it does not isolate why.
+
+Figure 1 compares ROAD/LOKI track-weighted speed CDFs, sampled at 1% quantiles, for instantaneous velocity and the sustained net-displacement proxy. Figure 2 compares the own-source-trained and opposite-source-trained full-fusion model predictions within each GT-class and physical-speed bin. The shared bins are invalid, [0, 0.2), [0.2, 0.5), [0.5, 1), [1, 2), and [2, inf) m/s; empty bins are unscored. Percentages are predicted-class shares within each GT class/bin, with the original frame weights retained.
+
+![Class-conditioned instantaneous and sustained motion distributions](../../outputs/experiments/E002/transfer-statistics/figures/class-motion-cdf.png)
+
+[SVG](../../outputs/experiments/E002/transfer-statistics/figures/class-motion-cdf.svg).
+
+![Predicted classes by GT class and speed bin](../../outputs/experiments/E002/transfer-statistics/figures/predictions-by-speed-bin.png)
+
+[SVG](../../outputs/experiments/E002/transfer-statistics/figures/predictions-by-speed-bin.svg).
+
+The paired speed-bin predictions show how errors change between own-source and opposite-source training at comparable observed speed, but speed is only one measured correlate and does not resolve annotation semantics or scene context. Overlapping sustained windows are not independent examples. Invalid velocity and position reduce eligible coverage, so those summaries do not describe the full GT population.
+
+Reproduce on Aalto from the repository root of the `pedestrian-behavior-labeling-e002b-evaluation` checkout with the saved validation predictions and prepared track archives:
+
+```bash
+MPLCONFIGDIR=/tmp/mpl-e002-transfer-statistics ~/.local/bin/uv run --locked --extra cu118 python scripts/analyze-e002-transfer-statistics.py
+```
+
+The script checks source checkpoint lineage against [transfer-comparison.json](transfer-comparison.json), prediction population/GT/timestamp alignment and frozen denominators. It reads only saved E002d predictions and referenced prepared track arrays; no inference or training is run. Numerical data, paths and quantile CDF points are saved in [summary.json](../../outputs/experiments/E002/transfer-statistics/summary.json).

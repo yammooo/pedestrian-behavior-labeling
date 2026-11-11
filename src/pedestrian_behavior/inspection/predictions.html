@@ -10,7 +10,7 @@
 </style>
 <header><h1>Pedestrian prediction review</h1><span class="muted">Saved predictions · accepted GT only for scores · complete recorded tracks</span></header>
 <div class="controls">
- <div class="row"><label>Evaluation dataset<select id="dataset"><option value="loki">LOKI</option><option value="road-waymo">ROAD-Waymo</option></select></label><label>Evaluation split<select id="split"><option value="test">Test (E001)</option><option value="validation">Source validation (E002a/b)</option></select></label><label>Find model runs<input id="run-search" placeholder="e.g. E001c boxes seed0" type="search"></label><button id="refresh">Refresh runs</button></div>
+ <div class="row"><label>Evaluation dataset<select id="dataset"><option value="loki">LOKI</option><option value="road-waymo">ROAD-Waymo</option></select></label><label>Evaluation split<select id="split"><option value="test">Test (E001)</option><option value="validation">Validation (E002/E003)</option></select></label><label>Find model runs<input id="run-search" placeholder="e.g. E001c boxes seed0" type="search"></label><button id="refresh">Refresh runs</button></div>
  <div id="models"></div>
  <div class="row">
   <label>Metric<select id="metric"><option value="accuracy">Accuracy ↑</option><option value="ce">Mean CE ↓</option><option value="macro_f1">Supported-class macro-F1 ↑</option><option value="confusion_rate" disabled>Specific-confusion rate ↓</option></select></label>

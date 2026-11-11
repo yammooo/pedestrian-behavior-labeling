@@ -14,6 +14,8 @@ from pedestrian_behavior.evaluation import confusion_metrics, load_predictions
 INDEX_VERSION = 2
 METRICS = ("accuracy", "ce", "macro_f1", "confusion_rate")
 SPLITS = ("test", "validation")
+VALIDATION_EXPERIMENTS = ("E002c", "E002d", "E002e", "E002f", "E003a", "E003b", "E003c")
+VALIDATION_CLASSES = ["MOVING", "STOPPED", "WAITING_TO_CROSS", "CROSSING"]
 
 
 def _run_label(config, experiment):
@@ -24,6 +26,159 @@ def _run_label(config, experiment):
         return "Transformer", config.get("arm", config.get("configuration", "unknown")), None
     variant = config.get("model_variant", config.get("variant", "unknown"))
     return "Transformer", config.get("arm", config.get("configuration", "unknown")), str(variant)
+
+
+def _validation_record(directory, experiment, config, provenance, prediction_paths, *, role, label):
+    """Describe one completed validation prediction set from a known E002/E003 layout."""
+    settings = config.get("settings") or {}
+    model = config.get("model") or settings.get("model") or {}
+    model = model if isinstance(model, dict) else {}
+    architecture = config.get("architecture") or model.get("architecture") or config.get("variant")
+    architecture = architecture if isinstance(architecture, str) else ""
+    variant = config.get("model_variant", config.get("variant"))
+    capacity = None
+    temporal = model.get("temporal") or {}
+    if isinstance(temporal, dict) and temporal:
+        capacity = " · ".join(str(value) for value in (
+            f"{temporal.get('width')} width" if temporal.get("width") is not None else None,
+            f"{temporal.get('heads')} heads" if temporal.get("heads") is not None else None,
+            f"{temporal.get('layers')} layers" if temporal.get("layers") is not None else None,
+            f"FFN {temporal.get('ffn')}" if temporal.get("ffn") is not None else None) if value)
+    if architecture in ("bilstm-96", "transformer-1layer"):
+        capacity = ("hidden 96/direction · 192→128 projection" if architecture == "bilstm-96"
+                    else "128 width · 4 heads · 1 layer · FFN 512")
+        architecture = "BiLSTM" if architecture == "bilstm-96" else "Transformer"
+        variant = None
+    elif "bilstm" in architecture.lower():
+        architecture = "BiLSTM" + (" · " + architecture.split("-", 1)[1] if "-" in architecture else "")
+    elif "transformer" in architecture.lower():
+        architecture = "Transformer" + (" · " + architecture.split("-", 1)[1] if "-" in architecture else "")
+    elif experiment == "E003b" or experiment == "E003c":
+        architecture, capacity = "Transformer", "source temporal-small model"
+        if isinstance(config.get("head"), dict) and config["head"].get("shape"):
+            capacity = "source temporal-small model · head 128→4"
+    elif temporal:
+        architecture = "Transformer"
+    else:
+        architecture = "Transformer"
+    if capacity is None and variant == "temporal-small":
+        capacity = "128 width · 4 heads · 2 layers · FFN 512"
+    configuration = config.get("arm", config.get("configuration", "unknown"))
+    selected = (config.get("selected_checkpoint_epoch")
+                or provenance.get("selected_checkpoint_epoch")
+                or (provenance.get("selection") or {}).get("epoch"))
+    original_source = config.get("original_source")
+    source = original_source or config.get("source")
+    target = config.get("target")
+    reference = config.get("reference")
+    if isinstance(reference, dict):
+        reference = reference.get("experiment") or reference.get("checkpoint")
+    relative = str(directory)
+    key = hashlib.sha256((relative + "\0" + role).encode()).hexdigest()[:16]
+    dropout = model.get("rgb_branch_dropout", config.get("rgb_branch_dropout"))
+    dropout_label = "RGB branch dropout"
+    if dropout is None:
+        dropout = model.get("dropout")
+        dropout_label = "Model dropout"
+    if config.get("dropout_enabled") is False or experiment in ("E003b", "E003c"):
+        dropout, dropout_label = 0.0, "Dropout off"
+    return {"id": key, "path": str(directory), "relative": relative,
+        "experiment": experiment, "source": source, "target": target,
+        "original_source": original_source, "configuration": configuration,
+        "architecture": architecture, "model_variant": variant,
+        "variant_label": {"norm": "Norm", "temporal-small": "Temporal small",
+                          "branches-small": "Branches small"}.get(variant, variant),
+        "capacity_label": capacity,
+        "seed": settings.get("seed", config.get("seed")), "epochs": settings.get("epochs"),
+        "patience": settings.get("patience"), "classes": config.get("classes", VALIDATION_CLASSES),
+        "datasets": sorted(prediction_paths), "split": "validation",
+        "selected_epoch": selected, "evaluation_labels": label,
+        "adaptation_label": config.get("adaptation_label"), "reference_label": reference,
+        "dropout": dropout, "dropout_label": dropout_label,
+        "prediction_paths": {dataset: str(path) for dataset, path in prediction_paths.items()},
+        "attempt": directory.name, "_role": role}
+
+
+def _new_validation_records(directory, experiment, config, status, provenance):
+    """Handle only the recorded validation layouts used by completed E002c–f and E003 runs."""
+    if experiment not in VALIDATION_EXPERIMENTS or status.get("status") != "complete":
+        return []
+    kind = config.get("kind")
+    if experiment in ("E002c", "E002d", "E002e", "E003a"):
+        if kind != "exploratory-source-validation" or status.get("kind") != kind:
+            return []
+        source = config.get("source")
+        paths = {dataset: directory/(dataset + "-validation")/"predictions.npz"
+                 for dataset in ("loki", "road-waymo")}
+        paths = {dataset: path for dataset, path in paths.items() if path.is_file()}
+        if experiment != "E003a":
+            paths = {dataset: path for dataset, path in paths.items() if dataset == source}
+        if not paths:
+            return []
+        labels = {dataset: ("Source validation" if dataset == source else "Direct target validation")
+                  for dataset in paths}
+        return [_validation_record(directory, experiment, config, provenance, paths,
+                                   role="source-validation", label=labels)]
+
+    if experiment == "E002f":
+        if kind == "exploratory-source-validation" and status.get("kind") == kind:
+            source = config.get("source")
+            path = directory/(str(source) + "-validation")/"predictions.npz"
+            if not path.is_file():
+                return []
+            return [_validation_record(directory, experiment, config, provenance, {source: path},
+                                       role="source-validation", label={source: "Source validation"})]
+        if kind == "comparison" and status.get("kind") == kind and config.get("initialization") == "source-checkpoint":
+            target = config.get("target", config.get("source"))
+            path = directory/(str(target) + "-validation")/"predictions.npz"
+            if not path.is_file():
+                return []
+            arm = config.get("arm", config.get("configuration"))
+            label = {target: "Temporal-head adaptation · target validation" if arm == "temporal-head"
+                     else "Head-only adaptation · target validation"}
+            record_config = dict(config, arm="g-rgb-dditr", configuration="g-rgb-dditr",
+                                 adaptation_label=label[target])
+            return [_validation_record(directory, experiment, record_config, provenance, {target: path},
+                                       role="adaptation-" + str(arm), label=label)]
+        return []
+
+    if experiment == "E003b":
+        if kind != "comparison" or status.get("kind") != kind:
+            return []
+        target = config.get("target")
+        if target not in ("loki", "road-waymo"):
+            return []
+        records = []
+        roles = (("source-head-validation", "Original source head · target validation", "source-head"),
+                 (target + "-validation", "Fresh target head · target validation", "target-head"))
+        for folder, text, role in roles:
+            path = directory/folder/"predictions.npz"
+            if path.is_file():
+                record_config = dict(config, original_source=config.get("original_source", config.get("source")),
+                                     target=target, arm="g-rgb-dditr", configuration="g-rgb-dditr",
+                                     adaptation_label=text)
+                records.append(_validation_record(directory, experiment, record_config, provenance,
+                    {target: path}, role=role, label={target: text}))
+        return records
+
+    if experiment == "E003c":
+        if (kind != "comparison" or status.get("kind") != kind
+                or config.get("initialization") != "source-checkpoint"):
+            return []
+        target = config.get("target", config.get("source"))
+        if target not in ("loki", "road-waymo"):
+            return []
+        path = directory/(target + "-validation")/"predictions.npz"
+        if not path.is_file():
+            return []
+        arm = config.get("arm", config.get("configuration"))
+        text = "Source head fine-tuned · target validation" if arm == "head" else \
+               "Temporal-head fine-tuned · target validation"
+        record_config = dict(config, original_source=config.get("original_source", config.get("source")),
+                             target=target, arm="g-rgb-dditr", configuration="g-rgb-dditr", adaptation_label=text)
+        return [_validation_record(directory, experiment, record_config, provenance, {target: path},
+                                   role="adaptation-" + str(arm), label={target: text})]
+    return []
 
 
 def write_json(path, value):
@@ -83,6 +238,8 @@ class PredictionIndex:
         config_paths = set(self.outputs.glob("experiments/E001*/runs/**/config.json"))
         for experiment in ("E002a", "E002b"):
             config_paths.update(self.outputs.glob(f"experiments/{experiment}/runs/**/config.json"))
+        for experiment in VALIDATION_EXPERIMENTS:
+            config_paths.update(self.outputs.glob(f"experiments/{experiment}/runs/**/config.json"))
         for config_path in sorted(config_paths):
             directory = config_path.parent
             try:
@@ -95,6 +252,17 @@ class PredictionIndex:
                 if (any("smoke" in part.lower() or "provisional" in part.lower()
                         for part in Path(relative).parts) or config.get("smoke") or status.get("smoke")
                         or config.get("provisional") or status.get("provisional")):
+                    continue
+                if experiment in VALIDATION_EXPERIMENTS:
+                    try:
+                        provenance = json.loads((directory/"provenance.json").read_text())
+                    except (OSError, ValueError):
+                        provenance = {}
+                    for record in _new_validation_records(directory, experiment, config, status, provenance):
+                        record["relative"] = relative
+                        record["id"] = hashlib.sha256((relative + "\0" + record.pop("_role")).encode()).hexdigest()[:16]
+                        if record["split"] == split:
+                            found[record["id"]] = record
                     continue
                 if experiment.startswith("E001"):
                     if config.get("kind", "comparison") != "comparison" or status.get("kind", "comparison") != "comparison":
@@ -181,6 +349,11 @@ class PredictionIndex:
                     "attempt": directory.name}
             except (OSError, ValueError, KeyError, TypeError) as error:
                 warnings.append(f"{directory.name}: {error}")
+        if split == "validation":
+            for record in self._transfer_validation_records():
+                found[record["id"]] = record
+            for record in self._e002f_direct_validation_records():
+                found[record["id"]] = record
         with self.lock:
             self.runs = found
         return {"runs": [run for run in found.values() if run["split"] == split], "warnings": warnings}
@@ -192,7 +365,8 @@ class PredictionIndex:
             if (run not in self.runs or self.runs[run].get("split") != split
                     or dataset not in self.runs[run]["datasets"]):
                 raise ValueError("Unknown run, split, or evaluation dataset; refresh the run list")
-            path = Path(self.runs[run]["path"])/(dataset+"-"+split)/"predictions.npz"
+            path = Path(self.runs[run].get("prediction_paths", {}).get(
+                dataset, Path(self.runs[run]["path"])/(dataset+"-"+split)/"predictions.npz"))
             stat = path.stat()
             stamp = (stat.st_size, stat.st_mtime_ns)
             key = (run, dataset, split)
@@ -219,6 +393,101 @@ class PredictionIndex:
             while len(self.loaded) > 4:
                 self.loaded.popitem(last=False)
             return result
+
+    def _transfer_validation_records(self):
+        """Expose the frozen E002 transfer cells stored outside individual run directories."""
+        root = self.outputs/"experiments/E002/transfer-validation-20261102"
+        try:
+            status = json.loads((root/"status.json").read_text())
+            manifest = json.loads((root/"transfer-comparison.json").read_text())
+            if (status.get("status") != "complete"
+                    or manifest.get("comparison") != "E002-cross-dataset-validation-transfer"
+                    or manifest.get("status") != "frozen-before-cross-dataset-validation-inference"):
+                return []
+        except (OSError, ValueError):
+            return []
+        records = []
+        for model in manifest.get("models", []):
+            source, input_name = model.get("training_source"), model.get("input")
+            target = "loki" if source == "road-waymo" else "road-waymo" if source == "loki" else None
+            if target is None or not input_name:
+                continue
+            cell = root/"cells"/source/input_name
+            prediction_path, metrics_path = cell/"predictions.npz", cell/"metrics.json"
+            try:
+                metrics = json.loads(metrics_path.read_text())
+                if (metrics.get("split") != "validation"
+                        or metrics.get("training_source") != source
+                        or metrics.get("target_source") != target
+                        or metrics.get("input") != input_name
+                        or metrics.get("checkpoint_sha256") != model.get("checkpoint_sha256")
+                        or metrics.get("normalization_source") != source
+                        or type(metrics.get("selected_epoch")) is not int
+                        or not prediction_path.is_file()):
+                    continue
+            except (OSError, ValueError):
+                continue
+            config = {"source": source, "target": target, "original_source": source,
+                      "arm": model.get("arm"), "variant": model.get("variant"),
+                      "rgb_branch_dropout": model.get("rgb_branch_dropout"),
+                      "classes": VALIDATION_CLASSES, "settings": {"seed": manifest.get("seed")},
+                      "reference": model.get("experiment")}
+            record = _validation_record(root, "E002 transfer", config,
+                {"selected_checkpoint_epoch": metrics["selected_epoch"]}, {target: prediction_path},
+                role=source+"-"+input_name, label={target: "Direct target validation"})
+            record["relative"] = str(root.relative_to(self.outputs)) + "/cells/" + source + "/" + input_name
+            record["id"] = hashlib.sha256((record["relative"] + "\0" + record.pop("_role")).encode()).hexdigest()[:16]
+            record["experiment"] = model.get("experiment", "E002") + " direct transfer"
+            record["checkpoint_sha256"] = model["checkpoint_sha256"]
+            records.append(record)
+        return records
+
+    def _e002f_direct_validation_records(self):
+        """Expose the architecture-specific direct LOKI predictions saved beside E002f features."""
+        records = []
+        for prediction_path in self.outputs.glob(
+                "experiments/E002f/features/**/source-validation-predictions.npz"):
+            directory = prediction_path.parent
+            if any("smoke" in part.lower() or "acceptance" in part.lower() for part in directory.parts):
+                continue
+            try:
+                status = json.loads((directory/"status.json").read_text())
+                manifest = json.loads((directory/"feature-cache.json").read_text())
+                identity = manifest["validation"]
+                metrics = json.loads((directory/"loki-validation/metrics.json").read_text())
+            except (OSError, ValueError, KeyError, TypeError):
+                continue
+            source, target, architecture = identity.get("source"), identity.get("target"), identity.get("architecture")
+            source_checkpoint = identity.get("source_checkpoint") or {}
+            digest = identity.get("checkpoint_sha256")
+            if (status.get("status") != "complete" or status.get("held_out_tests") is not False
+                    or identity.get("experiment") != "E002f" or identity.get("split") != "validation"
+                    or identity.get("smoke_selection") is not None
+                    or source != "road-waymo" or target != "loki"
+                    or architecture not in ("bilstm-96", "transformer-1layer")
+                    or source_checkpoint.get("sha256") != digest
+                    or metrics.get("split") != "validation" or metrics.get("training_source") != source
+                    or metrics.get("target_source") != target or metrics.get("architecture") != architecture
+                    or metrics.get("checkpoint_sha256") != digest
+                    or metrics.get("normalization_source") != source
+                    or type(metrics.get("selected_epoch")) is not int or not prediction_path.is_file()):
+                continue
+            config = {"experiment": "E002f", "source": source, "target": target,
+                "original_source": source, "architecture": architecture, "variant": architecture,
+                "arm": "g-rgb-dditr", "configuration": "g-rgb-dditr",
+                "rgb_branch_dropout": 0.5, "reference": "E002f source checkpoint",
+                "selected_checkpoint_epoch": metrics["selected_epoch"],
+                "classes": VALIDATION_CLASSES,
+                "settings": {"seed": 0, "epochs": 100, "patience": 15}}
+            relative = str(directory.relative_to(self.outputs))
+            record = _validation_record(directory, "E002f", config, {}, {target: prediction_path},
+                role="direct-target-validation", label={target: "Direct target validation · source model"})
+            record["relative"] = relative
+            record["id"] = hashlib.sha256((relative + "\0" + record.pop("_role")).encode()).hexdigest()[:16]
+            record["experiment"] = "E002f direct transfer"
+            record["checkpoint_sha256"] = digest
+            records.append(record)
+        return records
 
     def compare(self, runs, dataset, split="test"):
         if not 1 <= len(runs) <= 4 or len(set(runs)) != len(runs):

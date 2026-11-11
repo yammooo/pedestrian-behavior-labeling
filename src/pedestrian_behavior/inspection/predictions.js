@@ -15,7 +15,20 @@ async function api(path, params={}, body=null) {
   if(!response.ok)throw new Error(value.error || response.statusText);
   return value;
 }
-function label(run) {const arms={g:'Geometry', 'g-rgb':'Geometry + RGB', 'g-dditr':'Geometry + LiDAR'};const config=arms[run.configuration]?`${arms[run.configuration]} (${run.configuration})`:run.configuration;const design=run.variant_label?`${run.variant_label} (${run.model_variant})`:run.architecture;const architecture=run.variant_label?` · ${run.architecture}`:'';const selected=run.selected_epoch?` · selected e${run.selected_epoch}`:'';const evaluation=run.evaluation_label?` · ${run.evaluation_label}`:'';return `${run.experiment} · ${design} · ${config} · ${run.source}${architecture} · max${run.epochs}/pat${run.patience} · seed${run.seed}${selected}${evaluation} · ${run.attempt}`;}
+function label(run) {
+  const arms={g:'Geometry','g-rgb':'Geometry + RGB','g-dditr':'Geometry + LiDAR','g-rgb-dditr':'Geometry + RGB + LiDAR'};
+  const config=arms[run.configuration]?`${arms[run.configuration]} (${run.configuration})`:run.configuration;
+  const design=[run.architecture,run.capacity_label,run.model_variant&&(run.variant_label||run.model_variant)].filter(Boolean).join(' · ');
+  const sourceName=run.source==='road-waymo'?'ROAD-Waymo':run.source==='loki'?'LOKI':run.source;
+  const targetName=run.target==='road-waymo'?'ROAD-Waymo':run.target==='loki'?'LOKI':run.target;
+  const lineage=run.target?`${sourceName} → ${targetName}`:sourceName;
+  const settings=[run.epochs&&`max${run.epochs}`,run.patience&&`pat${run.patience}`,run.seed!==null&&run.seed!==undefined&&`seed${run.seed}`].filter(Boolean).join('/');
+  const selected=run.selected_epoch!==null&&run.selected_epoch!==undefined?` · selected e${run.selected_epoch}`:'';
+  const dropout=Number.isFinite(run.dropout)?` · ${run.dropout_label||'dropout'} ${run.dropout}`:'';
+  const reference=run.reference_label?` · ref ${run.reference_label}`:'';
+  const evaluation=run.evaluation_labels?.[state.dataset]||run.evaluation_label;
+  return `${run.experiment} · ${design} · ${config} · ${lineage}${settings?' · '+settings:''}${selected}${dropout}${reference}${evaluation?' · '+evaluation:''} · ${run.attempt}`;
+}
 function options(select, values, selected) {
   select.replaceChildren();
   values.forEach(([value,text])=>{const option=node('option',text); option.value=value;select.append(option);});

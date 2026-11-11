@@ -209,6 +209,140 @@ class PredictionViewerTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Incompatible targets"):
             index.query(selected, "loki", split="validation")
 
+    def test_completed_e002_e003_validation_layouts_and_transfer_cells(self):
+        outputs = self.root/"outputs"
+        settings = {"seed": 0, "epochs": 100, "patience": 15}
+
+        def predictions(path):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            save_predictions(path, [prediction("p"), prediction("q", True)])
+
+        def run(directory, experiment, source, kind, *, target=None, arm="g-rgb-dditr",
+                architecture="transformer-2layer", complete=True, extra=None, folders=()):
+            config = {"experiment": experiment, "source": source, "kind": kind,
+                      "arm": arm, "configuration": arm, "architecture": architecture,
+                      "classes": CLASSES, "settings": settings, "held_out_tests": False}
+            if target:
+                config.update(target=target, original_source=source)
+            config.update(extra or {})
+            write_json(directory/"config.json", config)
+            write_json(directory/"status.json", {"status": "complete" if complete else "incomplete", "kind": kind})
+            write_json(directory/"provenance.json", {"selected_checkpoint_epoch": 7})
+            for folder in folders:
+                predictions(directory/folder/"predictions.npz")
+
+        run(outputs/"experiments/E002d/runs/road-fusion", "E002d", "road-waymo",
+            "exploratory-source-validation", folders=("road-waymo-validation",))
+        run(outputs/"experiments/E003a/runs/20261103/road-waymo", "E003a", "road-waymo",
+            "exploratory-source-validation", folders=("road-waymo-validation", "loki-validation"))
+        run(outputs/"experiments/E002f/runs/architecture/source/bilstm", "E002f", "road-waymo",
+            "exploratory-source-validation", architecture="bilstm-96",
+            folders=("road-waymo-validation",))
+        run(outputs/"experiments/E002f/runs/architecture/adaptation/bilstm/temporal-head", "E002f", "loki",
+            "comparison", target="loki", arm="temporal-head", architecture="bilstm-96",
+            extra={"original_source": "road-waymo", "initialization": "source-checkpoint"},
+            folders=("loki-validation",))
+        # An otherwise complete smoke record must not appear as a real experiment.
+        run(outputs/"experiments/E002f/runs/acceptance/smoke", "E002f", "loki",
+            "integration-smoke", target="loki", folders=("loki-validation",))
+        feature_root = outputs/"experiments/E002f/features/architecture/transformer-1layer"
+
+        def direct_feature_cache(root, *, smoke_selection=None):
+            digest = "e002f-source-sha"
+            prediction_path = root/"source-validation-predictions.npz"
+            predictions(prediction_path)
+            write_json(root/"status.json", {"status": "complete", "held_out_tests": False})
+            identity = {"experiment": "E002f", "stage": "pre-temporal-fusion",
+                "architecture": "transformer-1layer", "source": "road-waymo", "target": "loki",
+                "split": "validation", "tracks": 2, "checkpoint_sha256": digest,
+                "source_checkpoint": {"sha256": digest}, "source_normalization": {"source": "road-waymo"},
+                "smoke_selection": smoke_selection}
+            write_json(root/"feature-cache.json", {"validation": identity | {"path": "features-validation.npz"}})
+            write_json(root/"loki-validation/metrics.json", {"split": "validation",
+                "training_source": "road-waymo", "target_source": "loki",
+                "architecture": "transformer-1layer", "selected_epoch": 13,
+                "checkpoint_sha256": digest, "normalization_source": "road-waymo"})
+
+        direct_feature_cache(feature_root)
+        direct_feature_cache(outputs/"experiments/E002f/features/acceptance-smoke/transformer-1layer",
+                             smoke_selection={"validation": ["selected"]})
+        run(outputs/"experiments/E003b/runs/head-adaptation", "E003b", "loki", "comparison",
+            target="loki", arm="target-head", extra={"original_source": "road-waymo",
+            "reference": "E002d source head"},
+            folders=("source-head-validation", "loki-validation"))
+        run(outputs/"experiments/E003c/runs/source-adaptation/head", "E003c", "loki", "comparison",
+            target="loki", arm="head", extra={"original_source": "road-waymo",
+            "reference": "Original E002d ROAD→LOKI source head", "initialization": "source-checkpoint"},
+            folders=("loki-validation",))
+        run(outputs/"experiments/E003c/runs/incomplete", "E003c", "loki", "comparison",
+            target="loki", complete=False, folders=("loki-validation",))
+        run(outputs/"experiments/E003c/runs/superseded-target-head", "E003c", "loki", "comparison",
+            target="loki", arm="head", extra={"original_source": "road-waymo",
+            "reference": "Superseded target-head initialization", "initialization": "target-head"},
+            folders=("loki-validation",))
+
+        transfer = outputs/"experiments/E002/transfer-validation-20261102"
+        write_json(transfer/"status.json", {"status": "complete"})
+        models = []
+        for source in ("road-waymo", "loki"):
+            target = "loki" if source == "road-waymo" else "road-waymo"
+            for i, (input_name, arm) in enumerate((("geometry", "g"), ("geometry+rgb", "g-rgb"),
+                                                    ("geometry+lidar", "g-dditr"),
+                                                    ("geometry+rgb+lidar", "g-rgb-dditr"))):
+                digest = f"{source}-{i}-sha"
+                model = {"training_source": source, "input": input_name, "experiment": "E002d",
+                         "arm": arm, "variant": "temporal-small", "rgb_branch_dropout": .5,
+                         "selected_epoch": 9, "checkpoint_sha256": digest}
+                models.append(model)
+                cell = transfer/"cells"/source/input_name
+                predictions(cell/"predictions.npz")
+                write_json(cell/"metrics.json", {"split": "validation", "training_source": source,
+                    "target_source": target, "input": input_name, "selected_epoch": 9,
+                    "checkpoint_sha256": digest, "normalization_source": source})
+        write_json(transfer/"transfer-comparison.json", {"status": "frozen-before-cross-dataset-validation-inference",
+                    "comparison": "E002-cross-dataset-validation-transfer", "seed": 0, "models": models})
+
+        index = PredictionIndex(outputs, self.root/"cache", AXES)
+        records = index.catalog("validation")["runs"]
+        self.assertEqual(len(records), 16)
+        by_experiment = {}
+        for record in records:
+            by_experiment.setdefault(record["experiment"], []).append(record)
+        self.assertEqual(len(by_experiment["E002d"]), 1)
+        self.assertEqual(len(by_experiment["E003a"]), 1)
+        self.assertEqual(len(by_experiment["E002f"]), 2)
+        self.assertEqual(len(by_experiment["E003b"]), 2)
+        self.assertEqual(len(by_experiment["E003c"]), 1)
+        transfer_records = [record for record in records if "direct transfer" in record["experiment"]
+                            and record["experiment"] != "E002f direct transfer"]
+        self.assertEqual(len(transfer_records), 8)
+        direct_architecture = next(record for record in records if record["experiment"] == "E002f direct transfer")
+        self.assertEqual(direct_architecture["evaluation_labels"]["loki"],
+                         "Direct target validation · source model")
+        self.assertEqual(direct_architecture["architecture"], "Transformer")
+        source_run = next(record for record in by_experiment["E002f"] if record["source"] == "road-waymo")
+        self.assertEqual((source_run["architecture"], source_run["capacity_label"]),
+                         ("BiLSTM", "hidden 96/direction · 192→128 projection"))
+        adapted_run = next(record for record in by_experiment["E002f"] if record["target"] == "loki")
+        self.assertEqual(adapted_run["configuration"], "g-rgb-dditr")
+        self.assertEqual(adapted_run["evaluation_labels"]["loki"],
+                         "Temporal-head adaptation · target validation")
+        e003a = by_experiment["E003a"][0]
+        self.assertEqual(e003a["evaluation_labels"],
+                         {"loki": "Direct target validation", "road-waymo": "Source validation"})
+        e003b = by_experiment["E003b"]
+        self.assertEqual({record["evaluation_labels"]["loki"] for record in e003b},
+                         {"Original source head · target validation", "Fresh target head · target validation"})
+        self.assertTrue(all(record["configuration"] == "g-rgb-dditr" for record in e003b))
+        self.assertEqual(by_experiment["E003c"][0]["source"], "road-waymo")
+        self.assertFalse(any("smoke" in record["relative"] or "incomplete" in record["relative"]
+                             for record in records))
+        self.assertEqual(index.query([direct_architecture["id"], adapted_run["id"]], "loki",
+                                     split="validation")["common"], 2)
+        for record in (adapted_run, *transfer_records[:1]):
+            loaded = index.load(record["id"], record["datasets"][0], "validation")
+            self.assertEqual(len(loaded["tracks"]), 2)
+
     def test_checkpoint_evaluation_catalog_requires_complete_evaluation_parent(self):
         outputs = run_fixture(self.root)
         e002_fixture(self.root)

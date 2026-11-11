@@ -23,6 +23,8 @@ src/pedestrian_behavior/
     sweep.py                Shared bounded child-process scheduling
     e001_run.py             E001 data/settings assembly and command
     e001_sweep.py           E001 seed matrix and command
+    e001d_run.py            Matched-capacity framewise MLP on the frozen E001 pipeline
+    e001d_sweep.py          E001d ten-attempt matrix and command
     e001b_run.py            Bbox data/settings assembly and verified-bbox strata
     e001b_sweep.py          E001b BiLSTM-only seed matrix and command
     e001c_run.py            E001c native-box inputs and shared-run assembly
@@ -65,6 +67,8 @@ The one-off `scripts/audit-road-associations.py` reuses the native reader and pr
 `experiments/run.py` owns the shared attempt lifecycle: fresh directory/failure evidence, seeding, one persistent training loader, source validation, checkpoint reload, final inference, local artifacts, plots and W&B. It receives ordinary assembly/condition functions, settings, class labels and stratum definitions; it imports no experiment policy. Local step/history/provenance writes precede external logging, and failures propagate. It keeps counter axes hidden, step/epoch curves separate, provenance in config and detailed tables in their namespace. Checkpoints/full predictions remain local. The restricted smoke uses source validation only; comparisons evaluate both held-out tests. No resume/restart/retry framework.
 
 `e001_run.py` remains the E001 command/settings/data wrapper and preserves its existing helper interfaces/defaults. `e001b_run.py` supplies bbox datasets, 14/20-column BiLSTMs, both explicit source normalizations, bbox manifest/path/hash provenance and additional verified-box conditions. Both reuse `training.py`, `evaluation.py`, `KinematicClassifier` and E001's existing ontology/ten stratum definitions. E001b conditions are computed after inference from verified caches and saved with predictions; they never enter model inputs as GT/condition metadata.
+
+`e001d_run.py` reuses E001 K+T+R datasets, source normalization, conditions and shared attempt handling, then appends a framewise capacity block to the existing nonrecurrent `KinematicClassifier`. It leaves the shared model and original E001 MLP/BiLSTM defaults unchanged; `e001d_sweep.py` declares the matched ten-run matrix.
 
 `experiments/sweep.py` schedules a supplied attempt list/command function in bounded independent subprocesses, with separate logs/status and failure propagation. `e001_sweep.py` supplies the existing 80-attempt matrix; `e001b_sweep.py` supplies 20 BiLSTM availability/geometry attempts. Both use 75/8 and seeds 0–4 by default. All requested seeds reach model initialization, persistent loaders, checkpoints, provenance and W&B names. No shared model state, population changes or automatic retries. [Commands](README.md#e001b-training-and-evaluation) own tmux and isolated-checkout details.
 

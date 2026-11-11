@@ -409,6 +409,18 @@ Detach with `Ctrl-b d`; reconnect with `tmux attach -t e001b`. The launcher crea
 
 A separate ROAD CUDA smoke uses `--smoke` with either configuration and a fresh output directory: one epoch, at most two training batches and one source-validation batch, with actual W&B logging and local checkpoint/plot checks. It never evaluates held-out tests or counts as a comparison result. Full checkpoints/predictions stay local. W&B keeps E001's step/epoch/evaluation namespaces, with additional verified-bbox strata and metadata in config. [Implementation and acceptance](experiments/E001b-2d-bbox-contribution/README.md#shared-runner-and-launcher-2026-10-09) record evidence.
 
+## E001d temporal capacity control
+
+[E001d](experiments/E001d-temporal-capacity-control/README.md) adds a framewise K+T+R MLP with 30,342 parameters, matched to the original E001 BiLSTM's 30,340. It reuses the original K+T+R MLP/BiLSTM seed0–4 attempts as controls and the E001 runner/data setup. Original E001 held-out tests informed development; this follow-up is not a pristine-test claim. On `aalto`, after pulling and verifying the intended revision in `/home/user20/projects/pedestrian-behavior-labeling-e002b-evaluation`, launch exactly ten new runs:
+
+```bash
+cd /home/user20/projects/pedestrian-behavior-labeling-e002b-evaluation
+git rev-parse HEAD
+uv run --locked --extra cu118 python scripts/train-e001d-seeds.py --jobs 2 --device cuda
+```
+
+The E001 outputs are already linked in that evaluation checkout. Outputs go to a fresh timestamped `outputs/experiments/E001d/runs/` directory. Set `--jobs 1` for sequential execution or supply `--output <fresh-directory>`. No training was launched during implementation.
+
 ## E002a pretrained-feature feasibility
 
 The [E002a behavior pilot](experiments/E002a-feature-feasibility/README.md) has separate preparation, calibration, integration and training commands below. Use its isolated CUDA extractor environment and pinned author clones/weights; the main E001 environment and caches remain unchanged. RGB cache reads verify native source file identity, so keep the native dataset partition mounted during RGB training even though the model consumes saved CLS features. The earlier bounded probe (`scripts/probe-e002a.py --help`) checks native crops, semantic BEV/alignment and resources without behavior training, held-out scoring, W&B or full caches.

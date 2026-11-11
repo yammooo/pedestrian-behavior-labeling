@@ -151,6 +151,47 @@ Natural transfer CE improves in both directions:1.192 vs1.257 for ROAD→LOKI an
 
 **Missing-RGB error check (2026-11-11):** on identical LOKI validation timesteps, the ROAD-trained masked model reduces the track-weighted fraction of **GT Moving predicted Stopped** from 37.9% to 18.4% when RGB is unavailable. With RGB available, it changes 10.0%→11.0%. The missing/available cohorts contain 22,756/14,654 GT Moving frames; saved GT and RGB flags match between models. Overall class F1 improves for Moving (67.47%→70.81%) and Stopped (32.29%→43.54%), but Waiting to cross falls 45.75%→10.49% and Crossing falls 40.47%→36.20%. Thus one availability-associated error decreases despite lower overall transfer F1. This supports a specific robustness improvement, not a causal explanation of transfer or a general masking benefit. [Numerical evidence and native-inspection cases](../../outputs/experiments/E002/transfer-confusion-diagnostic-20261111/inspection-cases-and-masking.json); no new inference or training.
 
+### Paired ROAD→LOKI failure audit (2026-11-11)
+
+Four saved full-fusion prediction sets share **1,861 LOKI validation tracks /93 scenarios /60,231 GT timesteps**: **A** original E002d; **B** E003a masking; **C** fresh LOKI head on the frozen E002d body; **D** fresh LOKI head on the frozen E003a body. Natural inputs are retained at evaluation. Macro-F1 is46.50/40.26/64.16/62.77% for A/B/C/D. This compares selected seed0 checkpoints, not a causal isolation of individual masks. No training, inference or test access.
+
+All rates retain timestep weight `1 / track_GT_count`, unchanged after filtering. **Fixed** means A wrong/B correct; **new error** means A correct/B wrong. Their denominators are the weighted GT mass of that row’s class. F1 columns show original head → fresh target head.
+
+| GT class | E002d F1: A→C (%) | E003a F1: B→D (%) | Fixed (% GT class) | New error (% GT class) |
+|---|---:|---:|---:|---:|
+| Moving | 67.47→89.28 | 70.81→88.90 | 15.71 | 10.89 |
+| Stopped | 32.29→54.05 | 43.54→53.59 | 11.26 | 2.07 |
+| Waiting to cross | 45.75→68.41 | 10.49→64.94 | 0.08 | 29.95 |
+| Crossing | 40.47→44.88 | 36.20→43.64 | 15.17 | 7.49 |
+
+**Where Waiting fails:** 2,699 GT Waiting timesteps that A classified correctly become errors under B, representing29.95% of weighted Waiting GT. Of this new-error mass,82.23% is predicted Stopped,14.25% Crossing and3.52% Moving. The top five scenarios account for40.94% of it; this is descriptive concentration, not evidence of a recording shortcut.
+
+Waiting-only slices below overlap across axes. Support is raw GT frames /tracks /scenarios. New-error rates divide by each slice’s weighted Waiting GT; recovery divides by its weighted new-error mass. Invalid velocity is separate;0.2m/s is a diagnostic bin, not a native label definition.
+
+| GT Waiting condition | Support: frames / tracks / scenarios | New error (%) | New errors corrected by D (%) |
+|---|---:|---:|---:|
+| RGB missing | 4,351 / 210 / 45 | 23.99 | 81.35 |
+| RGB present | 3,969 / 158 / 45 | 37.36 | 87.59 |
+| valid speed <0.2 m/s | 6,550 / 211 / 44 | 32.54 | 86.49 |
+| valid speed >=0.2 m/s | 1,768 / 192 / 45 | 26.63 | 81.53 |
+| invalid velocity | 2 / 2 / 1 | 0.00 | — |
+| transition near | 166 / 73 / 21 | 37.41 | 58.43 |
+| transition steady | 8,152 / 223 / 47 | 30.16 | 85.34 |
+| transition unknown | 2 / 2 / 1 | 0.00 | — |
+
+**Reading:** the Waiting regression is not confined to missing RGB: its new-error rate is37.36% with RGB versus23.99% without. 98.09% of new-error mass lies in steady GT intervals. D repairs84.82% of the new Waiting-error mass with the body frozen, demonstrating accessible target information rather than establishing why the original readout fails. After target-head fitting, Waiting F1 remains3.48pp lower for the masked body (64.94% versus68.41%); the remaining gap does not establish information loss. Moving/Stopped gains also coexist with new false Crossing predictions:69.96% of new GT Moving errors are predicted Crossing. Crossing recall rises57.10%→64.78%, but precision falls31.34%→25.12%, explaining its lower F1 despite more corrections than new misses.
+
+**Six viewer leads:** each link selects A/B/C/D above on **LOKI validation** and opens the start frame. The viewer must be running at `localhost:8765`. Windows have constant accepted GT and never bridge GT gaps. These are purposive examples, not prevalence estimates; native behavior/association has not been visually checked.
+
+- **Fix:** [scenario_315 / `e270d715`](http://localhost:8765/#%7B%22dataset%22%3A%22loki%22%2C%22split%22%3A%22validation%22%2C%22runs%22%3A%2293be881b8f9c94b4%2Cf2d4b4fd70c71869%2C246352b2acb260e4%2Cf3cc253585f4fb24%22%2C%22search%22%3A%22e270d715-d618-42bf-a0ba-acd9e9b56601%22%2C%22locator%22%3A%22%7B%5C%22scenario%5C%22%3A%5C%22scenario_315%5C%22%2C%5C%22track_id%5C%22%3A%5C%22e270d715-d618-42bf-a0ba-acd9e9b56601%5C%22%7D%22%2C%22frame%22%3A0%7D), frames1–69, GT Moving. A/B/C/D: Stopped · Moving · Moving · Moving. RGB 0/69; median valid speed0.523m/s.
+- **Fix:** [scenario_546 / `474b3963`](http://localhost:8765/#%7B%22dataset%22%3A%22loki%22%2C%22split%22%3A%22validation%22%2C%22runs%22%3A%2293be881b8f9c94b4%2Cf2d4b4fd70c71869%2C246352b2acb260e4%2Cf3cc253585f4fb24%22%2C%22search%22%3A%22474b3963-5671-41b0-b420-ae5294484587%22%2C%22locator%22%3A%22%7B%5C%22scenario%5C%22%3A%5C%22scenario_546%5C%22%2C%5C%22track_id%5C%22%3A%5C%22474b3963-5671-41b0-b420-ae5294484587%5C%22%7D%22%2C%22frame%22%3A0%7D), frames1–36, GT Moving. A/B/C/D: Stopped · Moving · Moving · Moving. RGB 0/36; median valid speed0.924m/s.
+- **New error, recovered by D:** [scenario_139 / `fe60ee9e`](http://localhost:8765/#%7B%22dataset%22%3A%22loki%22%2C%22split%22%3A%22validation%22%2C%22runs%22%3A%2293be881b8f9c94b4%2Cf2d4b4fd70c71869%2C246352b2acb260e4%2Cf3cc253585f4fb24%22%2C%22search%22%3A%22fe60ee9e-1261-414e-b748-292197126c43%22%2C%22locator%22%3A%22%7B%5C%22scenario%5C%22%3A%5C%22scenario_139%5C%22%2C%5C%22track_id%5C%22%3A%5C%22fe60ee9e-1261-414e-b748-292197126c43%5C%22%7D%22%2C%22frame%22%3A0%7D), frames1–101, GT Waiting to cross. A/B/C/D: Waiting · Stopped · Waiting · Waiting. RGB 83/101; median valid speed0.030m/s.
+- **New error, recovered by D:** [scenario_388 / `2ef213b5`](http://localhost:8765/#%7B%22dataset%22%3A%22loki%22%2C%22split%22%3A%22validation%22%2C%22runs%22%3A%2293be881b8f9c94b4%2Cf2d4b4fd70c71869%2C246352b2acb260e4%2Cf3cc253585f4fb24%22%2C%22search%22%3A%222ef213b5-01b5-469f-8cc3-3666c03dc535%22%2C%22locator%22%3A%22%7B%5C%22scenario%5C%22%3A%5C%22scenario_388%5C%22%2C%5C%22track_id%5C%22%3A%5C%222ef213b5-01b5-469f-8cc3-3666c03dc535%5C%22%7D%22%2C%22frame%22%3A3%7D), frames4–95, GT Waiting to cross. A/B/C/D: Waiting · Stopped · Waiting 90/92/Moving 2/92 · Waiting. RGB 31/92; median valid speed0.074m/s.
+- **Residual after D:** [scenario_140 / `5185e1e6`](http://localhost:8765/#%7B%22dataset%22%3A%22loki%22%2C%22split%22%3A%22validation%22%2C%22runs%22%3A%2293be881b8f9c94b4%2Cf2d4b4fd70c71869%2C246352b2acb260e4%2Cf3cc253585f4fb24%22%2C%22search%22%3A%225185e1e6-a2fd-4dc1-b64b-fcca8ac10fbc%22%2C%22locator%22%3A%22%7B%5C%22scenario%5C%22%3A%5C%22scenario_140%5C%22%2C%5C%22track_id%5C%22%3A%5C%225185e1e6-a2fd-4dc1-b64b-fcca8ac10fbc%5C%22%7D%22%2C%22frame%22%3A0%7D), frames1–49, GT Waiting to cross. A/B/C/D: Waiting · Moving · Waiting · Moving. RGB 49/49; median valid speed0.095m/s.
+- **Residual after D:** [scenario_618 / `1588089d`](http://localhost:8765/#%7B%22dataset%22%3A%22loki%22%2C%22split%22%3A%22validation%22%2C%22runs%22%3A%2293be881b8f9c94b4%2Cf2d4b4fd70c71869%2C246352b2acb260e4%2Cf3cc253585f4fb24%22%2C%22search%22%3A%221588089d-e3b7-4887-baa5-e13e24ae4a32%22%2C%22locator%22%3A%22%7B%5C%22scenario%5C%22%3A%5C%22scenario_618%5C%22%2C%5C%22track_id%5C%22%3A%5C%221588089d-e3b7-4887-baa5-e13e24ae4a32%5C%22%7D%22%2C%22frame%22%3A14%7D), frames15–44, GT Waiting to cross. A/B/C/D: Stopped · Stopped · Waiting · Stopped. RGB 0/30; median valid speed0.015m/s.
+
+[Numerical audit](../../outputs/experiments/E003a/paired-error-audit-20261111/summary.json) / [full case identities, sequences and timestamps](../../outputs/experiments/E003a/paired-error-audit-20261111/six-case-shortlist.json). Input hashes, GT/time alignment and reconstruction of all four saved macro-F1 values are recorded there. The analysis does not attribute causality to a branch, establish label inconsistency or demonstrate a masking benefit across seeds.
+
 ### Fixed branch-view diagnostics
 
 These source-validation diagnostics use fixed masks shared by the models, without checkpoint selection. Every validation track remains in each denominator. Cells show E003a / E002d track-weighted macro-F1 (%), with the change in percentage points.

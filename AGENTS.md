@@ -32,6 +32,8 @@ Use concise, simple language, lowercase hyphenated names except `README.md`, `AG
 
 Treat this as an experimental research codebase. Optimize for fast, narrow, disposable experiments: reuse existing paths, prefer small scripts, and avoid speculative options, duplicate checks and general infrastructure. Keep the safeguards needed to protect data, reproduce results and interpret comparisons; test concrete risks without adding routine overhead.
 
+Keep routine changes lean. Inspect only the paths needed for the request and reach a working increment before expanding coverage. Do not survey every related experiment or add extensive acceptance work by default. Prefer focused checks; run required full suites once and repeat only for a concrete new risk or failure. Give delegates one narrow handoff and review their consolidated result; avoid repeated status pings and planning round-trips. Broaden scope only when necessary to finish the request or when explicitly asked.
+
 Prefer evidence-driven choices and the simplest meaningful baseline. Inspect failures before adding modalities, sources or learned models. Do not assume multimodal fusion helps. Separate observable behavior from latent intention and offline full-record annotation from causal prediction. Treat cross-dataset generalization seriously; claim novelty only after literature comparison.
 
 No substantial model implementation or rigid abstraction before problem/input and feasibility/protocol gates are sufficiently settled and implementation is authorized. Small native inspection utilities are encouraged: reusable code in `src/`, one-off tools in `scripts/`, exploration in `notebooks/`.

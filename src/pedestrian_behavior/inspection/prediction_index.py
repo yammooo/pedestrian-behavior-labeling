@@ -8,7 +8,7 @@ import threading
 
 import numpy as np
 
-from pedestrian_behavior.data.preparation import checksum
+from pedestrian_behavior.data.preparation import PERIOD_US, checksum, load_track, source_times
 from pedestrian_behavior.evaluation import confusion_metrics, load_predictions
 
 INDEX_VERSION = 2
@@ -157,6 +157,11 @@ def _new_validation_records(directory, experiment, config, status, provenance):
                 record_config = dict(config, original_source=config.get("original_source", config.get("source")),
                                      target=target, arm="g-rgb-dditr", configuration="g-rgb-dditr",
                                      adaptation_label=text)
+                if role == "source-head":
+                    source_checkpoint = record_config.get("source_checkpoint") or {}
+                    record_config["selected_checkpoint_epoch"] = source_checkpoint.get("selected_epoch")
+                    if record_config["selected_checkpoint_epoch"] is None:
+                        record_config["selected_checkpoint_epoch"] = (source_checkpoint.get("selection") or {}).get("epoch")
                 records.append(_validation_record(directory, experiment, record_config, provenance,
                     {target: path}, role=role, label={target: text}))
         return records
@@ -222,6 +227,31 @@ def prepare_track(track, classes, cached_score=None):
     track["ce_values"][gt] = np.log(np.exp(scores[gt]).sum(1))-scores[gt, y[gt]]
     track["scores"] = cached_score if cached_score is not None else track_scores(track)
     return track
+
+
+def _restore_prediction_timing(track):
+    """Restore absent timeline fields from the saved prepared-track archive, never from logits."""
+    has_grid, has_source = "grid_times_us" in track, "source_times_us" in track
+    if has_grid and has_source:
+        return
+    if has_grid != has_source:
+        raise ValueError("Prediction track has incomplete timestamp metadata")
+    archive = Path(track.get("archive", ""))
+    if not archive.is_file():
+        raise ValueError("Prediction timestamps are missing and the referenced prepared track is unavailable")
+    metadata, _ = load_track(archive)
+    if metadata.get("track_locator") != track.get("locator"):
+        raise ValueError("Prediction locator differs from its referenced prepared track")
+    extent = metadata.get("native_extent_us")
+    if (not isinstance(extent, list) or len(extent) != 2
+            or any(type(value) is not int for value in extent)
+            or extent[1] < extent[0]):
+        raise ValueError("Prepared-track time extent is invalid")
+    grid = list(range(extent[0], extent[1] + 1, PERIOD_US))
+    source = source_times(metadata)
+    if len(grid) != len(track["targets"]) or len(source) != len(track["targets"]):
+        raise ValueError("Prediction and prepared-track timeline lengths differ")
+    track["grid_times_us"], track["source_times_us"] = grid, source
 
 
 class PredictionIndex:
@@ -379,6 +409,7 @@ class PredictionIndex:
             stored = json.loads(cached.read_text())["tracks"] if cached.exists() else {}
             tracks = {}
             for track in load_predictions(path):
+                _restore_prediction_timing(track)
                 prepare_track(track, len(self.runs[run]["classes"]), stored.get(track["locator"]))
                 if track["locator"] in tracks:
                     raise ValueError("Duplicate prediction track identity")

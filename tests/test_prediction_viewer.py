@@ -2,6 +2,7 @@
 
 from http.server import ThreadingHTTPServer
 import json
+from hashlib import sha256
 import math
 from pathlib import Path
 import tempfile
@@ -14,11 +15,12 @@ from urllib.request import Request, urlopen
 import numpy as np
 from PIL import Image
 
-from pedestrian_behavior.data.preparation import checksum, load_track, prepare_collection
+from pedestrian_behavior.data.preparation import ARRAYS, MASKS, checksum, load_track, locator, prepare_collection, save_track
 from pedestrian_behavior.evaluation import load_predictions, prediction_metrics, save_predictions
 from pedestrian_behavior.inspection.prediction_context import (ContextCache, bev_radius_pixels, native_frames,
                                                                 render_context_frame)
-from pedestrian_behavior.inspection.prediction_index import PredictionIndex, prepare_track, track_scores, write_json
+from pedestrian_behavior.inspection.prediction_index import (PredictionIndex, _restore_prediction_timing,
+    prepare_track, track_scores, write_json)
 from pedestrian_behavior.inspection.predictions import Viewer, handler
 from test_track_preparation import native_readers, pose
 
@@ -32,7 +34,7 @@ def prediction(name="p", correct=False):
     logits[0] = [0, 0, -100, -100]
     if correct:
         logits[1:10, :2] = [math.log(.25), math.log(.75)]
-    return {"locator": json.dumps({"scenario": "scene", "track_id": name}, sort_keys=True),
+    return {"locator": locator(scenario="scene", track_id=name),
             "group": "scene", "archive": "unavailable/"+name+".npz", "logits": logits,
             "targets": targets, "gt_valid": targets >= 0,
             "source_times_us": [i*200000 for i in range(11)], "grid_times_us": [i*200000 for i in range(11)],
@@ -52,6 +54,19 @@ def run_fixture(root, count=4):
         target = directory/"loki-test"; target.mkdir()
         save_predictions(target/"predictions.npz", [prediction("p", correct=i%2 == 1), prediction("q", correct=i%2 == 1)])
     return outputs
+
+
+def prepared_archive(root, locator_value, length):
+    archive = root/("prepared-"+sha256(locator_value.encode()).hexdigest()+".npz")
+    times = [i*200000 for i in range(length)]
+    metadata = {"track_locator": locator_value, "native_extent_us": [times[0], times[-1] + 100000],
+        "source_frames": times, "native_annotations": [[] for _ in times],
+        "availability": [{} for _ in times], "issues": [[] for _ in times],
+        "native_metadata": [{} for _ in times], "anchor_valid": True, "native_counts": {}}
+    arrays = {name: np.full((length, *shape), np.nan, dtype=np.float64) for name, shape in ARRAYS.items()}
+    arrays.update({name: np.zeros(length, dtype=bool) for name in MASKS})
+    save_track(archive, metadata, arrays)
+    return archive
 
 
 def e002_fixture(root):
@@ -118,6 +133,21 @@ class PredictionViewerTest(unittest.TestCase):
         invalid = prediction(); invalid["logits"][0, 0] = np.nan
         with self.assertRaisesRegex(ValueError, "Invalid"):
             prepare_track(invalid, 4)
+
+    def test_missing_prediction_timestamps_restore_only_from_matching_prepared_track(self):
+        identity = locator(scenario="scene", track_id="timed")
+        archive = prepared_archive(self.root, identity, 3)
+        track = {"locator": identity, "archive": str(archive), "targets": np.array([0, 1, 1])}
+        _restore_prediction_timing(track)
+        self.assertEqual(track["grid_times_us"], [0, 200000, 400000])
+        self.assertEqual(track["source_times_us"], [0, 200000, 400000])
+        with self.assertRaisesRegex(ValueError, "lengths differ"):
+            _restore_prediction_timing({"locator": identity, "archive": str(archive), "targets": np.array([0, 1])})
+        with self.assertRaisesRegex(ValueError, "locator differs"):
+            _restore_prediction_timing({"locator": "{}", "archive": str(archive), "targets": np.array([0, 1, 1])})
+        with self.assertRaisesRegex(ValueError, "incomplete timestamp"):
+            _restore_prediction_timing({"locator": identity, "archive": str(archive),
+                                        "targets": np.array([0, 1, 1]), "grid_times_us": [0, 200000, 400000]})
 
     def test_catalog_four_models_scopes_confusions_sorting_and_cache(self):
         outputs = run_fixture(self.root)
@@ -213,9 +243,15 @@ class PredictionViewerTest(unittest.TestCase):
         outputs = self.root/"outputs"
         settings = {"seed": 0, "epochs": 100, "patience": 15}
 
-        def predictions(path):
+        def predictions(path, *, missing_timing=False):
             path.parent.mkdir(parents=True, exist_ok=True)
-            save_predictions(path, [prediction("p"), prediction("q", True)])
+            tracks = [prediction("p"), prediction("q", True)]
+            if missing_timing:
+                for track in tracks:
+                    track["archive"] = str(prepared_archive(self.root, track["locator"], len(track["targets"])))
+                    track.pop("grid_times_us")
+                    track.pop("source_times_us")
+            save_predictions(path, tracks)
 
         def run(directory, experiment, source, kind, *, target=None, arm="g-rgb-dditr",
                 architecture="transformer-2layer", complete=True, extra=None, folders=()):
@@ -247,10 +283,10 @@ class PredictionViewerTest(unittest.TestCase):
             "integration-smoke", target="loki", folders=("loki-validation",))
         feature_root = outputs/"experiments/E002f/features/architecture/transformer-1layer"
 
-        def direct_feature_cache(root, *, smoke_selection=None):
+        def direct_feature_cache(root, *, smoke_selection=None, missing_timing=False):
             digest = "e002f-source-sha"
             prediction_path = root/"source-validation-predictions.npz"
-            predictions(prediction_path)
+            predictions(prediction_path, missing_timing=missing_timing)
             write_json(root/"status.json", {"status": "complete", "held_out_tests": False})
             identity = {"experiment": "E002f", "stage": "pre-temporal-fusion",
                 "architecture": "transformer-1layer", "source": "road-waymo", "target": "loki",
@@ -263,13 +299,15 @@ class PredictionViewerTest(unittest.TestCase):
                 "architecture": "transformer-1layer", "selected_epoch": 13,
                 "checkpoint_sha256": digest, "normalization_source": "road-waymo"})
 
-        direct_feature_cache(feature_root)
+        direct_feature_cache(feature_root, missing_timing=True)
         direct_feature_cache(outputs/"experiments/E002f/features/acceptance-smoke/transformer-1layer",
                              smoke_selection={"validation": ["selected"]})
-        run(outputs/"experiments/E003b/runs/head-adaptation", "E003b", "loki", "comparison",
+        e003b_directory = outputs/"experiments/E003b/runs/head-adaptation"
+        run(e003b_directory, "E003b", "loki", "comparison",
             target="loki", arm="target-head", extra={"original_source": "road-waymo",
-            "reference": "E002d source head"},
+            "reference": "E002d source head", "source_checkpoint": {"selected_epoch": 17}},
             folders=("source-head-validation", "loki-validation"))
+        predictions(e003b_directory/"source-head-validation/predictions.npz", missing_timing=True)
         run(outputs/"experiments/E003c/runs/source-adaptation/head", "E003c", "loki", "comparison",
             target="loki", arm="head", extra={"original_source": "road-waymo",
             "reference": "Original E002d ROAD→LOKI source head", "initialization": "source-checkpoint"},
@@ -334,11 +372,20 @@ class PredictionViewerTest(unittest.TestCase):
         self.assertEqual({record["evaluation_labels"]["loki"] for record in e003b},
                          {"Original source head · target validation", "Fresh target head · target validation"})
         self.assertTrue(all(record["configuration"] == "g-rgb-dditr" for record in e003b))
+        source_head = next(record for record in e003b
+                           if record["evaluation_labels"]["loki"].startswith("Original source head"))
+        fresh_head = next(record for record in e003b
+                          if record["evaluation_labels"]["loki"].startswith("Fresh target head"))
+        self.assertEqual((source_head["selected_epoch"], fresh_head["selected_epoch"]), (17, 7))
         self.assertEqual(by_experiment["E003c"][0]["source"], "road-waymo")
         self.assertFalse(any("smoke" in record["relative"] or "incomplete" in record["relative"]
                              for record in records))
         self.assertEqual(index.query([direct_architecture["id"], adapted_run["id"]], "loki",
                                      split="validation")["common"], 2)
+        self.assertEqual(index.load(direct_architecture["id"], "loki", "validation")["tracks"][
+                         prediction("p")["locator"]]["source_times_us"], [i*200000 for i in range(11)])
+        self.assertEqual(index.load(source_head["id"], "loki", "validation")["tracks"][
+                         prediction("p")["locator"]]["grid_times_us"], [i*200000 for i in range(11)])
         for record in (adapted_run, *transfer_records[:1]):
             loaded = index.load(record["id"], record["datasets"][0], "validation")
             self.assertEqual(len(loaded["tracks"]), 2)

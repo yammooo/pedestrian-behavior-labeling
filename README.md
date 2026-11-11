@@ -419,7 +419,7 @@ git rev-parse HEAD
 uv run --locked --extra cu118 python scripts/train-e001d-seeds.py --jobs 2 --device cuda
 ```
 
-The E001 outputs are already linked in that evaluation checkout. Outputs go to a fresh timestamped `outputs/experiments/E001d/runs/` directory. Set `--jobs 1` for sequential execution or supply `--output <fresh-directory>`. No training was launched during implementation.
+The E001 outputs are already linked in that evaluation checkout. Outputs go to a fresh timestamped `outputs/experiments/E001d/runs/` directory. Set `--jobs 1` for sequential execution or supply `--output <fresh-directory>`. The [completed five-seed results](experiments/E001d-temporal-capacity-control/README.md#results) compare the matched MLP with both original controls.
 
 ## E002a pretrained-feature feasibility
 

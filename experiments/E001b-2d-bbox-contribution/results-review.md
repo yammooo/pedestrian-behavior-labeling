@@ -2,6 +2,8 @@
 
 Reviewed 2026-10-10; extended **2026-10-15** with E001c. **130 completed attempts / 260 held-out evaluation cells**, seeds 0–4. Earlier seed-0 30/5 and 50/8 rounds and validation-only smokes are excluded from these averages. Designs: [E001](../E001-kinematic-transfer/README.md), [E001b](README.md), [E001c](../E001c-bbox-inputs/README.md).
 
+The [E001d matched-capacity follow-up](../E001d-temporal-capacity-control/README.md#results) adds a separately trained framewise MLP against the existing K+T+R controls; it supplements this historical review.
+
 - **BiLSTM improves on MLP in every seed for every matched E001 input/direction.** The improvement does not isolate temporal context from additional recurrent capacity.
 - **RAW versus K+T+R depends on direction.** For BiLSTM, K+T+R beats RAW by 1.63 pp on ROAD within-domain, is nearly tied on ROAD → LOKI (+0.07 pp), and averages lower for LOKI within-domain (−0.82 pp) and LOKI → ROAD (−2.03 pp). The last disadvantage appears in four of five seeds.
 - **Geometry helps LOKI → ROAD consistently:** +5.51 ± 0.50 pp versus availability, positive in all five seeds. Most of the gain is Stopped; Waiting worsens. Other directions show mixed seed-level gains. Availability alone has no consistent benefit across directions.

@@ -16,6 +16,7 @@ LABELS = {"geometry": "Geometry", "geometry+rgb": "Geometry + RGB",
 DIRECTIONS = (("road-waymo", "loki"), ("loki", "road-waymo"))
 TARGET_TRACKS = {"road-waymo": 1110, "loki": 1861}
 DIRECTION_LABELS = {"road-waymo": "ROAD-Waymo", "loki": "LOKI"}
+CLASS_LABELS = ("Moving", "Stopped", "Waiting to cross", "Crossing")
 
 
 def _close(actual, expected, label, *, atol=1e-10):
@@ -60,9 +61,22 @@ def _validate_metrics(metrics, *, training_source, target_source, input_name, ex
             raise ValueError(f"{weighting} confusion row sums differ from reported support")
         if weighting == "raw" and not np.allclose(support, class_frames, rtol=0, atol=1e-6):
             raise ValueError("Raw confusion rows differ from class-frame denominators")
+        predicted_support = matrix.sum(axis=0)
+        precision = np.divide(np.diag(matrix), predicted_support, out=np.zeros(4), where=predicted_support > 0)
+        recall = np.divide(np.diag(matrix), support, out=np.zeros(4), where=support > 0)
+        f1 = np.divide(2 * precision * recall, precision + recall,
+            out=np.zeros(4), where=precision + recall > 0)
+        for metric, actual in (("precision", precision), ("recall", recall), ("f1", f1)):
+            reported = np.asarray(record.get(metric), dtype=float)
+            if reported.shape != (4,) or not np.isfinite(reported).all() or not np.allclose(
+                    reported, actual, rtol=1e-10, atol=1e-10):
+                raise ValueError(f"{weighting} {metric} differs from confusion-matrix calculation")
+        _close(record["macro_f1"], float(f1.mean()),
+            f"{weighting} macro-F1 from per-class F1")
         normalized = np.divide(matrix, support[:, None], out=np.zeros_like(matrix), where=support[:, None] > 0)
         result[weighting] = {"matrix": matrix, "support": support,
             "normalized": normalized * 100., "class_frames": class_frames,
+            "precision": precision, "recall": recall, "f1": f1,
             "macro_f1": float(record["macro_f1"]), "gt_frames": int(denominators["gt_frames"]),
             "tracks": expected_tracks}
     return result
@@ -114,6 +128,40 @@ def _load_cells(comparison_path, source_metrics_path, target_root):
                 raise ValueError(f"Target metric selected epoch differs from frozen manifest: {key}")
             cells[key] = {"manifest": model, "source": source_validated, "target": target_validated}
     return cells
+
+
+def per_class_table(cells, source, target, weighting):
+    rows = []
+    for input_name in INPUTS:
+        metrics = cells[source, input_name]
+        source_metrics, target_metrics = metrics["source"][weighting], metrics["target"][weighting]
+        for index, label in enumerate(CLASS_LABELS):
+            values = (source_metrics["precision"][index], source_metrics["recall"][index],
+                      source_metrics["f1"][index], target_metrics["precision"][index],
+                      target_metrics["recall"][index], target_metrics["f1"][index])
+            rows.append(f"| {LABELS[input_name]} | {label} | "
+                        + " | ".join(f"{value * 100:.2f}" for value in values) + " |")
+    heading = "| Inputs | Class | Source P (%) | Source R (%) | Source F1 (%) | Target P (%) | Target R (%) | Target F1 (%) |\n"
+    separator = "|---|---|---:|---:|---:|---:|---:|---:|\n"
+    return heading + separator + "\n".join(rows) + "\n"
+
+
+def per_class_section(cells):
+    parts = [
+        "## Per-class precision, recall and F1",
+        "",
+        "These are global per-class metrics computed from each saved confusion matrix: precision uses the predicted-class column sum; recall uses the GT-class row sum; F1 is their harmonic mean. Source columns are the checkpoint's own-source validation results; target columns are direct opposite-source validation before adaptation. The main tables use the same track-weighted confusion matrices as the transfer summary. Metrics are percentages; class order matches the confusion figures.",
+        "",
+    ]
+    for source, target in DIRECTIONS:
+        parts.extend([f"### {DIRECTION_LABELS[source]} → {DIRECTION_LABELS[target]}", "", per_class_table(cells, source, target, "track_weighted")])
+    parts.extend(["<details>", "<summary>Pooled-frame per-class metrics</summary>", "",
+        "These use raw accepted GT frames pooled across tracks rather than equal total mass per track.", ""])
+    for source, target in DIRECTIONS:
+        parts.extend([f"### {DIRECTION_LABELS[source]} → {DIRECTION_LABELS[target]}", "",
+                      per_class_table(cells, source, target, "raw")])
+    parts.extend(["</details>", ""])
+    return "\n".join(parts)
 
 
 def _figure(cells, source, target, weighting, view, output):
@@ -200,7 +248,9 @@ def main():
     target_root = args.outputs_root.resolve() / "experiments/E002/transfer-validation-20261102"
     cells = _load_cells(args.comparison, args.source_metrics, target_root)
     paths = generate(cells, args.output)
-    print(f"Wrote {len(paths)} source/target confusion grids to {args.output.resolve()}")
+    table_path = args.output.parent / "per-class-metrics.md"
+    table_path.write_text(per_class_section(cells))
+    print(f"Wrote {len(paths)} source/target confusion grids to {args.output.resolve()} and per-class tables to {table_path.resolve()}")
 
 
 if __name__ == "__main__":

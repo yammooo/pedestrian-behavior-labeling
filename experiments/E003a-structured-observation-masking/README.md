@@ -149,6 +149,8 @@ Each cell is track-weighted four-class macro-F1 (%) / mean track CE at the sourc
 
 Natural transfer CE improves in both directions:1.192 vs1.257 for ROAD→LOKI and1.271 vs1.349 for LOKI→ROAD. This does not translate into consistent transfer F1 gains; LOKI’s source-F1 gain is also much larger than its transfer gain. Both validation populations informed development, so these are target-informed exploratory results. No test set was accessed.
 
+**Missing-RGB error check (2026-11-11):** on identical LOKI validation timesteps, the ROAD-trained masked model reduces the track-weighted fraction of **GT Moving predicted Stopped** from 37.9% to 18.4% when RGB is unavailable. With RGB available, it changes 10.0%→11.0%. The missing/available cohorts contain 22,756/14,654 GT Moving frames; saved GT and RGB flags match between models. Overall class F1 improves for Moving (67.47%→70.81%) and Stopped (32.29%→43.54%), but Waiting to cross falls 45.75%→10.49% and Crossing falls 40.47%→36.20%. Thus one availability-associated error decreases despite lower overall transfer F1. This supports a specific robustness improvement, not a causal explanation of transfer or a general masking benefit. [Numerical evidence and native-inspection cases](../../outputs/experiments/E002/transfer-confusion-diagnostic-20261111/inspection-cases-and-masking.json); no new inference or training.
+
 ### Fixed branch-view diagnostics
 
 These source-validation diagnostics use fixed masks shared by the models, without checkpoint selection. Every validation track remains in each denominator. Cells show E003a / E002d track-weighted macro-F1 (%), with the change in percentage points.

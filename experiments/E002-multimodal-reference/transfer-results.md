@@ -185,6 +185,8 @@ All eight direct-transfer files align by locator, GT and mask with the own-sourc
 
 For a sustained-motion check, require seven consecutive GT-Stopped, position-valid slots and use actual endpoint timestamps (approximately 1.2 s). **GT remains Stopped throughout each window; only the prediction at its center selects the error or correct group.** Among centers predicted Moving,1,498 eligible centers across 77 tracks have median net speed **0.688 m/s**; 4,106 centers across 167 tracks predicted Stopped have**0.006 m/s**. These windows cover 9.5% and 29.8% of all weighted ROAD Stopped GT respectively, not the entire error population; overlapping windows are not independent examples. The observation warrants checking native RGB, the matched 3D actor and annotation boundaries. It does not establish annotation error or independently verified physical motion.
 
+The [2026-11-11 inspection shortlist](../../outputs/experiments/E002/transfer-confusion-diagnostic-20261111/inspection-cases-and-masking.json) pins exact tracks/windows in ROAD clips `train_00261`, `train_00111`, `train_00626` and `train_00593`, including source-model predictions and a zero-displacement control. These are selected examples, not prevalence estimates or confirmed annotation errors. A saved-prediction [E003a subgroup check](../E003a-structured-observation-masking/README.md#natural-validation-comparison) also finds that masking reduces GT Moving classified as Stopped when RGB is missing, despite worse overall ROAD→LOKI F1.
+
 E003b head-only adaptation changes predicted labels on the same target-validation timesteps, with trade-offs:
 
 | Training / evaluation datasets | GT label | Predicted label | Before head adaptation (%) | After head adaptation (%) |

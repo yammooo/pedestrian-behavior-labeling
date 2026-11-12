@@ -33,10 +33,13 @@ class E004aAnalysisTest(unittest.TestCase):
         return result["targets"][0], Path(temp.name)
 
     def test_track_weights_stay_fixed_after_partial_acceptance(self):
-        calibration = [_track("cal", [0.9], [0], [0]) | {"source_flags": {"rgb_valid": np.ones(1, dtype=bool)}}]
+        calibration = [_track("cal", [0.9], [0], [0]) | {"source_flags": {
+            "rgb_valid": np.ones(1, dtype=bool), "point_tokens": np.asarray([80], dtype=np.int64)}}]
         assessment = [
-            _track("long", [0.95, 0.8], [0, 1], [0, 0]) | {"source_flags": {"rgb_valid": np.ones(2, dtype=bool)}},
-            _track("short", [0.7], [0], [0]) | {"source_flags": {"rgb_valid": np.ones(1, dtype=bool)}},
+            _track("long", [0.95, 0.8], [0, 1], [0, 0]) | {"source_flags": {
+                "rgb_valid": np.ones(2, dtype=bool), "point_tokens": np.asarray([80, 86], dtype=np.int64)}},
+            _track("short", [0.7], [0], [0]) | {"source_flags": {
+                "rgb_valid": np.ones(1, dtype=bool), "point_tokens": np.asarray([0], dtype=np.int64)}},
         ]
         selected, output = self.analyze(calibration, assessment, 0.0)
         measured = selected["assessment"]
@@ -49,6 +52,7 @@ class E004aAnalysisTest(unittest.TestCase):
         unavailable = measured["natural_availability_cohorts"]["rgb_valid"]["unavailable"]
         self.assertIsNone(unavailable["coverage"])
         self.assertIsNone(unavailable["raw_coverage"])
+        self.assertEqual(set(measured["natural_availability_cohorts"]), {"rgb_valid"})
         with np.load(output / "calibration-curve.npz", allow_pickle=False) as curve:
             self.assertEqual(curve["threshold"].shape, (1,))
 

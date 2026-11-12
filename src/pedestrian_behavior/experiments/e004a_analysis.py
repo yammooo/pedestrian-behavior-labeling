@@ -21,7 +21,8 @@ def _population(tracks):
     seen = set()
     arrays = {key: [] for key in ("scores", "predicted", "targets", "weights", "track", "group_ids")}
     flags = {}
-    flag_names = {name for row in tracks for name in row.get("source_flags", {})}
+    flag_names = {name for row in tracks for name in row.get("source_flags", {})
+                  if isinstance(name, str) and name.endswith("_valid")}
     group_ids = {}
     for index, row in enumerate(tracks):
         locator, group = row.get("locator"), row.get("group")

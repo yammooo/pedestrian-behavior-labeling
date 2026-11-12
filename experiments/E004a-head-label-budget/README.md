@@ -1,6 +1,6 @@
 # E004a — Head adaptation versus labeled-track budget
 
-**Protocol agreed 2026-11-12; implemented and checked. Full runs remain user-launched.** This is the first [E004 label-efficiency](../E004-label-efficiency/README.md) comparison. It asks how target performance changes as more complete target-training tracks supervise only the source classifier. Target-only controls remain necessary before claiming annotation savings.
+**Full pilot completed on 2026-11-12; ROAD→LOKI, validation assessment only.** This is the first [E004 label-efficiency](../E004-label-efficiency/README.md) comparison. It asks how target performance changes as more complete target-training tracks supervise only the source classifier. Target-only controls remain necessary before claiming annotation savings.
 
 ## Initial model and data flow
 
@@ -116,4 +116,70 @@ This builds the compact frozen representation cache once, then runs 45 reduced-b
 - Compact cache is approximately165.4MB. Copied-head predictions on its new post-temporal representations reproduce the original source logits. Source checkpoint SHA remains unchanged. No native cache rebuild or held-out test access.
 - Remote evidence: `outputs/experiments/E004a/runs/20261112-091726-841239Z/verification.json`, with local inspection copies in `outputs/experiments/E004a/acceptance/20261112/`. The first failed smoke at `20261112-091530-427492Z` is preserved: numeric `point_tokens` provenance was incorrectly treated as availability; cohort analysis now uses only `*_valid` fields.
 
-Full46-fit training was **not started**. Production online W&B uses the existing logging path; the bounded check deliberately used offline W&B. Empirical calibration targets are not risk guarantees.
+At preparation, full46-fit training had **not started**; the completed user-launched pilot is recorded below. Production uses online W&B; the bounded check deliberately used offline W&B. Empirical calibration targets are not risk guarantees.
+
+## Results
+
+**All 46 fits and the original-head anchor completed on 2026-11-12**, at clean revision `96c0a2d`, in 11.1 minutes using the previously cached frozen representations. No new encoder extraction or test access. All fits stopped by patience; none reached 10,000 updates. Six selected update 0, retaining the original source head. Exact subset plans, access counts, checkpoints and predictions remain in the original Aalto attempt: `outputs/experiments/E004a/runs/20261112-092028-490189Z/`.
+
+Assessment is the same 931 tracks /47 scenarios /30,605 GT timesteps for every result. Reduced budgets show mean ±sample SD across five subset draws, with training seed 0 fixed. Zero/all anchors have one result each. These are historically inspected validation data, separated from this pilot's fitting/selection; they are not untouched test results.
+
+### F1 and confidence coverage by fitting budget
+
+All F1, coverage and error values below are percentages; CE is mean track CE. Coverage uses the **5% calibration error target**, but achieved assessment error is measured separately. Overruns count checkpoint results above that target; these results share the same assessment population and are not independent datasets.
+
+| Fitting tracks | Assessment F1 ±SD | CE | Assessment coverage ±SD | Assessment accepted error, mean | 5% overruns |
+|---|---:|---:|---:|---:|---:|
+| 0 | 41.67 | 1.236 | 0.84 | 7.83 | 1/1 |
+| 1 | 42.27 ±1.33 | 1.210 | 2.77 ±4.32 | 7.31 | 5/5 |
+| 5 | 47.06 ±3.62 | 0.973 | 19.41 ±17.51 | 8.33 | 4/5 |
+| 10 | 47.70 ±3.49 | 0.962 | 18.69 ±12.97 | 9.30 | 5/5 |
+| 25 | 51.14 ±1.93 | 0.851 | 27.47 ±7.07 | 8.46 | 5/5 |
+| 50 | 50.57 ±1.14 | 0.808 | 26.89 ±10.84 | 10.42 | 5/5 |
+| 100 | 52.83 ±2.44 | 0.731 | 36.33 ±5.74 | 9.26 | 5/5 |
+| 250 | 55.56 ±3.01 | 0.677 | 46.63 ±6.02 | 11.39 | 5/5 |
+| 500 | 55.81 ±2.75 | 0.642 | 50.23 ±9.58 | 10.49 | 5/5 |
+| 1,000 | 56.84 ±1.25 | 0.581 | 57.51 ±3.40 | 10.69 | 5/5 |
+| 8,574 | 55.28 | 0.560 | 54.83 | 8.99 | 1/1 |
+
+![F1 versus fitting-track budget](../../outputs/experiments/E004a/results-review/20261112-092028-490189Z/report/budget-f1.png) ([SVG](../../outputs/experiments/E004a/results-review/20261112-092028-490189Z/report/budget-f1.svg))
+
+**F1 improves with target fitting, with diminishing gains.** The original 41.67% becomes 51.14% ±1.93 at 25 tracks, 52.83% ±2.44 at 100, and 56.84% ±1.25 at 1,000. Gains beyond 250 tracks are modest relative to subset-draw variation. The single all-data anchor is 55.28%; this does not establish that fewer labels outperform all labels or that the methods are equivalent. Full-data CE is lowest, despite its lower F1 than the 1,000-track mean.
+
+**Count the fixed label overhead:** every budget also accesses 930 development/calibration tracks /29,626 GT timesteps. Thus 100 fitting tracks means 1,030 training/selection tracks, and 1,000 means 1,930; assessment's 931 labeled tracks are separate audit effort. The 1,000-track draws cover all 430 training scenarios and 31,495–32,027 GT timesteps; the all-data fit uses 8,574 tracks /262,071 GT. This is recording-diverse sampling, not uniform random track sampling. [Per-fit access counts](../../outputs/experiments/E004a/results-review/20261112-092028-490189Z/report/budget-runs.csv) retain exact denominators and nominal GT durations.
+
+### Automatic coverage does not meet its calibration targets
+
+![Coverage versus fitting-track budget](../../outputs/experiments/E004a/results-review/20261112-092028-490189Z/report/budget-coverage.png) ([SVG](../../outputs/experiments/E004a/results-review/20261112-092028-490189Z/report/budget-coverage.svg))
+
+Hollow points flag an assessment overrun in at least one draw. The 5% target is exceeded in 46/47 checkpoint results, including all five 1,000-track draws. At 1,000 tracks, 57.51% ±3.40 coverage comes with 10.69% mean accepted error. With all data, 54.83% coverage has 8.99% error. These are **not** coverage estimates at a guaranteed 5% assessment error.
+
+The all-data anchor makes the distinction clear:
+
+| Calibration error target | Observed calibration error | Assessment coverage | Assessment accepted error |
+|---|---:|---:|---:|
+| 1% | 0.71% | 3.27% | 0.24% |
+| 5% | 5.00% | 54.83% | 8.99% |
+| 10% | 10.00% | 82.84% | 16.89% |
+| 20% | 16.10% | 100.00% | 22.66% |
+
+Only the all-data 1% cutoff among these four all-data operating points meets its target on assessment, with 3.27% coverage. Across all 47 checkpoint results, 1%/5%/10%/20% targets overrun in 43/46/47/47 cases; there are no empty accepted sets. This describes this fixed split and confidence rule, not a population-level failure probability. Cutoffs were not retuned on assessment labels.
+
+Aggregate coverage also hides class rejection. For the **all-data fit**, the table compares full-coverage class F1 with the 5%-calibration-cutoff acceptance statistics. All entries are percentages; undefined accepted precision is shown as—.
+
+| Class | Development F1 | Assessment F1 | GT-class retention | Accepted precision | Correctly automated GT fraction |
+|---|---:|---:|---:|---:|---:|
+| Moving | 91.63 | 88.27 | 69.28 | 91.17 | 68.91 |
+| Stopped | 55.41 | 40.31 | 1.01 | — | 0.00 |
+| Waiting to cross | 73.90 | 55.74 | 6.99 | 66.46 | 1.32 |
+| Crossing | 52.72 | 36.79 | 44.21 | 88.97 | 12.53 |
+
+Stopped and Waiting are largely rejected. Crossing retains 44.21% of GT weight but only 12.53% is correctly automated; retained GT can still be assigned another class. High accepted precision for a predicted class does not mean high GT-class retention or safe automation of that behavior.
+
+### Conclusions and limits
+
+- **The frozen source representation supports useful target adaptation.** Head fitting raises assessment F1 by roughly 10–15 points with tens to hundreds of fitting tracks under this recipe. It does not establish annotation savings over target-only training; that matched control is still missing.
+- **Selection/calibration does not transfer cleanly across these target scenarios.** The all-data fit has 68.41% development F1 /0.463 CE versus 55.28% /0.560 on assessment. This gap and the cutoff overruns warrant caution about representativeness and selection optimism; they do not identify a cause or prove annotation inconsistency. The older E002f 64.56% head result used the whole 1,861-track validation pool and a different fitting recipe, so it is not directly comparable to this assessment score.
+- **A large automatic-label coverage claim is unsupported by the current confidence rule.** Report achieved errors and class retention alongside coverage. These results justify the next matched E004 controls, not a new architecture search or a reliability guarantee.
+
+Numerical evidence: [budget summary CSV](../../outputs/experiments/E004a/results-review/20261112-092028-490189Z/report/budget-summary.csv), [per-fit CSV](../../outputs/experiments/E004a/results-review/20261112-092028-490189Z/report/budget-runs.csv), [complete report JSON](../../outputs/experiments/E004a/results-review/20261112-092028-490189Z/report/budget-report.json), [subset plan](../../outputs/experiments/E004a/results-review/20261112-092028-490189Z/subset-plans.json), [all-data selected metrics](../../outputs/experiments/E004a/results-review/20261112-092028-490189Z/budget-all-selected-metrics.json), [provenance](../../outputs/experiments/E004a/results-review/20261112-092028-490189Z/provenance.json). Report aggregates were checked against all 47 saved result rows; plots were visually checked. Source checkpoint/normalization references remain pinned. No retraining or inference was performed for this review.

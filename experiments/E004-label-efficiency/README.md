@@ -1,6 +1,6 @@
 # E004 — Target-label efficiency
 
-**Study direction agreed 2026-11-12; E004a protocol fixed, later comparisons remain open.** E004 asks whether source behavior training reduces the target annotation needed for offline pedestrian labeling, which components need adaptation, and what automatic-label coverage is supported at a declared error tolerance.
+**Study direction agreed 2026-11-12; E004a complete, later comparisons remain open.** E004 asks whether source behavior training reduces the target annotation needed for offline pedestrian labeling, which components need adaptation, and what automatic-label coverage is supported at a declared error tolerance.
 
 ## Scope and motivation
 
@@ -11,10 +11,12 @@ The task, ontology, frozen populations, group splits, natural missingness and fu
 | Comparison | Target-trained components | Purpose / status |
 |---|---|---|
 | Original source model | None | Zero-training-label reference; development-label access is accounted separately |
-| [E004a: head-only adaptation](../E004a-head-label-budget/README.md) | Original source classifier only | First pilot: performance versus absolute labeled-track count |
+| [E004a: head-only adaptation](../E004a-head-label-budget/README.md) | Original source classifier only | Completed ROAD→LOKI pilot: [results and budget figures](../E004a-head-label-budget/README.md#results) |
 | Temporal + head adaptation | Source temporal block, final norm and classifier | Planned comparison; detailed settings/ID TBD |
 | Target-only training | Randomly initialized task branches, spatial readout, fusion, temporal block and head | Essential control for annotation-savings claims; same pretrained encoders and target subsets |
 | Full task-model adaptation | All source-trained task components above | Optional follow-up if justified; does not mean encoder fine-tuning |
+
+The completed E004a pilot finds diminishing F1 gains beyond a few hundred fitting tracks under its fixed recipe, while simple confidence cutoffs exceed their calibration error targets on assessment. These results motivate matched target-only/adaptation-depth comparisons and caution about automatic-label reliability; they do not establish annotation savings or guarantees. The experiment owner retains the numerical evidence and qualifiers.
 
 ## Budget and comparison rules
 
@@ -60,6 +62,6 @@ At threshold 0.95, three predictions are accepted: coverage 60%, observed accept
 
 ## Ownership and current boundary
 
-E004 owns common comparison/accounting and coverage concepts. [E004a](../E004a-head-label-budget/README.md) owns the first head-only protocol. E004a is implemented over the existing frozen features; no source-model training, test preparation or encoder changes are included. Full comparison fits remain user-launched.
+E004 owns common comparison/accounting and coverage concepts. [E004a](../E004a-head-label-budget/README.md) owns the first head-only protocol. E004a is implemented over the existing frozen features; no source-model training, test preparation or encoder changes are included. All46 E004a fits are complete. No later comparison was launched by the results review.
 
 On 2026-11-12 the user assigned E004 to label efficiency. The earlier unexecuted E004 complementary-supervision reservation is superseded; that idea remains deferred in [research history](../../docs/research.md#tentative-experiment-direction). No past run or result was renamed.

@@ -1,6 +1,6 @@
 # Research dashboard
 
-Updated **2026-11-11**. We are developing a reliable **offline, given-track pedestrian behavior labeler**. Final architecture and publication contribution remain provisional. Deadline **17 December 2026**; **7–17 December** is protected for buffer and handover. The [literature review](literature/offline-labeling-research-direction.md) supports an empirical study first, with one conditional retrieval or supervision comparison.
+Updated **2026-11-12**. We are developing a reliable **offline, given-track pedestrian behavior labeler**. Final architecture and publication contribution remain provisional. Deadline **17 December 2026**; **7–17 December** is protected for buffer and handover. The [literature review](literature/offline-labeling-research-direction.md) supports an empirical study first, with one conditional retrieval or supervision comparison.
 
 ## Current evidence
 
@@ -22,9 +22,9 @@ Updated **2026-11-11**. We are developing a reliable **offline, given-track pede
 
 ## Next work
 
-1. Use the completed [E001d capacity comparison](../experiments/E001d-temporal-capacity-control/README.md#results) to finalize a bounded baseline comparison.
+1. Complete the [E004a head-only label-budget protocol](../experiments/E004a-head-label-budget/README.md): recording-aware draws, fitting budget and validation-label accounting. The [E004 study](../experiments/E004-label-efficiency/README.md) owns adaptation/target-only comparisons and the secondary error–coverage endpoint.
 2. Arrange a separate backup for valuable checkpoints/predictions; external storage is **TBD**. Original interrupted attempts and all earlier evidence remain preserved.
-3. Choose at most one justified representation or supervision follow-up after reviewing the remaining failures and cost. Masking does not claim independent sensor outages or architectural novelty. The unused retrieval proposal is deferred; E004 remains conditional.
+3. Define the bounded error–coverage policy after the initial budget study; tolerance, calibration/audit groups and uncertainty remain TBD in E004. Representation changes, retrieval and complementary supervision remain deferred.
 
 ## Navigation and ownership
 

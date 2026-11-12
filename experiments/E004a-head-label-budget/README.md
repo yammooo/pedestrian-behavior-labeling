@@ -39,7 +39,7 @@ Produce two main figures: `budget-f1.png` / `.svg` and `budget-coverage.png` / `
 | Figure | Y-axis and grouping | Repeats |
 |---|---|---|
 | **Budget versus F1** | Full-coverage four-class track-weighted macro-F1 (%) on the declared assessment population; one E004a head-adaptation series | Mean ± sample SD (`ddof=1`) over the five subset draws |
-| **Budget versus automatic coverage** | Track-weighted coverage (%); three colored series for calibration error targets **1%, 5%, 10%**, with 5% the central reporting point | Mean ± sample SD of each run's achieved assessment coverage; never pool predictions across models |
+| **Budget versus automatic coverage** | Track-weighted coverage (%); four colored series for calibration error targets **1%, 5%, 10%, 20%**, with 5% the central reporting point | Mean ± sample SD of each run's achieved assessment coverage; never pool predictions across models |
 
 Zero and all-data anchors have one fixed model result, not five independent copies; omit their SD bars. Use the same assessment population for every budget/draw. SD describes subset-draw variation conditional on the fixed source model/training seed, not uncertainty over new recordings. If the reporting population is also used to select a checkpoint or threshold, label results as development results rather than independent assessment.
 
@@ -80,6 +80,6 @@ Save per-run F1/CE, full calibration and assessment error–coverage curves, sel
 | Loss | Existing accepted-GT mean CE per track, averaged over labeled tracks |
 | Optimizer, regularization, fitting budget and stopping | TBD; low-budget convergence/selection must be specified rather than blindly inheriting full-label epochs |
 | Validation labels, selection and later independent evaluation | TBD; count all target-label access |
-| Coverage reporting | Two figures, timestep acceptance, track weights, 1%/5%/10% calibration targets fixed above; calibration/audit membership and any formal uncertainty guarantee TBD |
+| Coverage reporting | Two figures, timestep acceptance, track weights, 1%/5%/10%/20% calibration targets fixed above; calibration/audit membership and any formal uncertainty guarantee TBD |
 
 No new runs, code or evaluation artifacts exist for E004a yet. Existing E002f direct/full-label head results are context; the full-label head can be reused as an anchor only if the eventual initialization, fitting and selection recipe match.

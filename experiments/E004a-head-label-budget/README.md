@@ -1,6 +1,6 @@
 # E004a — Head adaptation versus labeled-track budget
 
-**Protocol agreed 2026-11-12; implementation prepared. Full runs remain user-launched.** This is the first [E004 label-efficiency](../E004-label-efficiency/README.md) comparison. It asks how target performance changes as more complete target-training tracks supervise only the source classifier. Target-only controls remain necessary before claiming annotation savings.
+**Protocol agreed 2026-11-12; implemented and checked. Full runs remain user-launched.** This is the first [E004 label-efficiency](../E004-label-efficiency/README.md) comparison. It asks how target performance changes as more complete target-training tracks supervise only the source classifier. Target-only controls remain necessary before claiming annotation savings.
 
 ## Initial model and data flow
 
@@ -108,3 +108,12 @@ uv run --locked --extra cu118 python scripts/train-e004a.py --device cuda
 This builds the compact frozen representation cache once, then runs 45 reduced-budget fits and one all-data fit sequentially, plus the zero-fitting-label evaluation. Outputs are fresh under `outputs/experiments/E004a/runs/<timestamp>/`; the reusable compact cache is `outputs/experiments/E004a/features/postnorm-bilstm-96/`. Original checkpoints/caches remain read-only. One W&B run per fit logs step CE, online interval training CE/F1, development CE/F1, and final assessment tables. Full predictions and checkpoints remain local. The two main figures and numerical summaries are in the attempt's `report/` directory.
 
 `--smoke` instead runs budgets1/5, draw0, 200 updates each, with the full fixed development/assessment partitions and **offline W&B**, in a separate attempt. It is an integration check, not evidence for the label-efficiency comparison. Production logging errors stop the attempt; there is no retry/resume or silent offline fallback.
+
+## Preparation checks (2026-11-12)
+
+- Required CPU suite: **286 tests pass,13 CUDA skips**; focused sampler/update-cadence and coverage regressions pass. Documentation links/anchors and `git diff --check` pass.
+- Aalto CUDA smoke at `2dc5d5a`: budgets1/5, draw0,200 updates each, full fixed development/assessment partitions, offline W&B. Checkpoint reloads,200 sequential step records per fit, prediction exports, four cutoff analyses and both PNG/SVG figures pass; figures visually checked. This is integration evidence only. Both tiny smoke fits retained update0; no label-efficiency conclusion follows.
+- Compact cache is approximately165.4MB. Copied-head predictions on its new post-temporal representations reproduce the original source logits. Source checkpoint SHA remains unchanged. No native cache rebuild or held-out test access.
+- Remote evidence: `outputs/experiments/E004a/runs/20261112-091726-841239Z/verification.json`, with local inspection copies in `outputs/experiments/E004a/acceptance/20261112/`. The first failed smoke at `20261112-091530-427492Z` is preserved: numeric `point_tokens` provenance was incorrectly treated as availability; cohort analysis now uses only `*_valid` fields.
+
+Full46-fit training was **not started**. Production online W&B uses the existing logging path; the bounded check deliberately used offline W&B. Empirical calibration targets are not risk guarantees.

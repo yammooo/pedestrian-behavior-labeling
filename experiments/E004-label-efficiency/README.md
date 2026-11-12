@@ -60,6 +60,6 @@ At threshold 0.95, three predictions are accepted: coverage 60%, observed accept
 
 ## Ownership and current boundary
 
-E004 owns common comparison/accounting and coverage concepts. [E004a](../E004a-head-label-budget/README.md) owns the first head-only protocol. E004a is being implemented over the existing frozen features; no source-model training, test preparation or encoder changes are included. Full comparison fits remain user-launched.
+E004 owns common comparison/accounting and coverage concepts. [E004a](../E004a-head-label-budget/README.md) owns the first head-only protocol. E004a is implemented over the existing frozen features; no source-model training, test preparation or encoder changes are included. Full comparison fits remain user-launched.
 
 On 2026-11-12 the user assigned E004 to label efficiency. The earlier unexecuted E004 complementary-supervision reservation is superseded; that idea remains deferred in [research history](../../docs/research.md#tentative-experiment-direction). No past run or result was renamed.

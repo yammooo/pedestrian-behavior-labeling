@@ -1,6 +1,6 @@
 # E004 — Target-label efficiency
 
-**Study direction agreed 2026-11-12; detailed protocols remain open.** E004 asks whether source behavior training reduces the target annotation needed for offline pedestrian labeling, which components need adaptation, and what automatic-label coverage is supported at a declared error tolerance.
+**Study direction agreed 2026-11-12; E004a protocol fixed, later comparisons remain open.** E004 asks whether source behavior training reduces the target annotation needed for offline pedestrian labeling, which components need adaptation, and what automatic-label coverage is supported at a declared error tolerance.
 
 ## Scope and motivation
 
@@ -19,7 +19,7 @@ The task, ontology, frozen populations, group splits, natural missingness and fu
 ## Budget and comparison rules
 
 - First budget unit: complete labeled pedestrian tracks. Report unique recordings, tracks, accepted GT timesteps and labeled duration; one track is not one frame label or a fixed amount of human effort.
-- Prefer absolute counts. E004a owns its proposed count grid, repeated subset draws and open recording-aware sampling rule. Earlier percentage/complete-scenario budget proposals were provisional; exact subset construction remains to be settled.
+- Prefer absolute counts. E004a fixes absolute track counts, five nested recording-diverse draws and a scenario-disjoint development/calibration–assessment split. Earlier percentage/complete-scenario budget proposals were provisional and are superseded for this pilot.
 - Give methods the same labeled subsets and permitted target observations. Nest increasing budgets within each draw, repeat subset selection and distinguish draw variation from optimization-seed variation. Report absent classes and retain negative transfer; no undisclosed GT-balanced sampling.
 - Freeze initialization, normalization, trainable components, fit/selection budgets and source checkpoint before fitting. Source normalization stays frozen for source-model adaptation; the target-only normalization/access rule is TBD.
 - Count fitting, validation/stopping, tuning, subset selection and later threshold-calibration labels. Show fixed development overhead and total unique target-label access; do not describe a tiny training subset as total annotation cost.
@@ -56,10 +56,10 @@ Five equally weighted scored timesteps:
 
 At threshold 0.95, three predictions are accepted: coverage 60%, observed accepted error 1/3 =33.3%. At threshold 0.97, two are accepted: coverage 40%, observed error 0/2. The model can be confidently wrong, and zero observed errors in two cases do not establish zero underlying risk. The threshold is a score cutoff, not the tolerated error itself. Use calibration labels to choose a candidate cutoff for the desired error, then measure its achieved error/coverage independently.
 
-**E004a reporting fixed:** budget–F1 and budget–coverage figures; track-weighted timestep error/coverage; 1%, 5%, 10%, 20% calibration error targets; largest qualifying calibration accepted set and separate achieved-error reporting. Its [reporting specification](../E004a-head-label-budget/README.md#fixed-reporting-specification-2026-11-12) owns details. **TBD before independent assessment/reliability claims:** calibration-versus-audit groups, label accounting, and uncertainty/any formal risk bound accounting for correlated observations. No arbitrary minimum-support filter is imposed for the descriptive pilot. These are observed benchmark coverage/error estimates unless a separate guarantee is justified. Calibration/audit label access is additional annotation cost. Human hours saved are not established by benchmark label counts.
+**E004a reporting fixed:** budget–F1 and budget–coverage figures; track-weighted timestep error/coverage; 1%, 5%, 10%, 20% calibration error targets; largest qualifying calibration accepted set and separate achieved-error reporting. Its [reporting specification](../E004a-head-label-budget/README.md#fixed-reporting-specification-2026-11-12) owns details. **E004a assessment:** a fixed 46/47-scenario split of existing LOKI validation, with fitting/development label access and assessment effort separately counted. **TBD before reliability guarantees:** uncertainty/formal risk bounds accounting for correlated observations and assessment beyond historically inspected development data. No arbitrary minimum-support filter is imposed for the descriptive pilot. These are observed benchmark coverage/error estimates unless a separate guarantee is justified. Calibration/audit label access is additional annotation cost. Human hours saved are not established by benchmark label counts.
 
 ## Ownership and current boundary
 
-E004 owns common comparison/accounting and coverage concepts. [E004a](../E004a-head-label-budget/README.md) owns the first head-only protocol. This step records the study only; no new model implementation, preparation, test evaluation or training was started.
+E004 owns common comparison/accounting and coverage concepts. [E004a](../E004a-head-label-budget/README.md) owns the first head-only protocol. E004a is being implemented over the existing frozen features; no source-model training, test preparation or encoder changes are included. Full comparison fits remain user-launched.
 
 On 2026-11-12 the user assigned E004 to label efficiency. The earlier unexecuted E004 complementary-supervision reservation is superseded; that idea remains deferred in [research history](../../docs/research.md#tentative-experiment-direction). No past run or result was renamed.

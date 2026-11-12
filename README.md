@@ -1009,3 +1009,15 @@ bash scripts/run-e002f-sequential.sh
 ```
 
 It first checks both backbones at the inherited64×102 temporal bound, then runs two full ROAD source trainings, architecture-specific LOKI feature caches and four full target fits. For bounded GPU/W&B integration checks, use `E002F_SMOKE=1 bash scripts/run-e002f-sequential.sh`; this uses the explicit three-train/two-validation selection. Output roots are fresh and ignored under `outputs/experiments/E002f/`; failures stop without retry or resume.
+
+## E004a head-only label budgets
+
+The [E004a protocol](experiments/E004a-head-label-budget/README.md) fine-tunes only the original ROAD-trained E002f BiLSTM classifier on nested LOKI training-track subsets. All source statistics and representations remain frozen.
+
+```bash
+cd /home/user20/projects/pedestrian-behavior-labeling-e002b-evaluation
+export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+uv run --locked --extra cu118 python scripts/train-e004a.py --device cuda
+```
+
+The command reuses existing E002f fusion features, caches post-BiLSTM/final-LayerNorm representations once, and runs45 reduced-budget fits (nine budgets × five draws) plus one all-data fit and a zero-fitting-label evaluation. The fixed development/calibration pool has930 tracks; assessment has931. Each attempt writes local checkpoints/predictions, label-access counts and two PNG/SVG budget figures under `outputs/experiments/E004a/runs/<timestamp>/`. W&B receives losses, metrics, summary tables and plots; checkpoints/full predictions remain local. Failures stop without retry/resume. Append `--smoke` only for the bounded200-update, two-fit offline-W&B check; full training stays user-launched.

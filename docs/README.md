@@ -22,9 +22,9 @@ Updated **2026-11-12**. We are developing a reliable **offline, given-track pede
 
 ## Next work
 
-1. Complete the [E004a head-only label-budget protocol](../experiments/E004a-head-label-budget/README.md): recording-aware draws, fitting budget and validation-label accounting. The [E004 study](../experiments/E004-label-efficiency/README.md) owns adaptation/target-only comparisons and the secondary error–coverage endpoint.
+1. Run the [prepared E004a head-only label-budget pilot](../experiments/E004a-head-label-budget/README.md#run): nine reduced budgets × five recording-diverse draws, plus zero/all anchors. The fixed development/calibration pool is930 tracks and assessment931; labels and costs are reported separately. The [E004 study](../experiments/E004-label-efficiency/README.md) still needs matched target-only/adaptation-depth controls before claiming label savings. Full training remains user-launched; tests stay closed.
 2. Arrange a separate backup for valuable checkpoints/predictions; external storage is **TBD**. Original interrupted attempts and all earlier evidence remain preserved.
-3. Settle calibration/assessment groups and uncertainty for the [fixed E004a reporting specification](../experiments/E004a-head-label-budget/README.md#fixed-reporting-specification-2026-11-12); numerical error targets and timestep weighting are now defined. Representation changes, retrieval and complementary supervision remain deferred.
+3. Review the pilot's budget–F1 and budget–coverage curves, class retention and calibration-target overruns before expanding comparisons. Statistical risk guarantees and uncertainty over new recordings remain open. Defer new encoders, further masking/regularization sweeps, map distillation and complementary supervision; preserve the [closure schedule](research.md#schedule).
 
 ## Navigation and ownership
 

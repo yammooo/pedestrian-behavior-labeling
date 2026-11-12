@@ -27,18 +27,18 @@ The task, ontology, frozen populations, group splits, natural missingness and fu
 
 ## Secondary endpoint: error versus automatic coverage
 
-Define this before interpreting automatic-annotation usefulness, but do not make it a prerequisite for the E004a fitting pilot. The simplest proposed acceptance unit is an individual timestep; this does not imply whole-track acceptance.
+Define this before interpreting automatic-annotation usefulness, but do not make it a prerequisite for the E004a fitting pilot. E004a fixes individual scored timesteps as its acceptance unit; this does not imply whole-track acceptance.
 
-For prediction `y_hat[t] = argmax p[t]`, a proposed baseline confidence score is `s[t] = max p[t]`. Accept when `s[t] >= threshold`. Neither the GT label nor `p[t, GT[t]]` may enter this acceptance rule: GT is unavailable during annotation. GT measures the accepted predictions' actual error on labeled calibration/evaluation data.
+For prediction `y_hat[t] = argmax p[t]`, E004a's baseline confidence score is `s[t] = max p[t]`. Accept when `s[t] >= threshold`. Neither the GT label nor `p[t, GT[t]]` may enter this acceptance rule: GT is unavailable during annotation. GT measures the accepted predictions' actual error on labeled calibration/evaluation data.
 
-For scored GT timesteps, let `w[t] = 1 / track_GT_count` and `a[t]` indicate confidence acceptance. Two proposed weighted measures are:
+For scored GT timesteps, let `w[t] = 1 / track_GT_count` and `a[t]` indicate confidence acceptance. E004a uses these weighted measures:
 
 ```text
 coverage = sum(w * a) / sum(w)
 accepted error = sum(w * a * (y_hat != GT)) / sum(w * a)
 ```
 
-Keep weights from the original complete track; do not renormalize each track after acceptance. No accepted weight means coverage zero and error undefined. Raw frame-count versions should accompany the weighted measures; the primary error weighting is still TBD. Coverage over all non-padding, potentially unlabeled context is a separate acceptance fraction: without GT, its error cannot be measured.
+Keep weights from the original complete track; do not renormalize each track after acceptance. No accepted weight means coverage zero and error undefined. E004a uses these track-weighted measures as primary, with raw frame-count versions alongside them; other comparisons must declare changes explicitly. Coverage over all non-padding, potentially unlabeled context is a separate acceptance fraction: without GT, its error cannot be measured.
 
 Select a threshold using permitted labeled calibration/development data, then freeze it and assess its achieved coverage/error on separate evaluation groups not used for fitting, checkpoint selection or threshold tuning. Plotting the full risk–coverage curve is descriptive; choosing the best threshold and claiming its error on the same observations is optimistic. A softmax threshold of 0.95 does not guarantee 5% error. Report support, uncertainty, GT-class retention and accepted error by predicted class, plus missing-observation cohorts; high aggregate coverage/accuracy can hide rejection or failure of rare behaviors. See [SelectiveNet notes](../../docs/literature/papers/selectivenet.md).
 
@@ -56,7 +56,7 @@ Five equally weighted scored timesteps:
 
 At threshold 0.95, three predictions are accepted: coverage 60%, observed accepted error 1/3 =33.3%. At threshold 0.97, two are accepted: coverage 40%, observed error 0/2. The model can be confidently wrong, and zero observed errors in two cases do not establish zero underlying risk. The threshold is a score cutoff, not the tolerated error itself. Use calibration labels to choose a candidate cutoff for the desired error, then measure its achieved error/coverage independently.
 
-**TBD before a reliability claim:** error tolerance, primary weighting, final acceptance unit, threshold/calibration policy, calibration-versus-audit groups, minimum support and uncertainty method accounting for correlated observations. These are observed benchmark coverage/error estimates unless a separate guarantee is justified. Calibration/audit label access is additional annotation cost. Human hours saved are not established by benchmark label counts.
+**E004a reporting fixed:** budget–F1 and budget–coverage figures; track-weighted timestep error/coverage; 1%, 5%, 10% calibration error targets; largest qualifying calibration accepted set and separate achieved-error reporting. Its [reporting specification](../E004a-head-label-budget/README.md#fixed-reporting-specification-2026-11-12) owns details. **TBD before independent assessment/reliability claims:** calibration-versus-audit groups, label accounting, and uncertainty/any formal risk bound accounting for correlated observations. No arbitrary minimum-support filter is imposed for the descriptive pilot. These are observed benchmark coverage/error estimates unless a separate guarantee is justified. Calibration/audit label access is additional annotation cost. Human hours saved are not established by benchmark label counts.
 
 ## Ownership and current boundary
 

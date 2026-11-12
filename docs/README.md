@@ -24,7 +24,7 @@ Updated **2026-11-12**. We are developing a reliable **offline, given-track pede
 
 1. Complete the [E004a head-only label-budget protocol](../experiments/E004a-head-label-budget/README.md): recording-aware draws, fitting budget and validation-label accounting. The [E004 study](../experiments/E004-label-efficiency/README.md) owns adaptation/target-only comparisons and the secondary error–coverage endpoint.
 2. Arrange a separate backup for valuable checkpoints/predictions; external storage is **TBD**. Original interrupted attempts and all earlier evidence remain preserved.
-3. Define the bounded error–coverage policy after the initial budget study; tolerance, calibration/audit groups and uncertainty remain TBD in E004. Representation changes, retrieval and complementary supervision remain deferred.
+3. Settle calibration/assessment groups and uncertainty for the [fixed E004a reporting specification](../experiments/E004a-head-label-budget/README.md#fixed-reporting-specification-2026-11-12); numerical error targets and timestep weighting are now defined. Representation changes, retrieval and complementary supervision remain deferred.
 
 ## Navigation and ownership
 

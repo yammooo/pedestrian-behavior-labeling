@@ -1,6 +1,6 @@
 # Research dashboard
 
-Updated **2026-11-12**. We are developing a reliable **offline, given-track pedestrian behavior labeler**. Final architecture and publication contribution remain provisional. Deadline **17 December 2026**; **7–17 December** is protected for buffer and handover. The [literature review](literature/offline-labeling-research-direction.md) supports an empirical study first, with one conditional retrieval or supervision comparison.
+Updated **2026-11-13**. We are developing a reliable **offline, given-track pedestrian behavior labeler**. Final architecture and publication contribution remain provisional. Deadline **17 December 2026**; **7–17 December** is protected for buffer and handover. The [literature review](literature/offline-labeling-research-direction.md) supports an empirical study first, with one conditional retrieval or supervision comparison.
 
 ## Current evidence
 
@@ -24,7 +24,7 @@ Updated **2026-11-12**. We are developing a reliable **offline, given-track pede
 
 ## Next work
 
-1. Discuss the next matched [E004 comparison](../experiments/E004-label-efficiency/README.md) using the saved E004a subsets: target-only versus source-trained adaptation, with equal fitting/development labels. The [completed head pilot](../experiments/E004a-head-label-budget/README.md#results) shows recovery and diminishing gains, but does not establish source-training label savings.
+1. Run the [E004a early-check diagnostic](../experiments/E004a-head-label-budget/README.md#early-check-rerun-2026-11-13) on the exact same subset draws: development checks before update100, unchanged optimization and approximately1,500-update patience. The original results remain the baseline. Full rerun stays user-launched; no new sampling or class balancing.
 2. Resolve the observed calibration-to-assessment error gap before describing automatic acceptance as reliable. Retain class retention and achieved errors; statistical risk guarantees and uncertainty over new recordings remain open. No additional experiment is launched by this review.
 3. Arrange a separate backup for valuable checkpoints/predictions; external storage is **TBD**. Keep the [closure schedule](research.md#schedule); representation changes and further broad sweeps remain deferred.
 

@@ -1021,3 +1021,11 @@ uv run --locked --extra cu118 python scripts/train-e004a.py --device cuda
 ```
 
 The command reuses existing E002f fusion features, caches post-BiLSTM/final-LayerNorm representations once, and runs45 reduced-budget fits (nine budgets × five draws) plus one all-data fit and a zero-fitting-label evaluation. The fixed development/calibration pool has930 tracks; assessment has931. Each attempt writes local checkpoints/predictions, label-access counts and two PNG/SVG budget figures under `outputs/experiments/E004a/runs/<timestamp>/`. W&B receives losses, metrics, summary tables and plots; checkpoints/full predictions remain local. Failures stop without retry/resume. Append `--smoke` only for the bounded200-update, two-fit offline-W&B check; full training stays user-launched.
+
+The [E004a early-check diagnostic](experiments/E004a-head-label-budget/README.md#early-check-rerun-2026-11-13) keeps the exact same draws/settings and adds development checks before update 100. Run it with:
+
+```bash
+uv run --locked --extra cu118 python scripts/train-e004a.py --device cuda --early-checks
+```
+
+It uses fresh outputs, labels W&B runs `early-checks`, and retains approximately 1,500-update patience. The original command without the flag preserves the original schedule.

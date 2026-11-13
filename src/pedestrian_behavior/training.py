@@ -90,35 +90,72 @@ def train_epoch(model, batches, optimizer, device, clip_norm, on_step=None, step
 
 
 def fit(model, batches, validate, optimizer, device, output, checkpoint_references, on_epoch,
-        epochs, patience, clip_norm, on_step=None, epoch_operation=train_epoch, initial_candidate=False):
+        epochs, patience, clip_norm, on_step=None, epoch_operation=train_epoch, initial_candidate=False,
+        check_updates=None, patience_updates=None):
+    if check_updates is not None:
+        check_updates = tuple(check_updates)
+        if (len(check_updates) != epochs or not check_updates
+                or any(type(step) is not int or step <= 0 for step in check_updates)
+                or any(right <= left for left, right in zip(check_updates, check_updates[1:]))):
+            raise ValueError("check_updates must be a strictly increasing positive schedule matching epochs")
+        if type(patience_updates) is not int or patience_updates <= 0:
+            raise ValueError("A positive patience_updates value is required with check_updates")
+    elif patience_updates is not None:
+        raise ValueError("patience_updates requires check_updates")
+
     history, best, stale, step_offset = [], None, 0, 0
+    last_improvement_update = None
     if initial_candidate:
         validation = validate(model)
         best, stale, selected = select_epoch(None, validation["track_weighted"]["macro_f1"],
             validation["track_ce"], 0, 0)
+        if check_updates is not None:
+            best["optimizer_step"] = 0
+            last_improvement_update = 0
         row = {"epoch": 0, "training_ce": None, "training_f1": None,
             "optimizer_steps": 0, "processed_tracks": 0, "context_slots": 0, "gt_slots": 0,
             "padding_slots": 0, "batch_slots": 0,
             "validation_ce": validation["track_ce"],
             "validation_f1": validation["track_weighted"]["macro_f1"],
             "selected": selected, "non_improving_epochs": stale, "stopping_reason": None}
+        if check_updates is not None:
+            row["optimizer_step"] = 0
         history.append(row)
         evidence = checkpoint_references | {"epoch": 0, "selection": best, "validation": validation,
                                             "stopping_reason": None}
+        if check_updates is not None:
+            evidence["optimizer_step"] = 0
         save_checkpoint(Path(output)/"best.pt", model, evidence)
         save_checkpoint(Path(output)/"last.pt", model, evidence)
         on_epoch(row, history)
     for epoch in range(1, epochs+1):
-        row = {"epoch": epoch} | epoch_operation(model, batches, optimizer, device, clip_norm, on_step=on_step, step_offset=step_offset)
+        operation_args = {"on_step": on_step, "step_offset": step_offset}
+        if check_updates is not None:
+            operation_args["updates"] = check_updates[epoch-1] - step_offset
+        row = {"epoch": epoch} | epoch_operation(model, batches, optimizer, device, clip_norm, **operation_args)
         step_offset += row["optimizer_steps"]
+        if check_updates is not None and step_offset != check_updates[epoch-1]:
+            raise ValueError("Training operation did not reach the scheduled optimizer update")
         validation = validate(model)
         row.update(validation_ce=validation["track_ce"], validation_f1=validation["track_weighted"]["macro_f1"])
+        strict_improvement = best is None or row["validation_f1"] > best["f1"]
         best, stale, selected = select_epoch(best, row["validation_f1"], row["validation_ce"], epoch, stale)
-        reason = "patience" if stale >= patience else "budget" if epoch == epochs else None
+        if check_updates is not None:
+            if strict_improvement:
+                last_improvement_update = step_offset
+            if selected:
+                best["optimizer_step"] = step_offset
+            row["optimizer_step"] = step_offset
+            reason = "patience" if (last_improvement_update is not None
+                and step_offset - last_improvement_update >= patience_updates) else "budget" if epoch == epochs else None
+        else:
+            reason = "patience" if stale >= patience else "budget" if epoch == epochs else None
         row.update(selected=selected, non_improving_epochs=stale, stopping_reason=reason)
         history.append(row)
         evidence = checkpoint_references | {"epoch": epoch, "selection": best, "validation": validation,
                                             "stopping_reason": reason}
+        if check_updates is not None:
+            evidence["optimizer_step"] = step_offset
         if selected:
             save_checkpoint(Path(output)/"best.pt", model, evidence)
         save_checkpoint(Path(output)/"last.pt", model, evidence)

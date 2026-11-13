@@ -31,6 +31,8 @@ CLASSES = e003b_run.CLASSES
 BUDGETS = (1, 5, 10, 25, 50, 100, 250, 500, 1000)
 ALL_TRACKS = 8574
 DEVELOPMENT_GROUPS, ASSESSMENT_GROUPS = 46, 47
+EARLY_PATIENCE_UPDATES = 1500
+EARLY_CHECK_UPDATES = (1, 5, 10, 25, 50, 100, *range(200, 10001, 100))
 EXPECTED_VALIDATION = {"development": {"tracks": 930, "groups": 46, "gt_timesteps": 29626,
     "class_gt_counts": [17633, 1789, 5691, 4513], "nominal_gt_duration_seconds": 5925.2},
     "assessment": {"tracks": 931, "groups": 47, "gt_timesteps": 30605,
@@ -245,10 +247,18 @@ def _track_label_record(row):
         "class_gt_counts": np.bincount(labels, minlength=4).astype(int).tolist()}
 
 
-def _plan(training, development, assessment, smoke=False):
+def _check_schedule(early_checks, max_updates):
+    if not early_checks:
+        return None
+    return tuple(update for update in EARLY_CHECK_UPDATES if update <= max_updates)
+
+
+def _plan(training, development, assessment, smoke=False, early_checks=False):
     plan_rows = []
     draws = (0,) if smoke else tuple(range(5))
     budgets = (1, 5) if smoke else BUDGETS
+    max_updates = 200 if smoke else SETTINGS["max_updates"]
+    update_schedule = _check_schedule(early_checks, max_updates)
     for draw in draws:
         order = recording_round_robin(training, draw)
         for budget in budgets:
@@ -261,8 +271,12 @@ def _plan(training, development, assessment, smoke=False):
     return {"status": "planned", "experiment": "E004a", "smoke": smoke,
         "protocol": {"source_checkpoint_sha256": SOURCE_SHA256, "training_seed": 0,
             "draw_seeds": list(draws), "budget_grid": list(budgets) + ([] if smoke else [ALL_TRACKS]),
-            "fit_seed": 0, "optimizer": SETTINGS["optimizer"], "max_optimizer_updates": 200 if smoke else SETTINGS["max_updates"],
-            "validation_every_updates": SETTINGS["updates_per_check"], "patience_checks": SETTINGS["patience_checks"],
+            "fit_seed": 0, "optimizer": SETTINGS["optimizer"], "max_optimizer_updates": max_updates,
+            "validation_every_updates": SETTINGS["updates_per_check"],
+            "patience_checks": None if early_checks else SETTINGS["patience_checks"],
+            "early_checks": early_checks, "check_updates": [0, *update_schedule] if update_schedule is not None
+                else [0, *range(SETTINGS["updates_per_check"], max_updates + 1, SETTINGS["updates_per_check"])],
+            "patience_updates": EARLY_PATIENCE_UPDATES if early_checks else None,
             "development_groups_seed": 0, "development_group_count": DEVELOPMENT_GROUPS,
             "assessment_group_count": ASSESSMENT_GROUPS},
         "population": {"training": _population_summary(training),
@@ -282,13 +296,17 @@ def _new_head(state, device):
 
 def _fixed_update_epoch(updates):
     iterator = None
+    default_updates = updates
 
-    def operation(model, batches, optimizer, device, clip_norm, on_step=None, step_offset=0):
+    def operation(model, batches, optimizer, device, clip_norm, on_step=None, step_offset=0, updates=None):
         nonlocal iterator
+        interval_updates = updates if updates is not None else default_updates
+        if type(interval_updates) is not int or interval_updates <= 0:
+            raise ValueError("E004a update interval must be positive")
 
         def next_batches():
             nonlocal iterator
-            for _ in range(updates):
+            for _ in range(interval_updates):
                 if iterator is None:
                     iterator = iter(batches)
                 try:
@@ -343,12 +361,13 @@ def _plots(output, history):
     output = Path(output)
     output.mkdir(exist_ok=True)
     checks = [row for row in history if row["epoch"] > 0]
+    update = lambda row: row.get("optimizer_step", row["epoch"] * SETTINGS["updates_per_check"])
     fig, ax = plt.subplots(figsize=(7, 4))
-    ax.plot([row["epoch"] * SETTINGS["updates_per_check"] for row in history],
+    ax.plot([update(row) for row in history],
             [row["validation_f1"] for row in history], marker="o", label="development F1")
     ax.set(xlabel="Optimizer update", ylabel="Track-weighted macro-F1", ylim=(0, 1))
     ax2 = ax.twinx()
-    ax2.plot([row["epoch"] * SETTINGS["updates_per_check"] for row in checks],
+    ax2.plot([update(row) for row in checks],
              [row["training_f1"] for row in checks], color="tab:orange", alpha=.7, label="training F1")
     ax2.set_ylim(0, 1)
     fig.tight_layout()
@@ -367,12 +386,13 @@ def _wandb_risk_table(analysis):
 
 
 def _run_one(attempt, cache, training_rows, development_rows, assessment_rows, plan_row,
-             plan, device, smoke):
+             plan, device, smoke, early_checks=False):
     budget, draw = plan_row["budget"], plan_row["draw"]
     suffix = "all" if budget == ALL_TRACKS else f"{budget:04d}"
     fit_dir = attempt / (f"budget-{suffix}" if draw is None else f"budget-{suffix}-draw-{draw:02d}")
     fit_dir.mkdir()
-    local = {"status": "incomplete", "budget": budget, "draw": draw, "held_out_tests": False}
+    local = {"status": "incomplete", "budget": budget, "draw": draw,
+        "early_checks": early_checks, "held_out_tests": False}
     shared_run.write_json(fit_dir / "status.json", local)
     run = None
     try:
@@ -382,15 +402,22 @@ def _run_one(attempt, cache, training_rows, development_rows, assessment_rows, p
         development = e003b_run.CachedTracks(development_rows)
         batches = e003b_run._batches(dataset, training=True, seed=0)
         development_batches = e003b_run._batches(development, seed=0)
-        training_steps = 2 if smoke else SETTINGS["max_updates"] // SETTINGS["updates_per_check"]
-        settings = {**SETTINGS, "max_updates": training_steps * SETTINGS["updates_per_check"],
-            "check_interval_updates": SETTINGS["updates_per_check"], "smoke": smoke}
+        max_updates = 200 if smoke else SETTINGS["max_updates"]
+        check_updates = _check_schedule(early_checks, max_updates)
+        training_steps = len(check_updates) if check_updates is not None else max_updates // SETTINGS["updates_per_check"]
+        settings = {**SETTINGS, "max_updates": max_updates, "early_checks": early_checks,
+            "check_updates": [0, *check_updates] if check_updates is not None
+                else [0, *range(SETTINGS["updates_per_check"], max_updates + 1, SETTINGS["updates_per_check"])],
+            "check_interval_updates": None if early_checks else SETTINGS["updates_per_check"],
+            "patience_checks": None if early_checks else SETTINGS["patience_checks"],
+            "patience_updates": EARLY_PATIENCE_UPDATES if early_checks else None, "smoke": smoke}
         config = {"experiment": "E004a", "source": SOURCE, "target": TARGET,
             "architecture": ARCHITECTURE, "trainable_parameters": 516,
             "source_checkpoint_sha256": SOURCE_SHA256, "source_head_sha256": cache["manifest"]["source_head"]["state_sha256"],
             "feature_cache": {split: cache["manifest"]["derived_features"][split]["sha256"]
                               for split in ("training", "validation")},
             "budget_tracks": budget, "draw": draw, "training_seed": 0,
+            "early_checks": early_checks,
             "development_groups": DEVELOPMENT_GROUPS, "assessment_groups": ASSESSMENT_GROUPS,
             "settings": settings, "training_subset_groups": len({row["group"] for row in training_rows}),
             "training_subset_gt_timesteps": int(sum(row["gt_valid"].sum() for row in training_rows)),
@@ -401,10 +428,13 @@ def _run_one(attempt, cache, training_rows, development_rows, assessment_rows, p
         shared_run.write_json(config_path, config)
         shared_run.write_json(fit_dir / "provenance.json", {"config": str(config_path),
             "plan": str(attempt / "subset-plans.json"), "determinism": seed_info,
+            "early_checks": early_checks,
             "source_checkpoint_sha256": SOURCE_SHA256, "cache_manifest": str(cache["root"] / "cache.json"),
             "actual_optimizer_updates": 0, "selected_update": None})
         run_name = f"e004a-road-to-loki-head-n{budget:04d}-d{draw:02d}-s0" if draw is not None else \
             f"e004a-road-to-loki-head-n{budget:04d}-s0"
+        if early_checks:
+            run_name += "-early-checks"
         run = wandb.init(entity="yammo-unipd", project="pedestrian-behaviour-labeling", name=run_name,
             job_type="smoke" if smoke else "comparison", config=config,
             dir=str(fit_dir.resolve()), save_code=False, resume="never", mode="offline" if smoke else "online")
@@ -423,7 +453,7 @@ def _run_one(attempt, cache, training_rows, development_rows, assessment_rows, p
         history_path = fit_dir / "history.json"
         def on_check(row, history):
             shared_run.write_json(history_path, history)
-            step = row["epoch"] * SETTINGS["updates_per_check"]
+            step = row.get("optimizer_step", row["epoch"] * SETTINGS["updates_per_check"])
             run.log({"optimizer_check": step, "development/track_ce": row["validation_ce"],
                 "development/macro_f1": row["validation_f1"],
                 **({"train/track_ce": row["training_ce"], "train/macro_f1": row["training_f1"]}
@@ -438,7 +468,8 @@ def _run_one(attempt, cache, training_rows, development_rows, assessment_rows, p
              "provenance_file": "provenance.json", "fit_plan": {"budget": budget, "draw": draw}},
             on_check, epochs=training_steps, patience=SETTINGS["patience_checks"],
             clip_norm=SETTINGS["clip_norm"], on_step=on_step,
-            epoch_operation=_fixed_update_epoch(SETTINGS["updates_per_check"]), initial_candidate=True)
+            epoch_operation=_fixed_update_epoch(SETTINGS["updates_per_check"]), initial_candidate=True,
+            check_updates=check_updates, patience_updates=EARLY_PATIENCE_UPDATES if early_checks else None)
         selected = reload_checkpoint(fit_dir / "best.pt", model, device)
         # Assessment predictions are first computed after checkpoint selection and reload.
         selected_development = predict(model, development_batches, device)
@@ -453,9 +484,12 @@ def _run_one(attempt, cache, training_rows, development_rows, assessment_rows, p
         exposure = {key: sum(row[key] for row in fit_result["history"])
                     for key in ("optimizer_steps", "processed_tracks", "context_slots", "gt_slots",
                                 "padding_slots", "batch_slots")}
-        selected_update = int(selected["epoch"] * SETTINGS["updates_per_check"])
+        if early_checks and selected.get("optimizer_step") != selected["selection"].get("optimizer_step"):
+            raise ValueError("Selected checkpoint update differs from its saved selection metadata")
+        selected_update = int(selected["selection"]["optimizer_step"] if early_checks else
+            selected["epoch"] * SETTINGS["updates_per_check"])
         metadata = {"status": "complete", "budget": budget, "draw": draw,
-            "training_seed": 0, "source_checkpoint_sha256": SOURCE_SHA256,
+            "training_seed": 0, "early_checks": early_checks, "source_checkpoint_sha256": SOURCE_SHA256,
             "source_head_sha256": config["source_head_sha256"],
             "selected_update": selected_update, "selected_epoch": selected["epoch"],
             "stopping_reason": fit_result["stopping_reason"],
@@ -488,7 +522,8 @@ def _run_one(attempt, cache, training_rows, development_rows, assessment_rows, p
             "macro_f1": assessment_metrics["track_weighted"]["macro_f1"],
             "track_ce": assessment_metrics["track_ce"], "coverage": analysis,
             "annotation_access": metadata["annotation_access"], "fit_dir": str(fit_dir),
-            "selected_update": selected_update, "stopping_reason": fit_result["stopping_reason"]}
+            "selected_update": selected_update, "stopping_reason": fit_result["stopping_reason"],
+            "early_checks": early_checks}
     except BaseException as error:
         local.update(status="failed", failure={"type": type(error).__name__, "message": str(error),
             "traceback": traceback.format_exc()})
@@ -501,7 +536,7 @@ def _run_one(attempt, cache, training_rows, development_rows, assessment_rows, p
         raise
 
 
-def _evaluate_zero(attempt, cache, development_rows, assessment_rows, plan):
+def _evaluate_zero(attempt, cache, development_rows, assessment_rows, plan, early_checks=False):
     output = attempt / "zero-source-head"
     output.mkdir()
     dev_groups = {row["group"] for row in development_rows}
@@ -515,7 +550,7 @@ def _evaluate_zero(attempt, cache, development_rows, assessment_rows, plan):
     analysis = e004a_analysis.analyze_checkpoint(dev_tracks, assessment_tracks,
         output / "risk-analysis", error_targets=ERROR_TARGETS)
     dev_metrics, assessment_metrics = prediction_metrics(dev_tracks, len(CLASSES)), prediction_metrics(assessment_tracks, len(CLASSES))
-    summary = {"status": "complete", "budget": 0, "draw": None,
+    summary = {"status": "complete", "budget": 0, "draw": None, "early_checks": early_checks,
         "source_checkpoint_sha256": SOURCE_SHA256, "selected_update": 0,
         "selection": {"epoch": 0, "f1": dev_metrics["track_weighted"]["macro_f1"], "ce": dev_metrics["track_ce"]},
         "development_metrics": dev_metrics, "assessment_metrics": assessment_metrics,
@@ -525,10 +560,10 @@ def _evaluate_zero(attempt, cache, development_rows, assessment_rows, plan):
     return {"budget": 0, "draw": None, "macro_f1": assessment_metrics["track_weighted"]["macro_f1"],
         "track_ce": assessment_metrics["track_ce"], "coverage": analysis,
         "annotation_access": summary["annotation_access"], "fit_dir": str(output), "selected_update": 0,
-        "stopping_reason": "source-anchor"}
+        "stopping_reason": "source-anchor", "early_checks": early_checks}
 
 
-def run(device="cuda", outputs_root=Path("outputs"), smoke=False):
+def run(device="cuda", outputs_root=Path("outputs"), smoke=False, early_checks=False):
     device = torch.device(device)
     outputs_root = Path(outputs_root).resolve()
     if device.type not in ("cpu", "cuda") or (device.type == "cuda" and not torch.cuda.is_available()):
@@ -541,6 +576,7 @@ def run(device="cuda", outputs_root=Path("outputs"), smoke=False):
     diff = subprocess.check_output(["git", "diff", "HEAD"], cwd=Path(__file__).resolve().parents[3])
     provenance = {"command": getattr(sys, "orig_argv", sys.argv),
         "started_utc": datetime.now(timezone.utc).isoformat(),
+        "early_checks": early_checks, "smoke": smoke,
         "revision": subprocess.check_output(["git", "rev-parse", "HEAD"],
             cwd=Path(__file__).resolve().parents[3], text=True).strip(),
         "diff_sha256": hashlib.sha256(diff).hexdigest(), "python": platform.python_version(),
@@ -552,6 +588,7 @@ def run(device="cuda", outputs_root=Path("outputs"), smoke=False):
             "launcher": checksum(Path(__file__).resolve().parents[3] / "scripts/train-e004a.py")}}
     shared_run.write_json(attempt / "provenance.json", provenance)
     shared_run.write_json(attempt / "status.json", {"status": "incomplete", "smoke": smoke,
+        "early_checks": early_checks,
         "held_out_tests": False, "failures": []})
     try:
         seed_run(0)
@@ -561,9 +598,10 @@ def run(device="cuda", outputs_root=Path("outputs"), smoke=False):
         for name, rows in (("development", development), ("assessment", assessment)):
             if _population_summary(rows) != EXPECTED_VALIDATION[name]:
                 raise ValueError(f"Frozen LOKI {name} population/class support differs from the agreed 46/47 split")
-        plan = _plan(training, development, assessment, smoke=smoke) | {"validation_split": split_identity}
+        plan = _plan(training, development, assessment, smoke=smoke, early_checks=early_checks) | {
+            "validation_split": split_identity}
         shared_run.write_json(attempt / "subset-plans.json", plan)
-        results = [_evaluate_zero(attempt, cache, development, assessment, plan)]
+        results = [_evaluate_zero(attempt, cache, development, assessment, plan, early_checks)]
         plan_by_key = {(row["budget"], row["draw"]): row for row in plan["runs"]}
         for key, plan_row in plan_by_key.items():
             selected = {row["locator"] for row in plan_row["selected_tracks"]}
@@ -572,25 +610,27 @@ def run(device="cuda", outputs_root=Path("outputs"), smoke=False):
             if len(training_rows) != plan_row["budget"]:
                 raise ValueError("Persisted E004a subset plan does not match cached training tracks")
             results.append(_run_one(attempt, cache, training_rows, development, assessment,
-                plan_row, plan, device, smoke))
+                plan_row, plan, device, smoke, early_checks))
         shared_run.write_json(attempt / "results.json", results)
         report_rows = [{"budget": row["budget"], "draw": row["draw"], "macro_f1": row["macro_f1"],
             "track_ce": row["track_ce"], "coverage": row["coverage"],
             "annotation_access": row["annotation_access"], "selected_update": row["selected_update"],
-            "stopping_reason": row["stopping_reason"]} for row in results]
+            "stopping_reason": row["stopping_reason"], "early_checks": early_checks} for row in results]
         e004a_analysis.make_report(report_rows, attempt / "report")
         provenance.update(finished_utc=datetime.now(timezone.utc).isoformat(), elapsed_seconds=time.monotonic() - started)
         shared_run.write_json(attempt / "provenance.json", provenance)
         shared_run.write_json(attempt / "status.json", {"status": "complete", "smoke": smoke,
+            "early_checks": early_checks,
             "fit_count": len(plan["runs"]), "zero_anchor": True, "held_out_tests": False,
             "results": len(results), "report": str(attempt / "report")})
         return {"attempt": str(attempt), "cache": str(cache["root"]), "fits": len(plan["runs"]),
-                "results": len(results), "smoke": smoke}
+                "results": len(results), "smoke": smoke, "early_checks": early_checks}
     except BaseException as error:
         provenance.update(finished_utc=datetime.now(timezone.utc).isoformat(), elapsed_seconds=time.monotonic() - started,
             failure={"type": type(error).__name__, "message": str(error)})
         shared_run.write_json(attempt / "provenance.json", provenance)
         shared_run.write_json(attempt / "status.json", {"status": "failed", "smoke": smoke,
+            "early_checks": early_checks,
             "held_out_tests": False, "failures": [{"type": type(error).__name__, "message": str(error),
                                                      "traceback": traceback.format_exc()}]})
         raise

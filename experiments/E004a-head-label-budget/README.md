@@ -183,3 +183,28 @@ Stopped and Waiting are largely rejected. Crossing retains 44.21% of GT weight b
 - **A large automatic-label coverage claim is unsupported by the current confidence rule.** Report achieved errors and class retention alongside coverage. These results justify the next matched E004 controls, not a new architecture search or a reliability guarantee.
 
 Numerical evidence: [budget summary CSV](../../outputs/experiments/E004a/results-review/20261112-092028-490189Z/report/budget-summary.csv), [per-fit CSV](../../outputs/experiments/E004a/results-review/20261112-092028-490189Z/report/budget-runs.csv), [complete report JSON](../../outputs/experiments/E004a/results-review/20261112-092028-490189Z/report/budget-report.json), [subset plan](../../outputs/experiments/E004a/results-review/20261112-092028-490189Z/subset-plans.json), [all-data selected metrics](../../outputs/experiments/E004a/results-review/20261112-092028-490189Z/budget-all-selected-metrics.json), [provenance](../../outputs/experiments/E004a/results-review/20261112-092028-490189Z/provenance.json). Report aggregates were checked against all 47 saved result rows; plots were visually checked. Source checkpoint/normalization references remain pinned. No retraining or inference was performed for this review.
+
+## Early-check rerun (2026-11-13)
+
+**Agreed diagnostic; full rerun remains user-launched.** Check whether the original 100-update evaluation spacing missed useful low-label checkpoints. Keep the same source head/body, optimizer, learning rate, normalization, training seed, all 46 fits, five nested subset draws, development/assessment split and coverage analysis. There is no class balancing or resampling. Original results above remain the baseline.
+
+The original histories select update 0 in four of five one-track draws; five-track fits select0/100, and ten-track fits select0/100/200. With at most 64 tracks, 100 updates already make 100 passes over the subset. All five one-track subsets contain only Moving; early checking cannot fix that missing class support.
+
+| Setting | Early-check diagnostic |
+|---|---|
+| Development checks / checkpoint candidates | Updates 0, 1, 5, 10, 25, 50, 100, then 200, 300, …, 10,000 |
+| Patience | Stop at the first scheduled check at least 1,500 updates after the last strict development-F1 improvement; update 0 starts the clock |
+| Exact F1 ties | Lower CE, then earlier update; CE-only improvements do not reset patience |
+| Training order | One persistent seeded loader iterator across all short intervals; no reset at checks |
+| Evidence axis | Actual cumulative optimizer updates for histories, W&B, selected checkpoints and plots |
+| Outputs | Fresh attempt; `early-checks` in configuration and W&B run names; existing outputs untouched |
+
+```bash
+cd /home/user20/projects/pedestrian-behavior-labeling-e002b-evaluation
+export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+uv run --locked --extra cu118 python scripts/train-e004a.py --device cuda --early-checks
+```
+
+Omitting `--early-checks` retains the original protocol. Add `--smoke` for the two-fit, 200-update offline-W&B integration check only. The rerun reuses the compact cache and performs no encoder extraction.
+
+This is a target-informed follow-up to the inspected curves, not a new untouched comparison. Every check may select `best.pt`; assessment is computed only after selection and never determines the checkpoint. An earlier development peak alone does not establish better assessment performance or improved automatic-label reliability. Keep both attempts and their actual label-access counts.

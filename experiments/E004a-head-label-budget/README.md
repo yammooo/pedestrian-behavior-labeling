@@ -1,6 +1,6 @@
 # E004a — Head adaptation versus labeled-track budget
 
-**Full pilot completed on 2026-11-12; ROAD→LOKI, validation assessment only.** This is the first [E004 label-efficiency](../E004-label-efficiency/README.md) comparison. It asks how target performance changes as more complete target-training tracks supervise only the source classifier. Target-only controls remain necessary before claiming annotation savings.
+**Original and early-check pilots complete on 2026-11-13; ROAD→LOKI, validation assessment only.** This is the first [E004 label-efficiency](../E004-label-efficiency/README.md) comparison. It asks how target performance changes as more complete target-training tracks supervise only the source classifier. Target-only controls remain necessary before claiming annotation savings.
 
 ## Initial model and data flow
 
@@ -34,7 +34,7 @@ Use development/calibration only for checkpoint selection and cutoff selection. 
 
 Record fitting labels and the fixed development/calibration overhead separately, with their union as training/selection label access. Report assessment labels separately as evaluation/audit effort and retain total labeled-evidence counts. A one-track fit is not one-track total target annotation. The deterministic split contains **930 development/calibration tracks /29,626 GT timesteps** and **931 assessment tracks /30,605 GT timesteps**. All four classes are represented in both; exact IDs and supports are saved in `subset-plans.json`. Retain all four classes, failed fits and negative transfer.
 
-## Fixed head-fitting recipe
+## Original head-fitting recipe
 
 Each fit copies the same original source head and resets its optimizer; never continue from a smaller-budget adapted head. Only 516 classifier parameters learn, with frozen ROAD normalization and no dropout. Use deterministic float32 and the existing accepted-GT mean-track CE, averaged over the actual batch.
 
@@ -120,6 +120,55 @@ At preparation, full46-fit training had **not started**; the completed user-laun
 
 ## Results
 
+**Both full pilots are complete:** original 100-update checks at `96c0a2d` (`20261112-092028-490189Z`) and early checks at `f420c20` (`20261113-082847-737608Z`). Each has 46 fits plus the original-head anchor; all fits stop by patience, none reaches 10,000 updates. Both take approximately 11 minutes using cached representations. No new training or inference was performed for this review.
+
+The 46 subset plans, draw IDs, source head/checkpoint and feature-cache hashes, normalization and split populations match exactly. Development/calibration uses 930 tracks /29,626 GT; assessment uses 931 tracks /30,605 GT across 47 scenarios. These are historically inspected validation data, not untouched tests. The early-check follow-up is target-informed.
+
+### Earlier checks capture peaks, with little assessment benefit
+
+F1 values are assessment track-weighted macro-F1 (%) ±sample SD across the same five subset draws; zero/all anchors each have one result. Δ is early minus original in percentage points. CE is mean track CE, averaged over draws.
+
+| Fitting tracks | Original F1 ±SD | Early-check F1 ±SD | Δ F1 (pp) | CE: original → early |
+|---|---:|---:|---:|---:|
+| 0 | 41.67 | 41.67 | +0.00 | 1.236 → 1.236 |
+| 1 | 42.27 ±1.33 | 44.03 ±1.44 | +1.76 | 1.210 → 1.082 |
+| 5 | 47.06 ±3.62 | 47.13 ±3.48 | +0.07 | 0.973 → 0.965 |
+| 10 | 47.70 ±3.49 | 47.34 ±2.41 | -0.36 | 0.962 → 0.947 |
+| 25 | 51.14 ±1.93 | 50.52 ±2.14 | -0.61 | 0.851 → 0.865 |
+| 50 | 50.57 ±1.14 | 50.09 ±1.69 | -0.48 | 0.808 → 0.826 |
+| 100 | 52.83 ±2.44 | 52.31 ±3.03 | -0.52 | 0.731 → 0.753 |
+| 250 | 55.56 ±3.01 | 55.56 ±3.01 | +0.00 | 0.677 → 0.677 |
+| 500 | 55.81 ±2.75 | 55.81 ±2.75 | +0.00 | 0.642 → 0.642 |
+| 1,000 | 56.84 ±1.25 | 56.84 ±1.25 | +0.00 | 0.581 → 0.581 |
+| 8,574 | 55.28 | 55.28 | +0.00 | 0.560 → 0.560 |
+
+![Original versus early-check assessment F1](../../outputs/experiments/E004a/results-review/early-check-comparison/before-after-f1.png) ([SVG](../../outputs/experiments/E004a/results-review/early-check-comparison/before-after-f1.svg))
+
+**Checkpoint resolution was a real limitation, but its assessment effect is small.** Eleven of 46 fits now select updates before 100, changing 11 selected checkpoints. The six original update 0 selections become trained checkpoints. At one track, mean assessment F1 improves by 1.76 pp; at five tracks it changes by only +0.07 pp. At 10–100 tracks, means fall by 0.36–0.61 pp. Results at 250/500/1,000/all are identical, including the all-data checkpoint at update 1,400.
+
+This does not support a general low-label improvement from denser checking. It also does not identify the remaining cause: all one-track draws still contain only Moving, and class coverage/within-class diversity remain uncontrolled. [E004b](../E004b-class-covered-head-budget/README.md), now user-launched, tests the initial class-support condition separately; its training was not touched by this review.
+
+### Automatic-label reliability remains unresolved
+
+![Coverage and achieved error before versus after early checks](../../outputs/experiments/E004a/results-review/early-check-comparison/before-after-coverage-error.png) ([SVG](../../outputs/experiments/E004a/results-review/early-check-comparison/before-after-coverage-error.svg))
+
+Both panels use thresholds selected for **5% calibration error**, then frozen for assessment. Coverage is not promised to have 5% assessment error. Overruns fall only from 46/47 to 45/47 checkpoint results; these share one assessment population and are not independent datasets.
+
+At 1,000 tracks, both runs give **57.51% ±3.40 coverage /10.69% mean accepted error**. With all 8,574 fitting tracks, both give **54.83% coverage /8.99% error**. The saved all-data coverage and class-retention records are identical: only 1.01% of Stopped GT and 6.99% of Waiting GT are retained at that cutoff. Earlier checking therefore does not establish the proposed 60%-coverage/5%-error usefulness target.
+
+### Conclusions
+
+- **Keep the early checks as a safeguard against missed peaks**, while treating this rerun as a mostly negative generalization result. More favorable development selection did not consistently improve assessment F1 or CE.
+- **The broad head-adaptation result survives:** assessment F1 rises from 41.67% without fitting to roughly 55–57% with hundreds of tracks under these recipes. The observed full-data head result is not a performance ceiling or proof that 1,000 tracks are necessary.
+- **Label cost and reliability qualifications remain:** every fitting budget additionally uses 930 development/calibration tracks; assessment labels are separate audit effort. Subset-draw SD is not uncertainty over new recordings. Target-only controls are still needed before claiming annotation savings; confidence-based acceptance still fails its nominal error targets on most assessment results.
+
+Evidence: [paired comparison JSON](../../outputs/experiments/E004a/results-review/early-check-comparison/comparison.json), [comparison CSV](../../outputs/experiments/E004a/results-review/early-check-comparison/comparison.csv), [early report](../../outputs/experiments/E004a/results-review/20261113-082847-737608Z/report/budget-report.json), [early provenance](../../outputs/experiments/E004a/results-review/20261113-082847-737608Z/provenance.json), and [original report](../../outputs/experiments/E004a/results-review/20261112-092028-490189Z/report/budget-report.json). The paired analysis preserves the original numerical artifacts; no held-out test access or E004b execution changes.
+
+<details>
+<summary>Original100-update pilot: tables, plots and historical interpretation</summary>
+
+The following records the original pilot before the early-check follow-up. The paired comparison above is the current cadence interpretation; the unchanged all-data class results below still apply to both attempts.
+
 **All 46 fits and the original-head anchor completed on 2026-11-12**, at clean revision `96c0a2d`, in 11.1 minutes using the previously cached frozen representations. No new encoder extraction or test access. All fits stopped by patience; none reached 10,000 updates. Six selected update 0, retaining the original source head. Exact subset plans, access counts, checkpoints and predictions remain in the original Aalto attempt: `outputs/experiments/E004a/runs/20261112-092028-490189Z/`.
 
 Assessment is the same 931 tracks /47 scenarios /30,605 GT timesteps for every result. Reduced budgets show mean ±sample SD across five subset draws, with training seed 0 fixed. Zero/all anchors have one result each. These are historically inspected validation data, separated from this pilot's fitting/selection; they are not untouched test results.
@@ -184,9 +233,11 @@ Stopped and Waiting are largely rejected. Crossing retains 44.21% of GT weight b
 
 Numerical evidence: [budget summary CSV](../../outputs/experiments/E004a/results-review/20261112-092028-490189Z/report/budget-summary.csv), [per-fit CSV](../../outputs/experiments/E004a/results-review/20261112-092028-490189Z/report/budget-runs.csv), [complete report JSON](../../outputs/experiments/E004a/results-review/20261112-092028-490189Z/report/budget-report.json), [subset plan](../../outputs/experiments/E004a/results-review/20261112-092028-490189Z/subset-plans.json), [all-data selected metrics](../../outputs/experiments/E004a/results-review/20261112-092028-490189Z/budget-all-selected-metrics.json), [provenance](../../outputs/experiments/E004a/results-review/20261112-092028-490189Z/provenance.json). Report aggregates were checked against all 47 saved result rows; plots were visually checked. Source checkpoint/normalization references remain pinned. No retraining or inference was performed for this review.
 
+</details>
+
 ## Early-check rerun (2026-11-13)
 
-**Agreed diagnostic; full rerun remains user-launched.** Check whether the original 100-update evaluation spacing missed useful low-label checkpoints. Keep the same source head/body, optimizer, learning rate, normalization, training seed, all 46 fits, five nested subset draws, development/assessment split and coverage analysis. There is no class balancing or resampling. Original results above remain the baseline.
+**Full early-check rerun complete on 2026-11-13; see the paired results above.** Check whether the original 100-update evaluation spacing missed useful low-label checkpoints. Keep the same source head/body, optimizer, learning rate, normalization, training seed, all 46 fits, five nested subset draws, development/assessment split and coverage analysis. There is no class balancing or resampling. Original results above remain the baseline.
 
 The original histories select update 0 in four of five one-track draws; five-track fits select0/100, and ten-track fits select0/100/200. With at most 64 tracks, 100 updates already make 100 passes over the subset. All five one-track subsets contain only Moving; early checking cannot fix that missing class support.
 
@@ -210,4 +261,4 @@ Omitting `--early-checks` retains the original protocol. Add `--smoke` for the t
 This is a target-informed follow-up to the inspected curves, not a new untouched comparison. Every check may select `best.pt`; assessment is computed only after selection and never determines the checkpoint. An earlier development peak alone does not establish better assessment performance or improved automatic-label reliability. Keep both attempts and their actual label-access counts.
 
 
-Preparation checks at `644a944`: **288 CPU tests pass (13 CUDA skips)**; focused shared/E004a tests, CLI and documentation checks pass. Aalto's two-fit CUDA/offline-W&B smoke checks updates0/1/5/10/25/50/100/200 and selects checkpoints10/5. At update200 both last-checkpoint parameter states are bit-for-bit identical to the original200-update smoke, so the extra evaluations preserve the optimizer trajectory. All46 regenerated subset plans match the original full attempt, and the source checkpoint SHA is unchanged. Evidence: `outputs/experiments/E004a/runs/20261113-082424-712968Z/verification.json`. This is integration evidence; the full early-check comparison has **not started**.
+Preparation checks at `644a944`: **288 CPU tests pass (13 CUDA skips)**; focused shared/E004a tests, CLI and documentation checks pass. Aalto's two-fit CUDA/offline-W&B smoke checks updates0/1/5/10/25/50/100/200 and selects checkpoints10/5. At update200 both last-checkpoint parameter states are bit-for-bit identical to the original200-update smoke, so the extra evaluations preserve the optimizer trajectory. All46 regenerated subset plans match the original full attempt, and the source checkpoint SHA is unchanged. Evidence: `outputs/experiments/E004a/runs/20261113-082424-712968Z/verification.json`. This was integration evidence before full training; the completed comparison is recorded above.

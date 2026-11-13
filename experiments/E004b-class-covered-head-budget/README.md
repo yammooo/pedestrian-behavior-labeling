@@ -1,6 +1,6 @@
 # E004b — Class-covered head label budgets
 
-**Agreed 2026-11-13; implemented and checked.** Does initial four-class support improve low-label head adaptation versus the [E004a early-check rerun](../E004a-head-label-budget/README.md#early-check-rerun-2026-11-13)? Full training stays user-launched.
+**User-launched 2026-11-13; results await review.** Does initial four-class support improve low-label head adaptation versus the [E004a early-check rerun](../E004a-head-label-budget/README.md#early-check-rerun-2026-11-13)? Full training stays user-launched.
 
 ## Sampling
 
@@ -32,4 +32,4 @@ uv run --locked --extra cu118 python scripts/train-e004b.py --device cuda
 Fresh outputs: `outputs/experiments/E004b/runs/<timestamp>/`; W&B names identify `e004b` / `class-covered`. Existing E004a outputs/cache stay intact. Keep the existing two budget PNG/SVG figures and local numerical/checkpoint/prediction artifacts. `--smoke` runs only budgets 5/10, draw 0, 200 updates per fit, with offline W&B; full runs use online W&B. Logging errors propagate; no retry/resume.
 
 
-Checks at `d816d98`: **294 CPU tests pass (13 CUDA skips)**, including six E004b sampler checks; CLI, links and diff checks pass. Aalto's two-fit200-update CUDA/offline-W&B smoke passes. All five real-data draws satisfy the four-role/five-GT/four-scenario rule; ordinary remainders, nested budgets and canonical all-data selection are verified. Source checkpoint SHA is unchanged. Evidence: `outputs/experiments/E004b/runs/20261113-090830-754399Z/verification.json`. Full41-fit training has **not started**.
+Checks at `d816d98`: **294 CPU tests pass (13 CUDA skips)**, including six E004b sampler checks; CLI, links and diff checks pass. Aalto's two-fit200-update CUDA/offline-W&B smoke passes. All five real-data draws satisfy the four-role/five-GT/four-scenario rule; ordinary remainders, nested budgets and canonical all-data selection are verified. Source checkpoint SHA is unchanged. Evidence: `outputs/experiments/E004b/runs/20261113-090830-754399Z/verification.json`. At preparation, full41-fit training had **not started**; the user launched it afterward.

@@ -208,3 +208,6 @@ uv run --locked --extra cu118 python scripts/train-e004a.py --device cuda --earl
 Omitting `--early-checks` retains the original protocol. Add `--smoke` for the two-fit, 200-update offline-W&B integration check only. The rerun reuses the compact cache and performs no encoder extraction.
 
 This is a target-informed follow-up to the inspected curves, not a new untouched comparison. Every check may select `best.pt`; assessment is computed only after selection and never determines the checkpoint. An earlier development peak alone does not establish better assessment performance or improved automatic-label reliability. Keep both attempts and their actual label-access counts.
+
+
+Preparation checks at `644a944`: **288 CPU tests pass (13 CUDA skips)**; focused shared/E004a tests, CLI and documentation checks pass. Aalto's two-fit CUDA/offline-W&B smoke checks updates0/1/5/10/25/50/100/200 and selects checkpoints10/5. At update200 both last-checkpoint parameter states are bit-for-bit identical to the original200-update smoke, so the extra evaluations preserve the optimizer trajectory. All46 regenerated subset plans match the original full attempt, and the source checkpoint SHA is unchanged. Evidence: `outputs/experiments/E004a/runs/20261113-082424-712968Z/verification.json`. This is integration evidence; the full early-check comparison has **not started**.

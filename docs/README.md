@@ -24,7 +24,7 @@ Updated **2026-11-13**. We are developing a reliable **offline, given-track pede
 
 ## Next work
 
-1. Run the [E004a early-check diagnostic](../experiments/E004a-head-label-budget/README.md#early-check-rerun-2026-11-13) on the exact same subset draws: development checks before update100, unchanged optimization and approximately1,500-update patience. The original results remain the baseline. Full rerun stays user-launched; no new sampling or class balancing.
+1. Prepare and run [E004b class-covered head budgets](../experiments/E004b-class-covered-head-budget/README.md): four initial class-support tracks from distinct scenarios, then the ordinary ordering, with the same early-check recipe. Compare against the [E004a early-check diagnostic](../experiments/E004a-head-label-budget/README.md#early-check-rerun-2026-11-13); keep class-informed screening access separate from dense fitting/development labels. Full runs stay user-launched.
 2. Resolve the observed calibration-to-assessment error gap before describing automatic acceptance as reliable. Retain class retention and achieved errors; statistical risk guarantees and uncertainty over new recordings remain open. No additional experiment is launched by this review.
 3. Arrange a separate backup for valuable checkpoints/predictions; external storage is **TBD**. Keep the [closure schedule](research.md#schedule); representation changes and further broad sweeps remain deferred.
 

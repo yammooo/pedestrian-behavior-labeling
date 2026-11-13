@@ -1029,3 +1029,15 @@ uv run --locked --extra cu118 python scripts/train-e004a.py --device cuda --earl
 ```
 
 It uses fresh outputs, labels W&B runs `early-checks`, and retains approximately 1,500-update patience. The original command without the flag preserves the original schedule.
+
+## E004b class-covered head budgets
+
+[E004b](experiments/E004b-class-covered-head-budget/README.md) seeds each draw with four tracks supporting all four classes, then fills budgets using E004a's ordinary ordering. It keeps the early-check recipe and reuses the existing compact cache.
+
+```bash
+cd /home/user20/projects/pedestrian-behavior-labeling-e002b-evaluation
+export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+uv run --locked --extra cu118 python scripts/train-e004b.py --device cuda
+```
+
+This runs40 reduced-budget fits plus one all-data fit and a zero anchor in fresh E004b outputs. Class-support metadata from the full training pool is privileged sampling access, separately disclosed from dense fitting/development labels. `--smoke` runs only two200-update offline-W&B checks. Full training stays user-launched.

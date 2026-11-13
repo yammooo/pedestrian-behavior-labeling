@@ -347,10 +347,13 @@ def _annotation_access(plan, training_rows):
         "class_gt_counts": (np.asarray(training_and_development["class_gt_counts"])
             + assessment["class_gt_counts"]).tolist()}
     total["nominal_gt_duration_seconds"] = total["gt_timesteps"] / 5
-    return {"training_subset": training,
+    access = {"training_subset": training,
         "development_calibration": plan["population"]["development"],
         "assessment_audit": plan["population"]["assessment"],
         "training_plus_development": training_and_development, "total_labeled_access": total}
+    if "screening_access" in plan:
+        access["selection_screening"] = plan["screening_access"]["accounting"]
+    return access
 
 
 def _plots(output, history):
@@ -386,12 +389,13 @@ def _wandb_risk_table(analysis):
 
 
 def _run_one(attempt, cache, training_rows, development_rows, assessment_rows, plan_row,
-             plan, device, smoke, early_checks=False):
+             plan, device, smoke, early_checks=False, *, experiment="E004a",
+             run_name_prefix="e004a-road-to-loki-head", run_name_suffix=""):
     budget, draw = plan_row["budget"], plan_row["draw"]
     suffix = "all" if budget == ALL_TRACKS else f"{budget:04d}"
     fit_dir = attempt / (f"budget-{suffix}" if draw is None else f"budget-{suffix}-draw-{draw:02d}")
     fit_dir.mkdir()
-    local = {"status": "incomplete", "budget": budget, "draw": draw,
+    local = {"status": "incomplete", "experiment": experiment, "budget": budget, "draw": draw,
         "early_checks": early_checks, "held_out_tests": False}
     shared_run.write_json(fit_dir / "status.json", local)
     run = None
@@ -411,7 +415,7 @@ def _run_one(attempt, cache, training_rows, development_rows, assessment_rows, p
             "check_interval_updates": None if early_checks else SETTINGS["updates_per_check"],
             "patience_checks": None if early_checks else SETTINGS["patience_checks"],
             "patience_updates": EARLY_PATIENCE_UPDATES if early_checks else None, "smoke": smoke}
-        config = {"experiment": "E004a", "source": SOURCE, "target": TARGET,
+        config = {"experiment": experiment, "source": SOURCE, "target": TARGET,
             "architecture": ARCHITECTURE, "trainable_parameters": 516,
             "source_checkpoint_sha256": SOURCE_SHA256, "source_head_sha256": cache["manifest"]["source_head"]["state_sha256"],
             "feature_cache": {split: cache["manifest"]["derived_features"][split]["sha256"]
@@ -424,15 +428,26 @@ def _run_one(attempt, cache, training_rows, development_rows, assessment_rows, p
             "development_label_access": plan["population"]["development"],
             "assessment_label_access": plan["population"]["assessment"],
             "normalization_source": SOURCE, "held_out_tests": False}
+        selection_screening = None
+        if "screening_access" in plan:
+            config["sampling"] = plan_row.get("sampling", {})
+            selection_screening = plan["screening_access"]["accounting"] | {
+                "candidate_support_manifest": str(attempt / "subset-plans.json"),
+                "candidate_support_manifest_sha256": checksum(attempt / "subset-plans.json")}
+            config["selection_screening"] = selection_screening
         config_path = fit_dir / "config.json"
         shared_run.write_json(config_path, config)
         shared_run.write_json(fit_dir / "provenance.json", {"config": str(config_path),
-            "plan": str(attempt / "subset-plans.json"), "determinism": seed_info,
+            "experiment": experiment, "plan": str(attempt / "subset-plans.json"),
+            "sampling": plan_row.get("sampling"),
+            "selection_screening": selection_screening,
+            "determinism": seed_info,
             "early_checks": early_checks,
             "source_checkpoint_sha256": SOURCE_SHA256, "cache_manifest": str(cache["root"] / "cache.json"),
             "actual_optimizer_updates": 0, "selected_update": None})
-        run_name = f"e004a-road-to-loki-head-n{budget:04d}-d{draw:02d}-s0" if draw is not None else \
-            f"e004a-road-to-loki-head-n{budget:04d}-s0"
+        run_name = f"{run_name_prefix}-n{budget:04d}-d{draw:02d}-s0" if draw is not None else \
+            f"{run_name_prefix}-n{budget:04d}-s0"
+        run_name += run_name_suffix
         if early_checks:
             run_name += "-early-checks"
         run = wandb.init(entity="yammo-unipd", project="pedestrian-behaviour-labeling", name=run_name,
@@ -488,7 +503,7 @@ def _run_one(attempt, cache, training_rows, development_rows, assessment_rows, p
             raise ValueError("Selected checkpoint update differs from its saved selection metadata")
         selected_update = int(selected["selection"]["optimizer_step"] if early_checks else
             selected["epoch"] * SETTINGS["updates_per_check"])
-        metadata = {"status": "complete", "budget": budget, "draw": draw,
+        metadata = {"status": "complete", "experiment": experiment, "budget": budget, "draw": draw,
             "training_seed": 0, "early_checks": early_checks, "source_checkpoint_sha256": SOURCE_SHA256,
             "source_head_sha256": config["source_head_sha256"],
             "selected_update": selected_update, "selected_epoch": selected["epoch"],
@@ -497,6 +512,9 @@ def _run_one(attempt, cache, training_rows, development_rows, assessment_rows, p
             "selection": fit_result["selection"], "development_metrics": dev_metrics,
             "assessment_metrics": assessment_metrics, "coverage": analysis,
             "annotation_access": _annotation_access(plan, training_rows), "held_out_tests": False}
+        if "screening_access" in plan:
+            metadata["sampling"] = plan_row.get("sampling", {})
+            metadata["selection_screening"] = selection_screening
         shared_run.write_json(fit_dir / "selected-metrics.json", metadata)
         provenance_path = fit_dir / "provenance.json"
         provenance = json.loads(provenance_path.read_text())
@@ -519,6 +537,7 @@ def _run_one(attempt, cache, training_rows, development_rows, assessment_rows, p
         local["status"] = "complete"
         shared_run.write_json(fit_dir / "status.json", local)
         return {"budget": budget, "draw": draw,
+            "experiment": experiment,
             "macro_f1": assessment_metrics["track_weighted"]["macro_f1"],
             "track_ce": assessment_metrics["track_ce"], "coverage": analysis,
             "annotation_access": metadata["annotation_access"], "fit_dir": str(fit_dir),
@@ -536,7 +555,7 @@ def _run_one(attempt, cache, training_rows, development_rows, assessment_rows, p
         raise
 
 
-def _evaluate_zero(attempt, cache, development_rows, assessment_rows, plan, early_checks=False):
+def _evaluate_zero(attempt, cache, development_rows, assessment_rows, plan, early_checks=False, experiment="E004a"):
     output = attempt / "zero-source-head"
     output.mkdir()
     dev_groups = {row["group"] for row in development_rows}
@@ -550,7 +569,8 @@ def _evaluate_zero(attempt, cache, development_rows, assessment_rows, plan, earl
     analysis = e004a_analysis.analyze_checkpoint(dev_tracks, assessment_tracks,
         output / "risk-analysis", error_targets=ERROR_TARGETS)
     dev_metrics, assessment_metrics = prediction_metrics(dev_tracks, len(CLASSES)), prediction_metrics(assessment_tracks, len(CLASSES))
-    summary = {"status": "complete", "budget": 0, "draw": None, "early_checks": early_checks,
+    summary = {"status": "complete", "experiment": experiment, "budget": 0, "draw": None,
+        "early_checks": early_checks,
         "source_checkpoint_sha256": SOURCE_SHA256, "selected_update": 0,
         "selection": {"epoch": 0, "f1": dev_metrics["track_weighted"]["macro_f1"], "ce": dev_metrics["track_ce"]},
         "development_metrics": dev_metrics, "assessment_metrics": assessment_metrics,
@@ -558,7 +578,7 @@ def _evaluate_zero(attempt, cache, development_rows, assessment_rows, plan, earl
         "kind": "original source head; no optimizer", "held_out_tests": False}
     shared_run.write_json(output / "selected-metrics.json", summary)
     return {"budget": 0, "draw": None, "macro_f1": assessment_metrics["track_weighted"]["macro_f1"],
-        "track_ce": assessment_metrics["track_ce"], "coverage": analysis,
+        "experiment": experiment, "track_ce": assessment_metrics["track_ce"], "coverage": analysis,
         "annotation_access": summary["annotation_access"], "fit_dir": str(output), "selected_update": 0,
         "stopping_reason": "source-anchor", "early_checks": early_checks}
 

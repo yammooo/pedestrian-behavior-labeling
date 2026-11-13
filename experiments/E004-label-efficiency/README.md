@@ -1,6 +1,6 @@
 # E004 — Target-label efficiency
 
-**Study direction agreed 2026-11-12; E004a complete, later comparisons remain open.** E004 asks whether source behavior training reduces the target annotation needed for offline pedestrian labeling, which components need adaptation, and what automatic-label coverage is supported at a declared error tolerance.
+**Study direction agreed 2026-11-12; E004a complete; E004b class-coverage diagnostic agreed, later comparisons remain open.** E004 asks whether source behavior training reduces the target annotation needed for offline pedestrian labeling, which components need adaptation, and what automatic-label coverage is supported at a declared error tolerance.
 
 ## Scope and motivation
 
@@ -12,6 +12,7 @@ The task, ontology, frozen populations, group splits, natural missingness and fu
 |---|---|---|
 | Original source model | None | Zero-training-label reference; development-label access is accounted separately |
 | [E004a: head-only adaptation](../E004a-head-label-budget/README.md) | Original source classifier only | Completed ROAD→LOKI pilot: [results and budget figures](../E004a-head-label-budget/README.md#results) |
+| [E004b: class-covered head budgets](../E004b-class-covered-head-budget/README.md) | Original source classifier only | Four initial class-support tracks, ordinary remainder; privileged screening metadata disclosed |
 | Temporal + head adaptation | Source temporal block, final norm and classifier | Planned comparison; detailed settings/ID TBD |
 | Target-only training | Randomly initialized task branches, spatial readout, fusion, temporal block and head | Essential control for annotation-savings claims; same pretrained encoders and target subsets |
 | Full task-model adaptation | All source-trained task components above | Optional follow-up if justified; does not mean encoder fine-tuning |

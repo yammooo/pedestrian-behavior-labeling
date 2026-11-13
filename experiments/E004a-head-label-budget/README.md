@@ -146,7 +146,7 @@ F1 values are assessment track-weighted macro-F1 (%) ±sample SD across the same
 
 **Checkpoint resolution was a real limitation, but its assessment effect is small.** Eleven of 46 fits now select updates before 100, changing 11 selected checkpoints. The six original update 0 selections become trained checkpoints. At one track, mean assessment F1 improves by 1.76 pp; at five tracks it changes by only +0.07 pp. At 10–100 tracks, means fall by 0.36–0.61 pp. Results at 250/500/1,000/all are identical, including the all-data checkpoint at update 1,400.
 
-This does not support a general low-label improvement from denser checking. It also does not identify the remaining cause: all one-track draws still contain only Moving, and class coverage/within-class diversity remain uncontrolled. [E004b](../E004b-class-covered-head-budget/README.md), now user-launched, tests the initial class-support condition separately; its training was not touched by this review.
+This does not support a general low-label improvement from denser checking. It also does not identify the remaining cause: all one-track draws still contain only Moving, and class coverage/within-class diversity remain uncontrolled. [E004b](../E004b-class-covered-head-budget/README.md#results) tests the initial class-support condition separately; its completed results are recorded in its owner.
 
 ### Automatic-label reliability remains unresolved
 

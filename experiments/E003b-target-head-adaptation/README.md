@@ -163,6 +163,25 @@ Per-class track-weighted F1 (%), original→adapted:
 
 Crossing accounts for much of the ROAD-target recovery; waiting-to-cross remains weak there. On LOKI, moving and waiting-to-cross improve strongly, while crossing improves less. Frame class support is LOKI `[37410,4206,8320,10295]` /ROAD `[24018,11232,3317,6821]` in the table's class order; primary F1 remains equal-track weighted.
 
+### E002d confusion comparison
+
+Each direction's four panels show the E002d source model on source validation, unchanged direct transfer on target validation, the E003b frozen body with a fresh target-trained head, and the same-family full target-trained model on target validation. The fresh head belongs to E003b; E003c source-initialized head/temporal fine-tuning is not included here.
+
+| Direction | Source-val F1 | Direct target-val F1 | Fresh-head target-val F1 | Full target-trained F1 |
+|---|---:|---:|---:|---:|
+| ROAD→LOKI | 66.07% | 46.50% | 64.16% | 74.68% |
+| LOKI→ROAD | 74.68% | 45.02% | 59.49% | 66.07% |
+
+![E002d ROAD-to-LOKI track-weighted row-normalized confusion matrices](../../outputs/experiments/E003b/results-review-20261104/figures/e002d-road-waymo-to-loki-confusion-normalized.png) ([SVG](../../outputs/experiments/E003b/results-review-20261104/figures/e002d-road-waymo-to-loki-confusion-normalized.svg)); [weighted-count SVG](../../outputs/experiments/E003b/results-review-20261104/figures/e002d-road-waymo-to-loki-confusion-counts.svg)
+
+![E002d LOKI-to-ROAD track-weighted row-normalized confusion matrices](../../outputs/experiments/E003b/results-review-20261104/figures/e002d-loki-to-road-waymo-confusion-normalized.png) ([SVG](../../outputs/experiments/E003b/results-review-20261104/figures/e002d-loki-to-road-waymo-confusion-normalized.svg)); [weighted-count SVG](../../outputs/experiments/E003b/results-review-20261104/figures/e002d-loki-to-road-waymo-confusion-counts.svg)
+
+The source-validation panel uses the source population; the other three use the target validation population. The saved track and per-class weighted denominators match across the three target panels. Direct transfer and head adaptation retain source normalization; the target-trained reference uses target normalization. Rows are GT and columns are predictions: the diagonal row percentage is recall. The count SVGs show weighted GT mass, without row normalization. The [per-class precision, recall and F1 table](../../outputs/experiments/E003b/results-review-20261104/figures/e002d-per-class-metrics.md) uses the same confusion matrices.
+
+Head adaptation has recall trade-offs. On ROAD→LOKI, Stopped recall falls 81.3%→50.9% while precision rises 20.1%→57.7%; Crossing recall falls 57.1%→33.5% while precision rises 31.3%→68.0%. On LOKI→ROAD, Crossing recall rises 5.6%→44.5%, while Waiting recall falls 37.7%→22.4%. Higher macro-F1 does not mean every class's recall improves.
+
+Figure checks recompute P/R/F1 from every saved matrix and verify the matching target denominators and reported macro-F1. The existing summary is unchanged; the 286-test CPU suite passes with 13 CUDA skips, and new evidence links pass. No model inference or training was run.
+
 ### Evidence and reproduction
 
 | Attempt directory under `runs/20261104-092202/` | W&B |
@@ -172,4 +191,4 @@ Crossing accounts for much of the ROAD-target recovery; waiting-to-cross remains
 | `e002d-loki-to-road-waymo` | [h6k42uld](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/h6k42uld) |
 | `e003a-loki-to-road-waymo` | [iheyyj7p](https://wandb.ai/yammo-unipd/pedestrian-behaviour-labeling/runs/iheyyj7p) |
 
-Each attempt retains `validation-comparison.json`, histories, provenance, selected/last head checkpoints, original/adapted predictions and both compact feature archives. Small JSON evidence was copied to ignored `outputs/experiments/E003b/results-review-20261104/evidence/`; large representations and predictions remain on Aalto. Rebuild the two PNG/SVG pairs and numerical summary with `UV_CACHE_DIR=/tmp/uv-e003b-results-review MPLCONFIGDIR=/tmp/mpl-e003b-results-review uv run --locked --extra cpu python scripts/summarize-e003b-results.py`. No new training or inference was needed for this review. These are exploratory seed0 results on previously inspected validation sets.
+Each attempt retains `validation-comparison.json`, histories, provenance, selected/last head checkpoints, original/adapted predictions and both compact feature archives. Small JSON evidence was copied to ignored `outputs/experiments/E003b/results-review-20261104/evidence/`; large representations and predictions remain on Aalto. Rebuild the summary, curves, E002d confusion figures and per-class table with `UV_CACHE_DIR=/tmp/uv-e003b-results-review MPLCONFIGDIR=/tmp/mpl-e003b-results-review uv run --locked --extra cpu python scripts/summarize-e003b-results.py`. No new training or inference was needed for this review. These are exploratory seed0 results on previously inspected validation sets.

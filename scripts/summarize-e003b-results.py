@@ -28,6 +28,13 @@ DIRECT_F1 = {
     ("loki", "road-waymo", "e003a"): 0.45277970507727267,
 }
 CLASSES = ("MOVING", "STOPPED", "WAITING_TO_CROSS", "CROSSING")
+CLASS_LABELS = ("Moving", "Stopped", "Waiting to cross", "Crossing")
+E002D_EXPECTED_F1 = {
+    ("road-waymo", "loki"): (0.6607025742847996, 0.46496012823104105,
+                              0.6415806253538071, 0.7467957180106706),
+    ("loki", "road-waymo"): (0.7467957180106706, 0.4502332861111214,
+                              0.5948823481676118, 0.6607025742847996),
+}
 
 
 def dataset_name(name):
@@ -40,6 +47,133 @@ def read(path):
 
 def close(actual, expected):
     assert math.isclose(actual, expected, rel_tol=1e-10, abs_tol=1e-12), (actual, expected)
+
+
+def _confusion_metrics(record, expected_tracks):
+    matrix = record["confusion"]
+    support = record["support"]
+    assert len(matrix) == len(support) == len(CLASSES)
+    assert all(len(row) == len(CLASSES) for row in matrix)
+    assert all(math.isfinite(value) and value >= 0 for row in matrix for value in row)
+    for index, value in enumerate(support):
+        close(sum(matrix[index]), value)
+    close(sum(support), expected_tracks)
+    column_support = [sum(matrix[row][column] for row in range(4)) for column in range(4)]
+    precision = [matrix[i][i] / column_support[i] if column_support[i] else 0.0 for i in range(4)]
+    recall = [matrix[i][i] / support[i] if support[i] else 0.0 for i in range(4)]
+    f1 = [2 * p * r / (p + r) if p + r else 0.0 for p, r in zip(precision, recall)]
+    for key, values in (("precision", precision), ("recall", recall), ("f1", f1)):
+        assert len(record[key]) == 4
+        for actual, expected in zip(record[key], values):
+            close(actual, expected)
+    macro_f1 = sum(f1) / 4
+    close(record["macro_f1"], macro_f1)
+    return {
+        "matrix": matrix,
+        "support": support,
+        "normalized": [[100 * value / support[i] if support[i] else 0.0
+                        for value in row] for i, row in enumerate(matrix)],
+        "precision": precision,
+        "recall": recall,
+        "f1": f1,
+        "macro_f1": macro_f1,
+    }
+
+
+def _load_e002d_panels(source, target):
+    def run_data(source_name, target_name):
+        run = EVIDENCE / f"e002d-{source_name}-to-{target_name}"
+        return read(run / "config.json"), read(run / "validation-comparison.json")
+
+    source_config, source_comparison = run_data(source, target)
+    target_config, _ = run_data(target, source)
+    source_metrics = source_config["source_checkpoint"]["validation_metrics"]
+    target_metrics = target_config["source_checkpoint"]["validation_metrics"]
+    assert source_metrics["denominators"]["tracks"] == POPULATIONS[source]["validation"]
+    assert target_metrics["denominators"]["tracks"] == POPULATIONS[target]["validation"]
+    assert source_metrics["track_weighted"] == source_comparison["source_checkpoint"]["validation_metrics"]["track_weighted"]
+
+    expected_source_tracks = POPULATIONS[source]["validation"]
+    expected_target_tracks = POPULATIONS[target]["validation"]
+    target_denominators = (source_comparison["source_head"]["denominators"],
+                           source_comparison["adapted_head"]["denominators"],
+                           target_metrics["denominators"])
+    for key in ("groups", "tracks", "gt_frames", "class_frames", "class_tracks"):
+        assert target_denominators[0][key] == target_denominators[1][key] == target_denominators[2][key]
+    assert target_denominators[0]["tracks"] == expected_target_tracks
+    panels = [
+        (f"Source model · source validation\n{dataset_name(source)}", source_metrics["track_weighted"],
+         expected_source_tracks),
+        (f"Direct transfer · target validation\n{dataset_name(target)}", source_comparison["source_head"]["track_weighted"],
+         expected_target_tracks),
+        (f"E003b frozen body + fresh target head\n{dataset_name(target)} target validation",
+         source_comparison["adapted_head"]["track_weighted"], expected_target_tracks),
+        (f"Same-family target-trained model\n{dataset_name(target)} validation", target_metrics["track_weighted"],
+         expected_target_tracks),
+    ]
+    validated = [{"label": label, **_confusion_metrics(record, expected_tracks)}
+                 for label, record, expected_tracks in panels]
+
+    for panel in validated[1:]:
+        for actual, expected in zip(panel["support"], validated[1]["support"]):
+            close(actual, expected)
+    expected_f1 = E002D_EXPECTED_F1[source, target]
+    for panel, expected in zip(validated, expected_f1):
+        close(panel["macro_f1"], expected)
+    return validated
+
+
+def _plot_e002d_confusions(panels, source, target):
+    from matplotlib.colors import Normalize
+
+    direction = f"e002d-{source}-to-{target}"
+    for view in ("normalized", "matrix"):
+        normalized = view == "normalized"
+        vmax = 100 if normalized else max(max(max(row) for row in panel[view]) for panel in panels)
+        fig, axes = plt.subplots(2, 2, figsize=(11, 9.2), constrained_layout=True)
+        fig.suptitle(f"E002d {dataset_name(source)} → {dataset_name(target)} track-weighted "
+                     f"{'row-normalized confusions' if normalized else 'confusion mass'}", fontsize=14)
+        for axis, panel in zip(axes.flat, panels):
+            matrix = panel[view]
+            axis.imshow(matrix, cmap="Blues", norm=Normalize(0, vmax if vmax else 1), interpolation="nearest")
+            axis.set_xticks(range(4), CLASS_LABELS, rotation=25, ha="right")
+            axis.set_yticks(range(4), [f"{name}\nGT {mass:.1f}" for name, mass in zip(CLASS_LABELS, panel["support"])])
+            axis.set_title(f"{panel['label']} · F1 {100 * panel['macro_f1']:.2f}%", fontsize=9)
+            axis.set_xlabel("Predicted class")
+            axis.set_ylabel("Ground truth · weighted support")
+            for i, row in enumerate(matrix):
+                for j, value in enumerate(row):
+                    label = f"{value:.1f}%" if normalized else f"{value:.1f}"
+                    axis.text(j, i, label, ha="center", va="center", fontsize=8,
+                              color="white" if value > vmax * (.57 if not normalized else .57) else "black")
+        colorbar = fig.colorbar(axes.flat[0].images[0], ax=list(axes.flat),
+                                ticks=(0, 25, 50, 75, 100) if normalized else None,
+                                shrink=0.86, pad=0.02)
+        colorbar.set_label("Ground-truth row share (%)" if normalized else "Track-weighted ground-truth mass")
+        suffix = "normalized" if normalized else "counts"
+        if normalized:
+            fig.savefig(FIGURES / f"{direction}-confusion-{suffix}.png", dpi=180, bbox_inches="tight")
+        fig.savefig(FIGURES / f"{direction}-confusion-{suffix}.svg", bbox_inches="tight")
+        plt.close(fig)
+
+
+def _write_e002d_class_metrics(directions):
+    lines = [
+        "# E002d per-class track-weighted metrics",
+        "",
+        "Precision, recall and F1 are recomputed from the saved track-weighted confusion matrices. Values are percentages.",
+        "",
+    ]
+    for source, target, panels in directions:
+        lines.extend([f"## {dataset_name(source)} → {dataset_name(target)}", "",
+                      "| Panel | Class | Precision | Recall | F1 |", "|---|---|---:|---:|---:|"])
+        for panel in panels:
+            for index, label in enumerate(CLASS_LABELS):
+                lines.append(f"| {panel['label'].replace(chr(10), ' ')} | {label} | "
+                             f"{100 * panel['precision'][index]:.2f} | "
+                             f"{100 * panel['recall'][index]:.2f} | {100 * panel['f1'][index]:.2f} |")
+        lines.append("")
+    (FIGURES / "e002d-per-class-metrics.md").write_text("\n".join(lines))
 
 
 def load_case(source, target, reference):
@@ -140,6 +274,8 @@ def load_case(source, target, reference):
 def main():
     FIGURES.mkdir(parents=True, exist_ok=True)
     rows = [load_case(*case) for case in CASES]
+    e002d_directions = [(source, target, _load_e002d_panels(source, target))
+                        for source, target in (("road-waymo", "loki"), ("loki", "road-waymo"))]
     for row in rows:
         reference = next(other for other in rows
                          if other["source"] == row["target"] and other["reference"] == row["reference"])
@@ -235,8 +371,12 @@ def main():
     fig.savefig(FIGURES / "head-training-validation-curves.svg", bbox_inches="tight")
     plt.close(fig)
 
+    for source, target, panels in e002d_directions:
+        _plot_e002d_confusions(panels, source, target)
+    _write_e002d_class_metrics(e002d_directions)
+
     print(f"Wrote {REVIEW / 'summary.json'}")
-    print(f"Wrote four PNG/SVG figures to {FIGURES}")
+    print(f"Wrote E003b summary/curves and E002d confusion figures/tables to {FIGURES}")
     for row in summary["cases"]:
         print(f"{row['source']}→{row['target']}: {row['reference']} "
               f"F1 {100 * row['direct_macro_f1']:.2f}→{100 * row['adapted_macro_f1']:.2f}% "

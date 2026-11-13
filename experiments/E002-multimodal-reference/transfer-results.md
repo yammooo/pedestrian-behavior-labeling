@@ -122,6 +122,8 @@ These matrices compare each selected checkpoint on source validation with its **
 
 In a count matrix `C`, class recall is the diagonal entry divided by its **row sum**: `C[c,c] / sum(C[c,:])`. The row-normalized plots have already performed that division, so each diagonal percentage is class recall. Precision uses the **column sum** instead: `C[c,c] / sum(C[:,c])`. A count-view diagonal by itself is a true-positive count or weight, not recall. These plots show predicted-label frequencies, not softmax confidence.
 
+For the all-modality E002d models, [E003b](../E003b-target-head-adaptation/README.md#results) additionally compares **source validation, direct target transfer, target-head adaptation and the target-trained reference**, with weighted-count views and per-class precision/recall/F1. The three target panels share the target-validation population; the source panel is contextual.
+
 Dataset arrows such as **LOKI → ROAD** indicate training dataset → evaluation dataset. Classification errors are written explicitly as **GT Stopped, predicted Moving**: these are individual timesteps, not tracks undergoing a temporal behavior transition. In track-weighted plots, a row percentage is a share of weighted GT timesteps, not a percentage of tracks.
 
 ![ROAD-Waymo to LOKI track-weighted row-normalized confusion matrices](../../outputs/experiments/E002/transfer-validation-20261102/figures/confusions/road-waymo-to-loki-track-weighted-normalized.png)

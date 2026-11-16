@@ -66,3 +66,47 @@ At threshold 0.95, three predictions are accepted: coverage 60%, observed accept
 E004 owns common comparison/accounting and coverage concepts. [E004a](../E004a-head-label-budget/README.md) owns the first head-only protocol. E004a is implemented over the existing frozen features; no source-model training, test preparation or encoder changes are included. Both 46-fit E004a pilots are complete. E004b is complete; its minimum class-support floor gives no consistent mean F1 gain under privileged GT-informed sampling. No new comparison was launched by the results review.
 
 On 2026-11-12 the user assigned E004 to label efficiency. The earlier unexecuted E004 complementary-supervision reservation is superseded; that idea remains deferred in [research history](../../docs/research.md#tentative-experiment-direction). No past run or result was renamed.
+
+
+## Track-difficulty diagnostic (2026-11-16)
+
+Saved predictions compare the same **931 LOKI tracks /47 scenarios /30,605 GT timesteps**. All three models use the E002d geometry + RGB + D-DITR architecture with two temporal Transformer layers. The head-only adaptation is [E003c `head`](../E003c-temporal-adaptation/README.md#full-source-initialized-results-2026-11-06), initialized from the original ROAD classifier and fitted with all target-training labels. The target-trained reference is the existing E002d LOKI run. These are **not the E004 BiLSTM budget fits**; the optional 25-track comparison is omitted to keep architectures matched.
+
+The track identities are E004's assessment half, but the adapted and LOKI-trained checkpoints were selected using the original full LOKI validation set, including these tracks. This is descriptive analysis of previously inspected validation data, not independent assessment. No training, encoder inference, confidence filtering or test access was performed.
+
+| Model on common LOKI subset | Track-weighted macro-F1 (%) | Track-weighted error (%) |
+|---|---:|---:|
+| ROAD source, direct |44.04|48.92|
+| ROAD body + full-label target head |60.81|21.06|
+| LOKI-trained task model |71.25|16.93|
+
+Error is `1 - accuracy`, not `1 - macro-F1`. Each scored timestep retains weight `1 / complete-track GT count`, including within slices. Within-GT-class error below is `1 - recall`; it does not measure class precision.
+
+| GT class | ROAD direct error (%) | Adapted-head error (%) | LOKI-trained error (%) |
+|---|---:|---:|---:|
+| Moving |49.0|6.1|9.3|
+| Stopped |24.5|54.7|45.3|
+| Waiting to cross |62.6|38.1|30.3|
+| Crossing |53.5|69.5|31.3|
+
+### What the conditions reveal
+
+- **No general distance rule:** aggregate error after adaptation is fairly flat across distance bins. Within GT Crossing, however, LOKI-trained error rises from **15.7% below 10 m to 49.8% at 40 m or beyond** (695 /1,649 GT timesteps); direct-transfer error rises 18.0%→64.0%. Distance is a timestep condition, not each track's median distance.
+- **RGB availability is class-specific:** among GT Crossing in tracks with usable RGB in less than 25% of slots, direct/head/LOKI-trained error is **82.5/92.8/42.9%**, versus **14.0/36.6/9.8%** with at least 75% usable RGB (2,161 /1,817 GT timesteps). For low-RGB Moving, head adaptation instead reduces error 62.8%→3.1%. Availability therefore does not define one uniformly difficult population, and these associations do not establish a causal RGB benefit.
+- **Very short tracks are difficult before transfer adaptation:** the 89 tracks shorter than 1 s have 74.0% direct error, 23.5% head-adapted error and 25.6% LOKI-trained error. After adaptation, longer duration does not consistently imply lower overall error. Removing short tracks alone would not resolve the remaining breakdown.
+- **Transitions are only a small part of total error:** near-transition frames contribute **1.95/3.68/4.45%** of all weighted errors for direct/head/LOKI-trained models. Some within-class near-transition error rates are high, but most errors lie elsewhere. Stopped-near has only 29 GT timesteps across 15 tracks /8 scenarios; do not generalize from its rate.
+- **LiDAR missingness has little support here:** 906 of 931 tracks have usable LiDAR in at least 75% of their slots. Only 3 tracks fall below 25%; those bins cannot support a general reliability claim.
+
+Duration uses saved native timestamp extent, not labeled duration or a guarantee of continuous observations. RGB/LiDAR fractions use actual usable model-input flags over every unpadded track slot, including unlabeled context. Transition proximity uses the existing 0.4 s rule without bridging GT gaps. Counts, scenario support, within-class condition rates and each slice's contribution to total errors are retained in numerical files.
+
+![Error by duration, distance and usable modality fractions](../../outputs/experiments/E004/track-difficulty-20261116/difficulty.png)
+
+[SVG](../../outputs/experiments/E004/track-difficulty-20261116/difficulty.svg).
+
+![Within-class error near and away from GT transitions](../../outputs/experiments/E004/track-difficulty-20261116/class-transition.png)
+
+[SVG](../../outputs/experiments/E004/track-difficulty-20261116/class-transition.svg).
+
+**Interpretation:** this supports investigating class-specific observation failures and the head's trade-offs before imposing a broad distance/duration eligibility rule. It does not identify the cause of transfer failure or justify changing the population yet. Source-validation context is 66.07% ROAD F1 and 74.68% full-LOKI F1 on their respective original populations; those are not paired scores on the 931-track subset.
+
+[Analysis script](../../scripts/analyze-e004-track-difficulty.py) · [summary JSON](../../outputs/experiments/E004/track-difficulty-20261116/summary.json) · [subgroup CSV](../../outputs/experiments/E004/track-difficulty-20261116/summary.csv) · [per-track CSV](../../outputs/experiments/E004/track-difficulty-20261116/track-errors.csv). Input paths and checkpoint families are fixed in the script. Conditions come from the ROAD-direct archive; optional metadata axes differ across older exports. Track IDs, lengths, GT and masks align; timestamps match across the three model archives, while the E004 identity archive omits timestamps. All condition/class partitions reconstruct the complete weighted support and errors. The focused weight self-check passes; the CPU suite completed 294 tests with 13 expected skips, with its sandbox-blocked localhost test passing on isolated rerun outside the sandbox.

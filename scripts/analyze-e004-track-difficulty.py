@@ -60,7 +60,8 @@ def check_aligned(reference, candidate, name):
         for field in ("targets", "gt_valid"):
             if not np.array_equal(first[field], second[field]):
                 raise ValueError(f"GT alignment differs for {name}: {locator}/{field}")
-        if first.get("source_times_us") != second.get("source_times_us"):
+        first_times, second_times = first.get("source_times_us"), second.get("source_times_us")
+        if first_times is not None and second_times is not None and first_times != second_times:
             raise ValueError(f"Timestamp alignment differs for {name}: {locator}")
 
 
@@ -324,6 +325,7 @@ def make_data():
                       "contribution is the sum of weighted incorrect timesteps, in track-equivalent units."),
         "limitations": [
             "The 931 tracks are the E004a assessment identities, but E003c head and LOKI-trained E002d checkpoints were selected using all 1,861 LOKI validation tracks, including these tracks; this is descriptive posthoc analysis, not independent assessment.",
+            "E004a's saved assessment predictions omit source timestamps; alignment to the three model archives uses exact track locator, track length, targets and GT mask. The three model archives also agree on saved timestamps.",
             "Track duration uses the saved LOKI native extent timestamps, whose physical timing is not independently verified; interpret duration as nominal recorded span.",
             "RGB and LiDAR fractions are actual usable model-input flags over all unpadded track slots, not raw sensor-stream availability.",
             "Pedestrian–ego range and near/steady transition use the existing E001 saved condition bins; they are associations, not causal effects or explanations of annotation differences.",

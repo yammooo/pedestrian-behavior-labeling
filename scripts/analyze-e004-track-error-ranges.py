@@ -17,9 +17,9 @@ OUTPUT = ROOT / "E004/track-error-ranges-20261116"
 MODELS = ("road-direct", "road-head", "loki-trained")
 CLASSES = ("moving", "stopped", "waiting_to_cross", "crossing")
 TYPES = ("MOVING", "STOPPED", "WAITING", "CROSSING", "MIXED")
-ERROR_LABELS = ("[0,.05]", "(.05,.20]", "(.20,.50]", "(.50,.80]", "(.80,.95]", "(.95,1]")
+ERROR_LABELS = ("0–5%", "(5–20%]", "(20–50%]", "(50–80%]", "(80–95%]", "(95–100%]")
 ERROR_UPPER = np.array((0.05, 0.20, 0.50, 0.80, 0.95, 1.0))
-ERROR_COLORS = ("#4477AA", "#66CCEE", "#228833", "#CCBB44", "#EE6677", "#AA3377")
+ERROR_COLORS = ("#1a9850", "#91cf60", "#d9ef8b", "#fee08b", "#fc8d59", "#d73027")
 MODEL_LABELS = {"road-direct": "ROAD direct", "road-head": "ROAD + head", "loki-trained": "LOKI trained"}
 
 
@@ -92,7 +92,7 @@ def extract_track_metadata(by_model, destination):
             "track_type": track_type(row),
             "duration_seconds_nominal": float(row["duration_seconds_nominal"]),
             "gt_frames": int(row["gt_frames"]),
-            "median_ped_ego_range_m": float(np.median(distance)) if len(distance) else "",
+            "median_ped_ego_range_m": float(np.median(distance)) if len(distance) else None,
             "distance_valid_slots": len(distance),
             "distance_unknown": int(not len(distance)),
             **{f"gt_{name}_frames": int(row[f"gt_{name}_frames"]) for name in CLASSES},
@@ -204,7 +204,7 @@ def plot_composition(summary, output):
 
 
 def plot_ranges(summary, output):
-    fig, axes = plt.subplots(2, 3, figsize=(15, 7), sharex="col")
+    fig, axes = plt.subplots(2, 3, figsize=(15, 7), sharex="col", sharey="row")
     x = np.arange(len(ERROR_LABELS))
     for column, model in enumerate(MODELS):
         bins = summary["models"][model]

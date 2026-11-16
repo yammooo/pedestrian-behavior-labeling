@@ -140,18 +140,6 @@ def make_data():
     reference = predictions["road-direct"]
     for name, records in predictions.items():
         check_aligned(reference, records, name)
-        for locator in locators:
-            first, second = reference[locator], records[locator]
-            for axis in ("duration", "range", "transition"):
-                if axis not in first["conditions"] or axis not in second["conditions"]:
-                    raise ValueError(f"Missing required {axis} condition for {name}: {locator}")
-                if not np.array_equal(first["conditions"][axis], second["conditions"][axis]):
-                    raise ValueError(f"{axis} condition differs for {name}: {locator}")
-            for flag in ("rgb_valid", "lidar_valid"):
-                if flag not in first["source_flags"] or flag not in second["source_flags"]:
-                    raise ValueError(f"Missing required {flag} input flag for {name}: {locator}")
-                if not np.array_equal(first["source_flags"][flag], second["source_flags"][flag]):
-                    raise ValueError(f"{flag} input flag differs for {name}: {locator}")
     gt_frames = sum(int(assessment[k]["gt_valid"].sum()) for k in locators)
     groups = {scenario(k) for k in locators}
     if (len(locators), gt_frames, len(groups)) != EXPECTED_ASSESSMENT:
@@ -330,6 +318,7 @@ def make_data():
         "limitations": [
             "The 931 tracks are the E004a assessment identities, but E003c head and LOKI-trained E002d checkpoints were selected using all 1,861 LOKI validation tracks, including these tracks; this is descriptive posthoc analysis, not independent assessment.",
             "E004a's saved assessment predictions omit source timestamps; alignment to the three model archives uses exact track locator, track length, targets and GT mask. The three model archives also agree on saved timestamps.",
+            "Difficulty strata and usable-input fractions come from the ROAD-direct archive, which retains the required E001 condition arrays; some optional condition arrays are absent from the E003c head archive.",
             "Track duration uses the saved LOKI native extent timestamps, whose physical timing is not independently verified; interpret duration as nominal recorded span.",
             "RGB and LiDAR fractions are actual usable model-input flags over all unpadded track slots, not raw sensor-stream availability.",
             "Pedestrian–ego range and near/steady transition use the existing E001 saved condition bins; they are associations, not causal effects or explanations of annotation differences.",

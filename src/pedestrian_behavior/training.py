@@ -1,6 +1,7 @@
 """Shared deterministic training, source-validation selection and atomic checkpoints."""
 
 import os
+from itertools import count
 from pathlib import Path
 import random
 import time
@@ -92,7 +93,14 @@ def train_epoch(model, batches, optimizer, device, clip_norm, on_step=None, step
 def fit(model, batches, validate, optimizer, device, output, checkpoint_references, on_epoch,
         epochs, patience, clip_norm, on_step=None, epoch_operation=train_epoch, initial_candidate=False,
         check_updates=None, patience_updates=None):
-    if check_updates is not None:
+    unbounded = epochs is None
+    if unbounded:
+        if check_updates is None or iter(check_updates) is not check_updates:
+            raise ValueError("Unbounded fit requires a lazy check-update iterator")
+        if type(patience_updates) is not int or patience_updates <= 0:
+            raise ValueError("A positive patience_updates value is required for an unbounded fit")
+        update_iterator = check_updates
+    elif check_updates is not None:
         check_updates = tuple(check_updates)
         if (len(check_updates) != epochs or not check_updates
                 or any(type(step) is not int or step <= 0 for step in check_updates)
@@ -128,13 +136,23 @@ def fit(model, batches, validate, optimizer, device, output, checkpoint_referenc
         save_checkpoint(Path(output)/"best.pt", model, evidence)
         save_checkpoint(Path(output)/"last.pt", model, evidence)
         on_epoch(row, history)
-    for epoch in range(1, epochs+1):
+    epoch_numbers = count(1) if unbounded else range(1, epochs+1)
+    for epoch in epoch_numbers:
         operation_args = {"on_step": on_step, "step_offset": step_offset}
         if check_updates is not None:
-            operation_args["updates"] = check_updates[epoch-1] - step_offset
+            if unbounded:
+                try:
+                    scheduled_update = next(update_iterator)
+                except StopIteration as error:
+                    raise ValueError("Unbounded check-update iterator ended before patience") from error
+                if type(scheduled_update) is not int or scheduled_update <= step_offset:
+                    raise ValueError("Unbounded check updates must be strictly increasing positive integers")
+            else:
+                scheduled_update = check_updates[epoch-1]
+            operation_args["updates"] = scheduled_update - step_offset
         row = {"epoch": epoch} | epoch_operation(model, batches, optimizer, device, clip_norm, **operation_args)
         step_offset += row["optimizer_steps"]
-        if check_updates is not None and step_offset != check_updates[epoch-1]:
+        if check_updates is not None and step_offset != scheduled_update:
             raise ValueError("Training operation did not reach the scheduled optimizer update")
         validation = validate(model)
         row.update(validation_ce=validation["track_ce"], validation_f1=validation["track_weighted"]["macro_f1"])
@@ -147,7 +165,7 @@ def fit(model, batches, validate, optimizer, device, output, checkpoint_referenc
                 best["optimizer_step"] = step_offset
             row["optimizer_step"] = step_offset
             reason = "patience" if (last_improvement_update is not None
-                and step_offset - last_improvement_update >= patience_updates) else "budget" if epoch == epochs else None
+                and step_offset - last_improvement_update >= patience_updates) else "budget" if not unbounded and epoch == epochs else None
         else:
             reason = "patience" if stale >= patience else "budget" if epoch == epochs else None
         row.update(selected=selected, non_improving_epochs=stale, stopping_reason=reason)

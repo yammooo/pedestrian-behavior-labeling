@@ -107,10 +107,10 @@ def _load_caches(outputs_root):
     outputs_root = Path(outputs_root).resolve()
     compact = e004a_run._load_compact_cache(
         outputs_root / "experiments/E004a/features/postnorm-bilstm-96")
-    frozen = e002f_run._source_run(outputs_root / e002f_run.SOURCE_RUN, ARCHITECTURE, outputs_root)
+    frozen = e002f_run._source_run(outputs_root / e004a_run.SOURCE_RUN, ARCHITECTURE, outputs_root)
     if frozen["sha256"] != e004a_run.SOURCE_SHA256 or compact["manifest"]["normalization"] != frozen["normalization"]:
         raise ValueError("E004a compact cache and pinned E002f source normalization/checkpoint differ")
-    pre_root = outputs_root / e002f_run.SOURCE_FEATURES
+    pre_root = outputs_root / e004a_run.SOURCE_FEATURES
     pre_training, pre_training_meta = e002f_run._load_cache(pre_root, "training", ARCHITECTURE,
         frozen["sha256"], frozen["normalization"])
     pre_validation, pre_validation_meta = e002f_run._load_cache(pre_root, "validation", ARCHITECTURE,

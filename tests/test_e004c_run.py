@@ -19,6 +19,21 @@ def _physical_track(offset):
 
 
 class E004cRunTest(unittest.TestCase):
+    def test_load_caches_uses_pinned_e004a_source_paths(self):
+        row = {"locator": "track-a", "archive": "track-a.npz", "targets": np.asarray([0]),
+            "gt_valid": np.asarray([True]), "group": "scenario-a"}
+        compact = {"manifest": {"normalization": {}},
+            "records": {"training": [row], "validation": [row]}}
+        frozen = {"sha256": e004c_run.e004a_run.SOURCE_SHA256, "normalization": {}}
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(e004c_run.e004a_run, "_load_compact_cache", return_value=compact), \
+                patch.object(e004c_run.e002f_run, "_source_run", return_value=frozen) as source_run, \
+                patch.object(e004c_run.e002f_run, "_load_cache", return_value=([row], {"path": "cache"})) as load_cache:
+            root = Path(directory).resolve()
+            e004c_run._load_caches(root)
+        self.assertEqual(source_run.call_args.args[0], root / e004c_run.e004a_run.SOURCE_RUN)
+        self.assertEqual(load_cache.call_args.args[0], root / e004c_run.e004a_run.SOURCE_FEATURES)
+
     def test_target_normalization_reads_selected_tracks_only(self):
         entries = [{"locator": locator, "archive": f"{locator}.npz", "e001_sha256": "sha",
                     "bbox_sha256": "sha"} for locator in ("a", "b", "excluded")]

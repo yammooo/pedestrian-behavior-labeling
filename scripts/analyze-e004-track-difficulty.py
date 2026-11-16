@@ -363,9 +363,10 @@ def figure_difficulty(summary, path):
 
 
 def figure_transition(summary, path):
-    fig, axes = plt.subplots(2, 2, figsize=(10, 6), sharey=True)
+    fig, axes = plt.subplots(2, 2, figsize=(11, 7), sharey=True)
     x = np.arange(len(MODEL_LABELS))
     width = 0.34
+    short_labels = ("ROAD\ndirect", "ROAD +\nhead", "LOKI\ntrained")
     for class_id, (ax, class_name) in enumerate(zip(axes.flat, CLASSES)):
         values = summary["gt_class_transition_error"][class_name]
         for offset, transition in ((-width / 2, "near"), (width / 2, "steady")):
@@ -375,22 +376,22 @@ def figure_transition(summary, path):
             ax.bar(x + offset, y, width, label=transition,
                    color="#CC6677" if transition == "near" else "#4477AA")
         ax.set_title(class_name.replace("_", " ").title())
-        ax.set_xticks(x, [MODEL_LABELS[model] for model in MODEL_LABELS], rotation=18, ha="right", fontsize=8)
+        ax.set_xticks(x, short_labels, fontsize=8)
         ax.set_ylim(0, 100)
-        ax.set_ylabel("Within-class track-weighted error (%)")
         ax.grid(axis="y", alpha=0.25)
     axes[0, 0].legend(frameon=False, fontsize=9)
+    fig.supylabel("Error (%)")
     fig.suptitle("GT-class error near versus steady label transitions\n"
                  "Near = within 0.4 s of a GT transition; unknown support is retained in JSON/CSV",
-                 fontsize=12)
-    fig.tight_layout(rect=(0, 0, 1, 0.9))
+                 fontsize=12, y=0.99)
+    fig.tight_layout(rect=(0.06, 0.08, 1, 0.9))
     fig.savefig(path, dpi=180, bbox_inches="tight")
     fig.savefig(path.with_suffix(".svg"), bbox_inches="tight")
     plt.close(fig)
 
 
 def write_outputs(data):
-    OUTPUT.mkdir(parents=True, exist_ok=False)
+    OUTPUT.mkdir(parents=True, exist_ok=True)
     summary_rows = data.pop("summary_rows")
     track_rows = data.pop("track_rows")
     (OUTPUT / "summary.json").write_text(json.dumps(data, indent=2, allow_nan=False) + "\n")

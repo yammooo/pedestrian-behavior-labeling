@@ -219,7 +219,7 @@ def plot_ranges(summary, output):
             high = np.array([bins[label][high_key] if bins[label][high_key] is not None else np.nan
                              for label in ERROR_LABELS], dtype=float)
             ax.errorbar(x, med, yerr=np.vstack((med - low, high - med)), fmt="o", capsize=3,
-                        color=ERROR_COLORS[2], linewidth=1.5)
+                        color="#4477AA", linewidth=1.5)
             for i, label in enumerate(ERROR_LABELS):
                 n = bins[label]["track_count"]
                 if np.isfinite(med[i]):

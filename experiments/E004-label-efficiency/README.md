@@ -110,3 +110,65 @@ Duration uses saved native timestamp extent, not labeled duration or a guarantee
 **Interpretation:** this supports investigating class-specific observation failures and the head's trade-offs before imposing a broad distance/duration eligibility rule. It does not identify the cause of transfer failure or justify changing the population yet. Source-validation context is 66.07% ROAD F1 and 74.68% full-LOKI F1 on their respective original populations; those are not paired scores on the 931-track subset.
 
 [Analysis script](../../scripts/analyze-e004-track-difficulty.py) · [summary JSON](../../outputs/experiments/E004/track-difficulty-20261116/summary.json) · [subgroup CSV](../../outputs/experiments/E004/track-difficulty-20261116/summary.csv) · [per-track CSV](../../outputs/experiments/E004/track-difficulty-20261116/track-errors.csv). Input paths and checkpoint families are fixed in the script. Conditions come from the ROAD-direct archive; optional metadata axes differ across older exports. Track IDs, lengths, GT and masks align; timestamps match across the three model archives, while the E004 identity archive omits timestamps. All condition/class partitions reconstruct the complete weighted support and errors. The focused weight self-check passes; the CPU suite completed 294 tests with 13 expected skips, with its sandbox-blocked localhost test passing on isolated rerun outside the sandbox.
+
+
+### Error concentration and GT composition
+
+On the same 931 tracks, the worst 187 tracks (20%, rounded up) account for 41.1% of direct-transfer weighted errors, 81.3% after head adaptation and 90.3% for the LOKI-trained model. These are shares of each model's total errors, not those tracks' error rates. Direct transfer has 319 entirely wrong tracks: any 187 of them give the same 41.1% error share, so its exact worst 20% class composition is not uniquely defined.
+
+Counts below distinguish single-class tracks (all scored GT has that class) from mixed-class tracks; unlabeled slots do not establish constant behavior. The complete population has 572 Moving-only, 67 Stopped-only, 75 Waiting-only, 64 Crossing-only and 153 mixed-class tracks.
+
+| Entirely correct tracks | Moving-only | Stopped-only | Waiting-only | Crossing-only | Mixed | Total |
+|---|---:|---:|---:|---:|---:|---:|
+| ROAD direct |226|48|12|18|0|304|
+| Adapted head |530|12|23|2|0|567|
+| LOKI-trained |515|32|48|33|2|630|
+
+| Hard tracks | Moving-only | Stopped-only | Waiting-only | Crossing-only | Mixed | Total |
+|---|---:|---:|---:|---:|---:|---:|
+| ROAD direct: all tied entirely wrong tracks |198|10|40|42|29|319|
+| Adapted head: worst 20% |23|36|29|53|46|187|
+| LOKI-trained: worst 20% |45|30|25|26|61|187|
+
+Perfect head-adapted tracks are 93.5% Moving-only, versus 81.7% for the LOKI-trained model. Only 2/153 mixed tracks are entirely correct even with target training; their mean within-track error is 26.5%, versus 16.9% across all tracks. Perfect-track accuracy is stricter for longer, mixed tracks, so this does not establish that transition errors dominate. The composition qualifies the earlier concentration result: much of the perfect-track count comes from the common Moving-only population, and rare/mixed behaviors are overrepresented in the hard cohorts. These cohorts were selected retrospectively using GT and are not deployable rejection rules.
+
+[Numerical breakdown, including boundary ties and track-weighted GT class proportions](../../outputs/experiments/E004/track-difficulty-20261116/track-error-concentration.json).
+
+
+### Track quality by error range
+
+The same 931 tracks are grouped by their fraction of misclassified accepted-GT timesteps: **0–5%, >5–20%, >20–50%, >50–80%, >80–95%, >95–100%**. Boundaries are right-inclusive; these groups partition all tracks. Each track counts once. A single error in a five-GT-frame track is 20%, so labeled-frame support is reported alongside duration.
+
+The first figure separates single-GT-class and mixed-class tracks; each bar sums to 100% within that track type. This prevents the common Moving-only tracks from dominating every profile.
+
+| Tracks with at most 20% error (%) | All (931) | Moving-only (572) | Stopped-only (67) | Waiting-only (75) | Crossing-only (64) | Mixed (153) |
+|---|---:|---:|---:|---:|---:|---:|
+| ROAD direct |42.1|47.7|74.6|22.7|31.2|20.9|
+| Adapted head |70.9|95.1|40.3|53.3|10.9|27.5|
+| LOKI-trained |77.7|92.0|53.7|65.3|59.4|48.4|
+
+![Per-track error ranges within each GT track type](../../outputs/experiments/E004/track-error-ranges-20261116/error-composition.png)
+
+[SVG](../../outputs/experiments/E004/track-error-ranges-20261116/error-composition.svg).
+
+For each model/error bin, numerical summaries retain track count/fraction, GT composition, duration, labeled-frame count and pedestrian–ego distance. Points in the second figure are medians and bars span the 25th–75th percentiles (the middle 50%). Distance is calculated in meters from the existing unnormalized saved positions, using E001's `norm(ped_position - ego_position)` wherever pedestrian position and ego pose are valid. First compute each track's median distance over all valid unpadded context slots, including unlabeled slots, then summarize those track medians within each error group. Tracks without a valid distance remain unknown rather than being assigned zero. Duration remains nominal native timestamp span.
+
+![Duration and distance across track-error ranges](../../outputs/experiments/E004/track-error-ranges-20261116/error-ranges.png)
+
+[SVG](../../outputs/experiments/E004/track-error-ranges-20261116/error-ranges.svg).
+
+**Interpretation:** mixed tracks are not uniformly lost: 74/153 have at most 20% error for the LOKI-trained model, compared with only 2/153 that are entirely correct. Mixed tracks are also longer: median 15.8 s (middle 50% 9.2–19.6 s), versus 3.7 s (1.8–6.6 s) for Moving-only tracks. This helps explain why perfect-track counts were restrictive. The adapted head's improvement remains concentrated in Moving; 50/64 Crossing-only tracks have more than 95% error, versus 42/64 under direct transfer and 18/64 under LOKI training. Length/distance summaries mix behaviors and cannot establish causality; class composition must accompany their interpretation.
+
+For the LOKI-trained model, the 0–5% error group and the >95% error group have almost identical median track distances: **25.5 m** in both, with middle 50% **17.2–38.6 m** and **17.6–41.3 m** respectively. There is no simple overall separation by distance. Their median durations are 3.8 s and 2.6 s, while the >5–20% error group has median 17.0 s and 86 labeled timesteps. This is consistent with short tracks often being almost wholly right or wrong and longer tracks admitting partial errors; it does not isolate duration as the cause. All 931 tracks have at least one valid range measurement.
+
+These are retrospective GT-based quality groups, **not confidence-selected automatic coverage or risk guarantees**. Historical checkpoint-selection exposure is unchanged. No retraining, encoder inference or native sensor decoding is needed: only the existing 931 small prepared geometry archives are read once. [Script](../../scripts/analyze-e004-track-error-ranges.py), [summary CSV](../../outputs/experiments/E004/track-error-ranges-20261116/summary.csv), [summary JSON](../../outputs/experiments/E004/track-error-ranges-20261116/summary.json), and [cached per-track geometry summaries](../../outputs/experiments/E004/track-error-ranges-20261116/per-track-metadata.csv). The cached CSV allows figure regeneration without SSH or additional archive reads.
+
+
+Regenerate these two figures locally from the small cached metadata file:
+
+```bash
+uv run --locked --extra cpu python scripts/analyze-e004-track-error-ranges.py \
+  --metadata-csv outputs/experiments/E004/track-error-ranges-20261116/per-track-metadata.csv
+```
+
+The original saved-geometry extraction and report generation took 6.5 s on Aalto. Boundary/partition checks and the 294-test CPU suite pass (13 expected skips). Both figures were visually checked; all error-bin and class-composition counts reconstruct 931 tracks per model.

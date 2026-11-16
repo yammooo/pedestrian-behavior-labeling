@@ -69,3 +69,15 @@ Report aggregates and sampling/reference metadata were checked against the saved
 ### Initial-track class-support inspection
 
 [All20 initial tracks with full IDs and class counts](../../outputs/experiments/E004b/results-review/20261113-091208-600096Z/initial-track-class-support.csv) and [draw summaries](../../outputs/experiments/E004b/results-review/20261113-091208-600096Z/initial-track-class-support.json) show that role coverage is not class purity: draw2's Stopped-role track has7 Stopped /49 Moving GT; draw3's Moving-role track has39 Moving /57 Crossing /4 Waiting; draw4's Crossing-role track has7 Crossing /10 Moving. All five ordinary fifth tracks are Moving-only. Under equal-track CE, Stopped consequently has only2.5% of the five-track training label weight in draw2. This can contribute to differing behavior, but counts do not identify its cause: draw0 assessment improves4.75pp while the fairly balanced draw1 loses6.21pp. No new inference or training.
+
+### Five-track per-class F1 across draws
+
+The figure shows **each selected best checkpoint**, with one row per subset draw and columns for the four classes plus macro-F1. **Development** is the 930-track checkpoint-selection/calibration half; **assessment** is the separate 931-track half. Scores use all accepted GT with **no confidence rejection**. Training seed 0 is fixed; draws 0–4 change the labeled tracks. E004a means the early-check reference throughout.
+
+![Five-track per-class F1: E004a versus E004b, development and assessment](../../outputs/experiments/E004b/results-review/five-track-class-f1/five-track-class-f1.png) ([SVG](../../outputs/experiments/E004b/results-review/five-track-class-f1/five-track-class-f1.svg); [CSV](../../outputs/experiments/E004b/results-review/five-track-class-f1/five-track-class-f1.csv); [JSON and selected-checkpoint references](../../outputs/experiments/E004b/results-review/five-track-class-f1/five-track-class-f1.json)).
+
+Across draws, E004b changes mean assessment class F1 by **Moving −3.94 /Stopped −7.46 /Waiting +5.63 /Crossing +1.04 percentage points**. Waiting gains are offset by losses elsewhere.
+
+Mean selected-checkpoint development macro-F1 is 54.10% for E004a versus 53.57% for E004b; assessment is 47.13% versus 45.95%. The draw 0 improvement is not shared across all draws.
+
+The earlier budget curves average **assessment** F1 across draws; W&B's `development/macro_f1` curves describe development instead. This diagnostic localizes class-specific variation and does not establish its cause. No new training, inference or test access.

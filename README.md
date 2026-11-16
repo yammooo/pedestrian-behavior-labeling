@@ -1041,3 +1041,19 @@ uv run --locked --extra cu118 python scripts/train-e004b.py --device cuda
 ```
 
 This runs40 reduced-budget fits plus one all-data fit and a zero anchor in fresh E004b outputs. Class-support metadata from the full training pool is privileged sampling access, separately disclosed from dense fitting/development labels. `--smoke` runs only two200-update offline-W&B checks. Full training stays user-launched.
+
+
+## E004c adaptation-depth label budgets
+
+[E004c](experiments/E004c-adaptation-depth-budgets/README.md) compares source-initialized temporal+head adaptation with target-only task-model training at 25, 100 and 1,000 LOKI tracks, using the same five E004a draws. Existing head-only and unadapted-source results are reused.
+
+```bash
+cd /home/user20/projects/pedestrian-behavior-labeling-e002b-evaluation
+export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+uv run --no-project --python "$PWD/outputs/experiments/E002a/extractor-env/bin/python" \
+  python scripts/train-e004c.py --device cuda
+```
+
+The launcher runs 30 new fits sequentially in fresh `outputs/experiments/E004c/runs/<timestamp>/` outputs. Each stops after 1,500 optimizer updates without a strict development F1 improvement, with no update ceiling. Temporal adaptation reuses the frozen source fusion cache; target-only training uses the existing RGB/point feature supply and fits geometry normalization only on its selected training tracks. Both externally pretrained encoders remain frozen. No test preparation or encoder-feature rebuild is included. Selected predictions, confidence analyses and three comparison figures stay local; W&B receives per-fit metrics and plots. Full training remains user-launched.
+
+This reader uses the existing E002a isolated environment because the frozen feature identity was produced with its CUDA 12.6 backend; the standard cu118 environment does not reproduce that identity. No encoder inference is performed by this command.

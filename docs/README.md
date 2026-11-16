@@ -28,7 +28,7 @@ Updated **2026-11-16**. We are developing a reliable **offline, given-track pede
 
 ## Next work
 
-1. Discuss the next matched [E004 control](../experiments/E004-label-efficiency/README.md) after the completed [E004a](../experiments/E004a-head-label-budget/README.md#results) and [E004b](../experiments/E004b-class-covered-head-budget/README.md#results) diagnostics. Neither denser checks nor the initial four-class support floor produces a broad gain. Target-only/adaptation-depth comparisons and full annotation-access accounting remain open; no new runs are launched by this review.
+1. Launch the prepared [E004c adaptation-depth comparison](../experiments/E004c-adaptation-depth-budgets/README.md): temporal+head versus target-only at 25/100/1,000 tracks × five draws, reusing E004a heads. Patience is 1,500 updates with no ceiling. Both CUDA smoke fits pass; target-only measured 5.82 s/update and 39.65 s/development pass at 1,000 tracks, so the queue may take days. Full comparison remains user-launched.
 2. Resolve the observed calibration-to-assessment error gap before describing automatic acceptance as reliable. Retain class retention and achieved errors; statistical risk guarantees and uncertainty over new recordings remain open. No additional experiment is launched by this review.
 3. Arrange a separate backup for valuable checkpoints/predictions; external storage is **TBD**. Keep the [closure schedule](research.md#schedule); representation changes and further broad sweeps remain deferred.
 

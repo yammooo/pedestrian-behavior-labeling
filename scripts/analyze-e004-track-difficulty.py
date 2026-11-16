@@ -142,12 +142,16 @@ def make_data():
         check_aligned(reference, records, name)
         for locator in locators:
             first, second = reference[locator], records[locator]
-            for field in ("conditions", "source_flags"):
-                if first[field].keys() != second[field].keys():
-                    raise ValueError(f"{field} keys differ for {name}: {locator}")
-                for key in first[field]:
-                    if not np.array_equal(first[field][key], second[field][key]):
-                        raise ValueError(f"{field} differ for {name}: {locator}/{key}")
+            for axis in ("duration", "range", "transition"):
+                if axis not in first["conditions"] or axis not in second["conditions"]:
+                    raise ValueError(f"Missing required {axis} condition for {name}: {locator}")
+                if not np.array_equal(first["conditions"][axis], second["conditions"][axis]):
+                    raise ValueError(f"{axis} condition differs for {name}: {locator}")
+            for flag in ("rgb_valid", "lidar_valid"):
+                if flag not in first["source_flags"] or flag not in second["source_flags"]:
+                    raise ValueError(f"Missing required {flag} input flag for {name}: {locator}")
+                if not np.array_equal(first["source_flags"][flag], second["source_flags"][flag]):
+                    raise ValueError(f"{flag} input flag differs for {name}: {locator}")
     gt_frames = sum(int(assessment[k]["gt_valid"].sum()) for k in locators)
     groups = {scenario(k) for k in locators}
     if (len(locators), gt_frames, len(groups)) != EXPECTED_ASSESSMENT:
@@ -167,7 +171,7 @@ def make_data():
 
     track_features = {}
     for locator in locators:
-        track = assessment[locator]
+        track = reference[locator]
         duration_code = scalar_condition(track, "duration", DURATION)
         rgb = np.asarray(track["source_flags"]["rgb_valid"], dtype=bool)
         lidar = np.asarray(track["source_flags"]["lidar_valid"], dtype=bool)
@@ -194,7 +198,7 @@ def make_data():
     specs = (
         ("duration", DURATION, lambda loc: track_features[loc]["duration_code"], True),
         ("ped-ego-range", RANGE,
-         lambda loc: np.asarray(assessment[loc]["conditions"]["range"]), False),
+         lambda loc: np.asarray(reference[loc]["conditions"]["range"]), False),
         ("rgb-fraction", EVIDENCE, lambda loc: track_features[loc]["rgb_bin"], True),
         ("lidar-fraction", EVIDENCE, lambda loc: track_features[loc]["lidar_bin"], True),
     )
@@ -243,7 +247,7 @@ def make_data():
                 track = assessment[locator]
                 masks[locator] = ((np.asarray(track["targets"]) == class_id)
                                   & np.asarray(track["gt_valid"], dtype=bool)
-                                  & (np.asarray(track["conditions"]["transition"]) == transition_id))
+                                  & (np.asarray(reference[locator]["conditions"]["transition"]) == transition_id))
             transition_summary[class_name][transition_name] = {}
             for model, records in predictions.items():
                 metrics = aligned_weighted_metrics(records, masks, total_error_mass[model])

@@ -47,6 +47,7 @@ def timed(fn, device=None):
     for _ in range(REPEATS):
         if device is not None:
             sync(device)
+        result = None
         start = time.perf_counter()
         result = fn()
         if device is not None:
@@ -66,13 +67,19 @@ def gpu_snapshot():
         return None
 
 
-def cpu_voxels(path):
-    with np.load(path, allow_pickle=False) as saved:
-        points = np.asarray(saved["native_xyz"], dtype=np.float32).copy()
+def cpu_voxels(native_xyz):
+    points = np.c_[native_xyz, np.zeros(len(native_xyz), dtype=np.float32)]
     assert points.ndim == 2 and points.shape[1] == 4 and np.isfinite(points).all()
     points[:, :3] *= .2
-    selected, inverse, grid = voxel_sample(points, grid_size=.01)
-    return points, selected, inverse, grid
+    selected, _, grid = voxel_sample(points, grid_size=.01)
+    return points, selected, grid
+
+
+def read_native_xyz(path):
+    with np.load(path, allow_pickle=False) as saved:
+        points = np.asarray(saved["native_xyz"], dtype=np.float32).copy()
+    assert points.ndim == 2 and points.shape[1] == 3 and np.isfinite(points).all()
+    return points
 
 
 def tiny_timing(args, device, result):
@@ -99,8 +106,9 @@ def tiny_timing(args, device, result):
 
     frame_results = []
     for dataset, filename in SAMPLES.items():
-        prep_times, prepared = timed(lambda: cpu_voxels(args.fixtures / filename))
-        points, selected, inverse, grid = prepared
+        native_xyz = read_native_xyz(args.fixtures / filename)
+        prep_times, prepared = timed(lambda: cpu_voxels(native_xyz))
+        points, selected, grid = prepared
 
         def h2d():
             coord = torch.from_numpy(points[selected, :3]).to(device)
@@ -140,6 +148,7 @@ def tiny_timing(args, device, result):
         frame_results.append({
             "dataset": dataset,
             "fixture": filename,
+            "input": "preloaded full-sweep XYZ fixture; NPZ read excluded, zero strength added for the existing voxel helper",
             "native_points": len(points),
             "input_voxels": len(selected),
             "stage3_rows_channels": list(hierarchy[2]["feat"].shape),
@@ -151,7 +160,7 @@ def tiny_timing(args, device, result):
             "stage3_stage5_fp16_copy_seconds": copy_times,
             "peak_allocated_bytes": torch.cuda.max_memory_allocated(device),
         })
-        del arrays, point, hierarchy, data, points, prepared
+        del arrays, point, hierarchy, data, points, prepared, native_xyz
 
     result["utonia_tiny"] = {
         "checkpoint_sha256": TINY_SHA256,
@@ -179,6 +188,22 @@ def dino_timing(args, device, result):
     for batch_size in (1, 8):
         batch = crops[:batch_size]
 
+        h2d_times, batch_gpu = timed(lambda: batch.to(device), device)
+
+        def forward_only():
+            with torch.inference_mode(), torch.autocast(device_type="cuda", dtype=torch.float16):
+                output = encoder.model.forward_features(batch_gpu)
+                cls, patches = output["x_norm_clstoken"], output["x_norm_patchtokens"]
+            assert cls.shape == (batch_size, 768) and patches.shape == (batch_size, 256, 768)
+            assert torch.isfinite(cls).all() and torch.isfinite(patches).all()
+            return cls, patches
+
+        torch.cuda.reset_peak_memory_stats(device)
+        forward_times, output_gpu = timed(forward_only, device)
+        forward_peak = torch.cuda.max_memory_allocated(device)
+        del output_gpu, batch_gpu
+        sync(device)
+
         def forward_copy():
             cls, patches = encoder.descriptors(batch, patches=True)
             cls, patches = cls.astype(np.float16), patches.astype(np.float16)
@@ -193,8 +218,11 @@ def dino_timing(args, device, result):
             "cls_shape": list(arrays[0].shape),
             "patch_shape": list(arrays[1].shape),
             "fp16_output_bytes": int(arrays[0].nbytes + arrays[1].nbytes),
-            "forward_and_fp16_copy_seconds": seconds,
-            "peak_allocated_bytes": torch.cuda.max_memory_allocated(device),
+            "h2d_seconds": h2d_times,
+            "pure_forward_seconds": forward_times,
+            "adapter_forward_fp32_d2h_then_cpu_fp16_seconds": seconds,
+            "pure_forward_peak_allocated_bytes": forward_peak,
+            "adapter_copy_peak_allocated_bytes": torch.cuda.max_memory_allocated(device),
         }
         del arrays
     result["dinov3"] = {

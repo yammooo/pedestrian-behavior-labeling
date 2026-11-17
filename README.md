@@ -1043,6 +1043,23 @@ uv run --locked --extra cu118 python scripts/train-e004b.py --device cuda
 This runs40 reduced-budget fits plus one all-data fit and a zero anchor in fresh E004b outputs. Class-support metadata from the full training pool is privileged sampling access, separately disclosed from dense fitting/development labels. `--smoke` runs only two200-update offline-W&B checks. Full training stays user-launched.
 
 
+## E005 spatial feature preparation
+
+[E005](experiments/E005-spatial-representations/README.md) prepares DINO patch and Tiny-Utonia stage3/stage5 features for LOKI training/validation. It does not launch behavior training. Use Aalto's existing extractor environment from `/home/user20/projects/pedestrian-behavior-labeling-e002b-evaluation`:
+
+```bash
+export PYTHONPATH="$PWD/src" OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+e005_python="$PWD/outputs/experiments/E002a/extractor-env/bin/python"
+uv run --no-project --python "$e005_python" python scripts/cache-e005.py \
+  --device cuda --scope bounded \
+  --loki-root /run/media/user20/F47C60057C5FC152/projects/loki_data \
+  --utonia-code outputs/experiments/E002a/dependencies/utonia \
+  --tiny-checkpoint outputs/experiments/E005/online-probe-20261117/utonia_tiny.pth \
+  --output outputs/experiments/E005/loki-check
+```
+
+After the bounded build and its size estimate pass, the full build uses the same arguments with `--scope full --estimate outputs/experiments/E005/loki-check/manifest.json --output outputs/experiments/E005/loki-spatial`. Outputs must be fresh directories; the builder preserves at least20 GB free. Existing E002 caches remain untouched. The experiment owner records the actual preparation path and verification status.
+
 ## E004c adaptation-depth label budgets
 
 [E004c](experiments/E004c-adaptation-depth-budgets/README.md) compares source-initialized temporal+head adaptation with target-only task-model training at 25, 100 and 1,000 LOKI tracks, using the same five E004a draws. Existing head-only and unadapted-source results are reused.

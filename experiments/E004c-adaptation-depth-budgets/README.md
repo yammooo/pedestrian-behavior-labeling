@@ -1,6 +1,6 @@
 # E004c — Adaptation depth versus label budget
 
-**Status: implemented and checked on CPU/CUDA; full comparison remains user-launched.** ROAD→LOKI, one fixed all-modality E002f BiLSTM-96 architecture. This comparison extends [E004a](../E004a-head-label-budget/README.md), using its ordinary nested subsets and early-check results. It asks whether source behavior training saves target labels, and whether freezing the temporal representation restricts adaptation.
+**Status: deliberately stopped by the user on 2026-11-17 to prioritize E005.** All 15 temporal+head fits and seven target-only fits completed (3/2/2 draws at 25/100/1,000 tracks). Target-only100-track draw2 was interrupted; its best/last checkpoints remain. Later fits were not run. The earlier provisional result snapshot is retained separately; it has fewer completed target-only fits. [Stop record](../../outputs/experiments/E004c/stopped-20261117/user-stop.json). ROAD→LOKI, one fixed all-modality E002f BiLSTM-96 architecture. This comparison extends [E004a](../E004a-head-label-budget/README.md), using its ordinary nested subsets and early-check results. It asks whether source behavior training saves target labels, and whether freezing the temporal representation restricts adaptation.
 
 ## Comparison
 

@@ -28,9 +28,9 @@ Updated **2026-11-16**. We are developing a reliable **offline, given-track pede
 
 ## Next work
 
-1. Launch the prepared [E004c adaptation-depth comparison](../experiments/E004c-adaptation-depth-budgets/README.md): temporal+head versus target-only at 25/100/1,000 tracks × five draws, reusing E004a heads. Patience is 1,500 updates with no ceiling. Both CUDA smoke fits pass; target-only measured 5.82 s/update and 39.65 s/development pass at 1,000 tracks, so the queue may take days. Full comparison remains user-launched.
+1. Prepare [E005 spatial models and LOKI caches](../experiments/E005-spatial-representations/README.md): DINO patch readout and Tiny-Utonia native stages3/5, retaining BiLSTM-96. E004c was deliberately stopped after all 15 temporal+head and seven target-only fits; checkpoints/results are preserved. Models and cache code pass CPU/CUDA checks; native readback/model checks pass, but the refined cache estimate is260 GB against232 GB free (48 GB short with headroom). Full preparation is blocked pending a storage decision. ROAD remains uncached for later online evaluation.
 2. Resolve the observed calibration-to-assessment error gap before describing automatic acceptance as reliable. Retain class retention and achieved errors; statistical risk guarantees and uncertainty over new recordings remain open. No additional experiment is launched by this review.
-3. Arrange a separate backup for valuable checkpoints/predictions; external storage is **TBD**. Keep the [closure schedule](research.md#schedule); representation changes and further broad sweeps remain deferred.
+3. Arrange a separate backup for valuable checkpoints/predictions; external storage is **TBD**. Keep the [closure schedule](research.md#schedule); broader sweeps remain deferred while the authorized E005 preparation proceeds.
 
 ## Navigation and ownership
 

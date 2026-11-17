@@ -15,6 +15,7 @@ src/pedestrian_behavior/
   models/
     kinematic.py            MLP/BiLSTM and their shared encoder/classifier
     e002f.py                E002f temporal modules on the shared multimodal model
+    e005.py                 Frozen spatial-token readouts and the reused E002f BiLSTM
   training.py               Training loop and checkpoint handling
   evaluation.py             Loss, metrics and condition analysis
   experiments/
@@ -141,3 +142,5 @@ Its optional `--compare-crop-scales` reuses the same sample, crop function and e
 
 
 **E004c adaptation depth:** `experiments/e004c_run.py` reuses E004a subsets, partition and confidence analysis. It trains the source BiLSTM/projection/norm/head from cached fusion features, or a fresh full task model over existing frozen RGB/point descriptors with selected-subset normalization. `e004c_analysis.py` compares both methods with saved E004a head references; `scripts/train-e004c.py` is the sequential entry point. Comparison training uses update-based patience without an update ceiling. [E004c](experiments/E004c-adaptation-depth-budgets/README.md) owns settings, compute evidence and label access.
+
+**E005 spatial representations:** `experiments/e005_cache.py` owns pinned frozen extraction, scene-shared memory-mapped arrays, target selection indices and the complete-track batch adapter; `scripts/cache-e005.py` runs bounded/full LOKI preparation. The same token/cue functions serve future online extraction. `models/e005.py` projects frozen DINO patch tokens and Tiny-Utonia stage3/stage5 tokens with target-relative geometric cues, then uses one learned cross-attention query per modality. It reuses E002f's packed BiLSTM-96. Ragged CPU token lists are processed in bounded spatial chunks; large training batches recompute spatial activations while preserving complete-track temporal context. [E005](experiments/E005-spatial-representations/README.md) owns feature semantics, provenance and the preparation gate; existing E002 models and caches remain unchanged.

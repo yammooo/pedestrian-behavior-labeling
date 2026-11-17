@@ -429,6 +429,8 @@ The [pilot specification](experiments/E002a-feature-feasibility/README.md#deferr
 
 ### E002a feature caches
 
+On 17 November the old `indexed-road-waymo` cache was removed with user approval to make room for E005. Older ROAD D-DITR commands require rebuilding it; LOKI and RGB caches are retained. [Retirement record](experiments/E005-spatial-representations/README.md#full-preparation-launch).
+
 The [cache inventory](experiments/E002a-feature-feasibility/README.md#cache-inventory-and-retirement--2026-10-22) records current paths. The old450 GB point LRU was deleted at the user's request; geometry and geometry+RGB training remain independent of it. Historical LRU cache utilities below can recreate that cache; current training cannot. Indexed storage and training wiring pass bounded checks; full preparation and operational acceptance remain pending. Existing prototype shards remain usable, while new preparation extracts directly from native sweeps.
 
 The standalone indexed builder reads native LiDAR directly and does not use the retired LRU. The verified builder checkout on aalto is `/home/user20/projects/pedestrian-behavior-labeling-indexed-build`; its outputs alias the canonical root. It leaves the other checkouts unchanged. From that checkout, prepare **one source at a time**:

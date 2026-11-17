@@ -843,6 +843,8 @@ Configs match on seed0, enabled-branches-v2, source normalization, split identit
 
 ### Cache inventory and retirement — 2026-10-22
 
+**Update 2026-11-17:** the user authorized removing the 156 GB `outputs/experiments/E002a/indexed-road-waymo` cache for [E005 preparation](../E005-spatial-representations/README.md#full-preparation-launch). Top-level provenance JSON was retained. The old LOKI/RGB caches, native data, models and saved results remain intact; older ROAD D-DITR runs need that cache rebuilt. The inventory below is the historical 22 October snapshot.
+
 User-authorized deletion of the **old** `E002a/point-cache/`:23,305 entries/449.97 GB encoded payload,450.26 GB allocated directory. Ownership lock was free and no training/preparation/prototype process was active. Removed the directory while holding its lock; retained its229 MB SQLite index as historical unpooled cost evidence under `E002a/cache-inventory-20261022/retired-point-index.sqlite3`. This snapshot is not a usable cache or a source of new pooled-token costs. Free space increased to518 GB. No other cache, dataset, model run/checkpoint or native input was deleted. [Removal evidence](../../outputs/experiments/E002a/cache-inventory-20261022/retirement.json) · [full allocated-size inventory](../../outputs/experiments/E002a/cache-inventory-20261022/inventory.json).
 
 Canonical **aalto** output root: `/home/user20/projects/pedestrian-behavior-labeling/outputs/`. Review/viewer outputs and the older experiment checkouts' E001/E001b/E001c directories alias this same storage; they are not duplicate dataset caches. ThinkPad outputs are separate local copies (about5.8 GB total experiments), unchanged.

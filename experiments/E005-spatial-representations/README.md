@@ -1,6 +1,6 @@
 # E005 — Spatial representation upgrades
 
-**Status: models/cache code implemented; full preparation blocked by disk space, 2026-11-17.** E004c was deliberately stopped and its outputs preserved. A bounded native cache completes, but its measured projection exceeds available space. No old caches are deleted; no new behavior training or ROAD evaluation is launched by this increment.
+**Status: full LOKI cache preparation running, 2026-11-17.** The user approved retiring the old ROAD D-DITR derived cache to free space. E004c remains stopped with its outputs preserved. No behavior training or ROAD evaluation is launched by this increment.
 
 ## Question and scope
 
@@ -36,7 +36,7 @@ One learned128D query; four-head cross-attention to spatial keys/values; output 
 
 ## Cache and execution contract
 
-- New caches live under ignored `outputs/experiments/E005/`; old data, caches and results are preserved.
+- New caches live under ignored `outputs/experiments/E005/`. Native data, results and the old LOKI cache are preserved; the explicitly approved ROAD D-DITR cache retirement is recorded below.
 - Store frozen features as FP16, LiDAR coordinates as FP32. Trainable readouts use FP32. Cache features precede all task-trained projections.
 - RGB stores only valid256×768 patch arrays and the input geometry needed to reconstruct positional cues. Existing native associations/crop semantics remain authoritative.
 - LiDAR stores each stage once per unique sweep, retaining the union required by all eligible target20 m neighborhoods. Reader reconstructs each target crop; no per-pedestrian feature duplication, dense inverse expansion or bounded-LRU system.
@@ -45,7 +45,7 @@ One learned128D query; four-head cross-attention to spatial keys/values; output 
 - Check actual encoded sample sizes, cache/online agreement, finite outputs and a forward/backward batch before population preparation. Keep at least20 GB free during preparation; stop with evidence if the cache cannot fit. Never silently drop tracks/tokens to meet disk limits.
 - Prepare source training/validation only; fit no normalization from validation. No automatic retries or continuation from incomplete outputs.
 
-The earlier [storage/online estimate](../../outputs/experiments/E005/cache-online-feasibility-20261117/report.md) projected about136 GB Tiny +59 GB DINO for LOKI before indices/metadata. The four-scenario native build gives a larger estimate: **200.16 GB LiDAR including indices +71.87 GB RGB =272.04 GB**, versus 232 GB free after the bounded build. These remain sample projections, not full-cache totals. The 20 GB floor blocks the full build. Online ROAD is a later inference-only execution choice, not an authorization to evaluate now.
+The earlier [storage/online estimate](../../outputs/experiments/E005/cache-online-feasibility-20261117/report.md) projected about136 GB Tiny +59 GB DINO for LOKI before indices/metadata. The four-scenario native build gives a larger estimate: **200.16 GB LiDAR including indices +71.87 GB RGB =272.04 GB**, versus 232 GB free after the bounded build. These remain sample projections, not full-cache totals. This initially blocked the full build; the approved retirement below resolves that shortage. Online ROAD is a later inference-only execution choice, not an authorization to evaluate now.
 
 ## Acceptance and commands
 
@@ -60,4 +60,10 @@ Implemented [model](../../src/pedestrian_behavior/models/e005.py): 528,516 train
 - A complete 51-frame track passes GPU forward/backward for both arms and forced spatial recomputation. This checks wiring, not trained accuracy or production throughput.
 - Using the existing 151,040 valid RGB crops refines RGB storage to 59.39 GB; keeping the sampled LiDAR projection gives **259.55 GB total**. With 232.01 GB free, the full build is **47.55 GB short including the 20 GB floor**. LiDAR remains a four-scenario extrapolation; the guard also remains active during writes.
 
-[Build status/timing](../../outputs/experiments/E005/loki-cache-bounded-20261117/cache.json) · [array/count/provenance manifest](../../outputs/experiments/E005/loki-cache-bounded-20261117/manifest.json). Existing ROAD D-DITR derived cache `outputs/experiments/E002a/indexed-road-waymo` occupies 156 GB; deletion was proposed but **not authorized or performed**. Old caches, native data, checkpoints and predictions remain intact. Full cache preparation and behavior training have not started.
+[Build status/timing](../../outputs/experiments/E005/loki-cache-bounded-20261117/cache.json) · [array/count/provenance manifest](../../outputs/experiments/E005/loki-cache-bounded-20261117/manifest.json). The user subsequently authorized deleting only `outputs/experiments/E002a/indexed-road-waymo`. Removal freed **156.23 GB**; its three top-level JSON provenance files were retained separately (27.76 MB). Native data, old LOKI/RGB caches, weights, checkpoints and predictions remain intact. Older ROAD D-DITR inference/training now requires rebuilding that cache.
+
+## Full preparation launch
+
+Full output: `outputs/experiments/E005/loki-cache-full-20261117/` on Aalto; revision `be7a540`, PID `62329`. Preflight free space was **388.23 GB**, versus the conservative 272.04 GB projection plus 20 GB floor. This is a detached cache build, not behavior training. First durable check: 6/523 scenarios, 261/31,290 sweeps and 1,162 valid RGB crops after 109.7 s; 386 GB remained free. Early runtime estimate is 3–4 hours, subject to scene variation. Completion counts and final footprint remain pending.
+
+[Deletion receipt](../../outputs/experiments/E005/loki-cache-full-20261117-road-cache-provenance/deletion-receipt.json). The bounded verification and earlier failed storage gate remain recorded above.

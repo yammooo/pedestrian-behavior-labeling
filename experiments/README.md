@@ -4,7 +4,7 @@ Shared evaluation safeguards and comparison index. The [joint five-seed E001/E00
 
 | ID | Question | Status | Result |
 |---|---|---|---|
-| [E005](E005-spatial-representations/README.md) | Do spatial DINO and native-level Tiny-Utonia readouts improve the reference labeler? | Models/cache code checked; full LOKI cache build running after approved ROAD cache retirement; later ROAD online transfer | No behavior result yet; storage and online timing probes retained |
+| [E005](E005-spatial-representations/README.md) | Do spatial DINO and native-level Tiny-Utonia readouts improve the reference labeler? | Full LOKI cache ready; source-validation pilot launcher verified on CUDA | No behavior result yet; storage and online timing probes retained |
 | [E001](E001-kinematic-transfer/README.md) | Four kinematic feature sets × MLP/BiLSTM; within and bidirectional ROAD-Waymo/LOKI transfer | 80 five-seed attempts complete; earlier 32 retained | BiLSTM consistently improves on MLP; RAW versus K+T+R depends on direction |
 | [E001b](E001b-2d-bbox-contribution/README.md) | Exact K+T+R versus added bbox availability versus added geometry | 20 five-seed attempts complete | Geometry helps LOKI → ROAD in all seeds, mainly Stopped; other directions mixed |
 | [E001c](E001c-bbox-inputs/README.md) | Native 3D/2D centers, dimensions and velocities, with matched availability flags | 30 five-seed attempts complete | Basic boxes average below E001b geometry in all directions; no systematic 2D size-velocity gain; 3D size velocities remain a redundant-input control |

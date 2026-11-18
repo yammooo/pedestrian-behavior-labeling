@@ -1,6 +1,6 @@
 # E005 — Spatial representation upgrades
 
-**Status: full LOKI cache preparation running, 2026-11-17.** The user approved retiring the old ROAD D-DITR derived cache to free space. E004c remains stopped with its outputs preserved. No behavior training or ROAD evaluation is launched by this increment.
+**Status: full LOKI cache complete and training launcher verified, 2026-11-18.** The user approved retiring the old ROAD D-DITR derived cache to free space. E004c remains stopped with its outputs preserved.
 
 ## Question and scope
 
@@ -64,6 +64,14 @@ Implemented [model](../../src/pedestrian_behavior/models/e005.py): 528,516 train
 
 ## Full preparation launch
 
-Full output: `outputs/experiments/E005/loki-cache-full-20261117/` on Aalto; revision `be7a540`, PID `62329`. Preflight free space was **388.23 GB**, versus the conservative 272.04 GB projection plus 20 GB floor. This is a detached cache build, not behavior training. First durable check: 6/523 scenarios, 261/31,290 sweeps and 1,162 valid RGB crops after 109.7 s; 386 GB remained free. Early runtime estimate is 3–4 hours, subject to scene variation. Completion counts and final footprint remain pending.
+Full output: `outputs/experiments/E005/loki-cache-full-20261117/` on Aalto; revision `be7a540`, PID `62329`. Preflight free space was **388.23 GB**, versus the conservative 272.04 GB projection plus 20 GB floor. This is a detached cache build, not behavior training. First durable check: 6/523 scenarios, 261/31,290 sweeps and 1,162 valid RGB crops after 109.7 s; 386 GB remained free. Early runtime estimate was 3–4 hours. The build finished in **3 h 31 min**, covering **523 scenarios**, **8,574 training / 1,861 validation tracks**, **151,040 RGB crops** and **31,290 LiDAR sweeps**. Array payload was **224.57 GB**, with **163.47 GB** free near completion. The final cache status and manifest both report complete. [Status](../../outputs/experiments/E005/loki-cache-full-20261117/cache.json) · [Manifest](../../outputs/experiments/E005/loki-cache-full-20261117/manifest.json).
 
 [Deletion receipt](../../outputs/experiments/E005/loki-cache-full-20261117-road-cache-provenance/deletion-receipt.json). The bounded verification and earlier failed storage gate remain recorded above.
+
+## LOKI training pilot
+
+Train `g-rgb-utonia` with geometry, DINO patches and both Tiny-Utonia levels. The same launcher can fit `g-rgb` as a separate spatial RGB pilot. Both start from freshly initialized readouts and BiLSTM-96 with seed 0. Use the frozen LOKI training split and its E001b normalization. Select by full LOKI validation track-weighted macro-F1, then lower CE and earlier epoch. ROAD and held-out tests are outside this pilot. Matched controls for attributing a change to either spatial encoder remain to be fixed before drawing comparison conclusions.
+
+Reuse the E002a source recipe: equal-track cross-entropy, AdamW at 3e-4 with three epochs of linear warmup, 1e-4 weight decay, gradient clipping at 1.0, and 100 epochs with patience 15. Each update covers up to 64 complete tracks via gradient accumulation. Physical LiDAR batches contain one track and prefetch one batch. The geometry plus RGB arm uses up to four tracks per physical batch. Spatial chunks are bounded at two frames and 65,536 padded tokens. The largest cached LiDAR frame has 31,497 tokens. [Training command](../../README.md#e005-loki-training).
+
+On Aalto, launcher revision `36b5a2a` passed a CUDA smoke with the full cache: two 102-frame training tracks in one optimizer update, two 101-frame validation tracks, checkpoint reload, prediction export and offline W&B logging. Peak GPU allocation was 244 MB in this bounded run. Evidence: `outputs/experiments/E005/acceptance/20261118-053924Z-trainer-smoke/` on Aalto. Full pilot training remains user-launched.

@@ -1062,6 +1062,21 @@ uv run --no-project --python "$e005_python" python scripts/cache-e005.py \
 
 After the bounded build and its size estimate pass, the full build uses the same arguments with `--scope full --estimate outputs/experiments/E005/loki-check/manifest.json --output outputs/experiments/E005/loki-spatial`. Outputs must be fresh directories; the builder preserves at least20 GB free. Existing E002 caches remain untouched. The experiment owner records the actual preparation path and verification status.
 
+### E005 LOKI training
+
+From the Aalto experiment checkout, load the completed LOKI cache and fit the geometry + spatial RGB + Tiny-Utonia pilot:
+
+```bash
+cd /home/user20/projects/pedestrian-behavior-labeling-e002b-evaluation
+git pull --ff-only
+export PYTHONPATH="$PWD/src" OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+uv run --no-project --python "$PWD/outputs/experiments/E002a/extractor-env/bin/python" \
+  python scripts/train-e005.py --device cuda --arm g-rgb-utonia \
+  --output "outputs/experiments/E005/runs/loki-g-rgb-utonia-s0-$(date +%Y%m%d-%H%M%S)"
+```
+
+The default cache is `outputs/experiments/E005/loki-cache-full-20261117`. The run selects a checkpoint on LOKI validation. Use `--arm g-rgb` and a fresh output name for geometry plus spatial RGB. [Recipe and access](experiments/E005-spatial-representations/README.md#loki-training-pilot).
+
 ## E004c adaptation-depth label budgets
 
 [E004c](experiments/E004c-adaptation-depth-budgets/README.md) compares source-initialized temporal+head adaptation with target-only task-model training at 25, 100 and 1,000 LOKI tracks, using the same five E004a draws. Existing head-only and unadapted-source results are reused.

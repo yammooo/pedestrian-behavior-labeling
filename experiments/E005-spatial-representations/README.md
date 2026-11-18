@@ -6,7 +6,7 @@
 
 Can task-trained spatial readouts extract more useful pedestrian and scene information than the current RGB CLS / decoded D-DITR representations? Improvement is a hypothesis. E005a owns the DINO spatial change; E005b owns the proposed Tiny-Utonia replacement. Final comparison runs and matched controls must be pinned before training; the new combined model alone cannot isolate the two changes.
 
-Use the frozen E001/E001b populations, 5 Hz full tracks, geometry descriptor, labels, source-only normalization and missing-observation rules. Prepare **LOKI training and validation only** (8,574 / 1,861 tracks). ROAD features will be computed online for a later transfer evaluation; its evaluation split and command remain TBD. Historical validation and E001 test exposure remain disclosed. No new official test access.
+Use the frozen E001/E001b populations, 5 Hz full tracks, geometry descriptor, labels, source-only normalization and missing-observation rules. The feature cache covers **LOKI training and validation** (8,574 / 1,861 tracks). The separate transfer check uses [ROAD-Waymo validation](#loki-to-road-waymo-validation). Historical validation and E001 test exposure remain disclosed. No new official test access.
 
 ## Tensor flow
 
@@ -75,3 +75,11 @@ Train `g-rgb-utonia` with geometry, DINO patches and both Tiny-Utonia levels. Th
 Reuse the E002a source recipe: equal-track cross-entropy, AdamW at 3e-4 with three epochs of linear warmup, 1e-4 weight decay, gradient clipping at 1.0, and 100 epochs with patience 15. Each update covers up to 64 complete tracks via gradient accumulation. Physical LiDAR batches contain one track and prefetch one batch. The geometry plus RGB arm uses up to four tracks per physical batch. Spatial chunks are bounded at two frames and 65,536 padded tokens. The largest cached LiDAR frame has 31,497 tokens. [Training command](../../README.md#e005-loki-training).
 
 On Aalto, launcher revision `36b5a2a` passed a CUDA smoke with the full cache: two 102-frame training tracks in one optimizer update, two 101-frame validation tracks, checkpoint reload, prediction export and offline W&B logging. Peak GPU allocation was 244 MB in this bounded run. Evidence: `outputs/experiments/E005/acceptance/20261118-053924Z-trainer-smoke/` on Aalto. Full pilot training remains user-launched.
+
+## LOKI to ROAD-Waymo validation
+
+Evaluate the completed `g-rgb-utonia` run's LOKI-selected `best.pt` once on the frozen ROAD-Waymo validation split (1,110 tracks across 78 clips). Use the checkpoint's LOKI geometry statistics throughout. Compute DINO patch features and Tiny-Utonia stage features from native ROAD observations online. Reuse each encoded sweep for the eligible pedestrians in its clip, then release that clip's tensors. Only predictions, metrics and run evidence are saved to disk. [Command](../../README.md#e005-road-waymo-transfer).
+
+Compare track-weighted macro-F1, CE and class precision, recall and F1 against the historical [E002 transfer results](../E002-multimodal-reference/transfer-results.md). The old LOKI Transformer changes both the backbone and feature representation. The matched LOKI BiLSTM control is still needed to attribute a change to the combined spatial upgrade. This is exploratory transfer to an already studied validation split. Tiny-Utonia's exact Waymo pretraining exposure remains unknown.
+
+The CPU integration check uses synthetic native observations to test sweep reuse, missing modalities, both Utonia stages and complete-track prediction. The validation index was checked against the frozen preparation. Native ROAD and CUDA execution await the end of source training.

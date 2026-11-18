@@ -1077,6 +1077,24 @@ uv run --no-project --python "$PWD/outputs/experiments/E002a/extractor-env/bin/p
 
 The default cache is `outputs/experiments/E005/loki-cache-full-20261117`. The run selects a checkpoint on LOKI validation. Use `--arm g-rgb` and a fresh output name for geometry plus spatial RGB. [Recipe and access](experiments/E005-spatial-representations/README.md#loki-training-pilot).
 
+### E005 ROAD-Waymo transfer
+
+After the LOKI training attempt completes, run this in the same Aalto checkout with the native ROAD-Waymo volume mounted:
+
+```bash
+cd /home/user20/projects/pedestrian-behavior-labeling-e002b-evaluation
+git pull --ff-only
+export PYTHONPATH="$PWD/src" OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+
+uv run --no-project --python "$PWD/outputs/experiments/E002a/extractor-env/bin/python" \
+  python scripts/evaluate-e005-transfer.py --device cuda \
+  --source-run outputs/experiments/E005/runs/loki-g-rgb-utonia-s0-20261118-074440 \
+  --waymo-root /run/media/user20/F47C60057C5FC152/projects/waymo_v2 \
+  --output "outputs/experiments/E005/transfer/loki-to-road-$(date +%Y%m%d-%H%M%S)"
+```
+
+Use the actual completed LOKI attempt path if it differs. The command uses its selected checkpoint and normalization, encodes ROAD observations online and writes ROAD validation predictions and metrics. [Transfer protocol](experiments/E005-spatial-representations/README.md#loki-to-road-waymo-validation).
+
 ## E004c adaptation-depth label budgets
 
 [E004c](experiments/E004c-adaptation-depth-budgets/README.md) compares source-initialized temporal+head adaptation with target-only task-model training at 25, 100 and 1,000 LOKI tracks, using the same five E004a draws. Existing head-only and unadapted-source results are reused.

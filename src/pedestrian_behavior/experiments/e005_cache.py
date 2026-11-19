@@ -179,7 +179,7 @@ def rgb_tokens(patches, box_crop):
     patches = np.asarray(patches)
     if patches.shape != (256, 768):
         raise ValueError("Expected one 16x16 DINO patch grid")
-    return np.concatenate((patches, rgb_patch_cues(box_crop)), axis=1).astype(np.float16)
+    return np.concatenate((patches, rgb_patch_cues(box_crop)), axis=1, dtype=np.float16)
 
 
 def lidar_tokens(features, coords, box, world_from_native, anchor):
@@ -187,7 +187,7 @@ def lidar_tokens(features, coords, box, world_from_native, anchor):
     features, coords = np.asarray(features), np.asarray(coords)
     if features.ndim != 2 or coords.shape != (len(features), 3):
         raise ValueError("LiDAR stage features and representative coordinates differ")
-    return np.concatenate((features, lidar_cues(coords, box, world_from_native, anchor)), axis=1).astype(np.float16)
+    return np.concatenate((features, lidar_cues(coords, box, world_from_native, anchor)), axis=1, dtype=np.float16)
 
 
 class E005Writer:
@@ -461,8 +461,7 @@ class E005Cache:
             index_total = self.record["arrays"][index_name]["shape"][0]
             if type(offset) is not int or type(count) is not int or offset < 0 or count < 0 or offset + count > index_total:
                 raise ValueError("E005 target index range outside cache")
-            indices = np.arange(offset, offset + count, dtype=np.int64)
-            selected = np.asarray(self._map(index_name)[indices], dtype=np.int64)
+            selected = np.asarray(self._map(index_name)[offset:offset + count], dtype=np.int64)
             start, rows = int(lidar[f"{level}_start"]), int(lidar[f"{level}_count"])
             if (start < 0 or rows < 0 or start + rows > self.record["arrays"][feature_name]["shape"][0]
                     or (selected < 0).any() or (selected >= rows).any()

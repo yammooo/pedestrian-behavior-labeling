@@ -101,6 +101,23 @@ class E005ModelTest(unittest.TestCase):
         for actual, expected in zip((p.grad for p in model.parameters()), expected_grads):
             self.assertTrue(torch.allclose(actual, expected, atol=1e-6, rtol=1e-6))
 
+    def test_folded_attention_preserves_full_model_outputs_and_gradients(self):
+        arm = "g-rgb-utonia"
+        batch = batch_for(arm)
+        profile = PROFILE | {"frame_chunk": 4}
+        standard = build_model(arm, profile).train()
+        folded = build_model(arm, profile | {"fold_single_query": True}).train()
+        folded.load_state_dict(standard.state_dict())
+        torch.manual_seed(5)
+        expected = standard(batch)
+        expected.square().mean().backward()
+        torch.manual_seed(5)
+        actual = folded(batch)
+        actual.square().mean().backward()
+        torch.testing.assert_close(actual, expected, atol=2e-6, rtol=2e-5)
+        for candidate, reference in zip(folded.parameters(), standard.parameters()):
+            torch.testing.assert_close(candidate.grad, reference.grad, atol=2e-6, rtol=2e-5)
+
     def test_lidar_stage_tokens_remain_in_stage3_then_stage5_order(self):
         model = build_model("g-rgb-utonia", PROFILE).eval()
         batch = batch_for("g-rgb-utonia")

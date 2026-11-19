@@ -1,26 +1,14 @@
 """Benchmark candidate for E005's exact single-query spatial readout."""
 
 import torch
-from torch.nn import functional as F
-from torch.nn.utils.rnn import pad_sequence
 
 from pedestrian_behavior.models.e005 import SpatialReadout
 
+original_forward = SpatialReadout.forward
+
 
 def folded_forward(self, frames, seed=None):
-    seed = self.seed if seed is None else seed
-    tokens = pad_sequence(frames, batch_first=True)
-    valid = torch.arange(tokens.shape[1], device=tokens.device)[None, :] < torch.tensor(
-        [len(frame) for frame in frames], device=tokens.device)[:, None]
-    query = self.q(self.seed_norm(seed)).reshape(4, 32)
-    # A single query can absorb K before scoring. Linearity lets V follow the weighted sum.
-    query = torch.einsum("hd,hdw->hw", query, self.k.weight.reshape(4, 32, 128)) * 32 ** -.5
-    scores = F.linear(tokens, query).transpose(1, 2)
-    weights = scores.masked_fill(~valid[:, None, :], float("-inf")).softmax(dim=-1)
-    pooled = F.dropout(weights, p=.1, training=self.training).bmm(tokens)
-    values = torch.einsum("bhw,hdw->bhd", pooled, self.v.weight.reshape(4, 32, 128))
-    u = seed + self.dropout(self.out(values.reshape(-1, 128)))
-    return u + self.dropout(self.ffn(self.norm_ffn(u)))
+    return original_forward(self, frames, seed, folded=True)
 
 
 def check():

@@ -218,7 +218,8 @@ def validate_fast(prepared, dataset, order, record, destinations):
     cases = [(padded_count(costs, order[i:i+count], profile), order[i:i+count])
              for i in range(0, len(order), count)]
     ordinary = max(row for row in cases if row[0] <= profile["ordinary_tokens"])
-    dense = max(cases)
+    dense_indices = sorted(order, key=lambda i: padded_count(costs, [i], profile), reverse=True)[:count]
+    dense = padded_count(costs, dense_indices, profile), dense_indices
     model = prepared["build_model"]().to(DEVICE)
     optimizer = torch.optim.AdamW(model.parameters(), **SETTINGS["optimizer"])
     batches = prepared["batches"](dataset, training=True, seed=0)
@@ -246,9 +247,10 @@ def validate_fast(prepared, dataset, order, record, destinations):
     for offset, (label, (tokens, prefix)) in enumerate((("persistent-ordinary", ordinary), ("persistent-dense", dense)), start=1):
         rest = [i for i in order[offset*128:offset*128+64] if i not in prefix]
         update(prefix + rest[:64-len(prefix)], label, offset, tokens)
+    return costs
 
 
-def validate_folded_cuda(dataset, order, measure):
+def validate_folded_cuda():
     folded = runpy.run_path(str(Path(__file__).with_name("benchmark-e005-single-query.py")))["folded_forward"]
     ordinary = SpatialReadout.forward
     seed_run(0)
@@ -264,17 +266,26 @@ def validate_folded_cuda(dataset, order, measure):
     torch.testing.assert_close(result, reference, atol=2e-6, rtol=2e-5)
     for actual, expected in zip(result_grad, reference_grad):
         torch.testing.assert_close(actual, expected, atol=2e-6, rtol=2e-5)
-    parity = {"dropout_output_max_diff": (result-reference).abs().max().item(),
-              "gradient_max_diff": max((actual-expected).abs().max().item()
-                                        for actual, expected in zip(result_grad, reference_grad))}
-    del layer, frames, args, result, reference, result_grad, reference_grad
-    configs = (("standard", ordinary), ("folded", folded))
-    for repeat, pair in enumerate((configs, configs[::-1])):
-        for name, forward in pair:
-            with patch.object(SpatialReadout, "forward", forward):
-                measure("2track-8frame", dataset, order[:64], "warm-attention-pair", prefetch=True,
-                        workers=2, repeat=repeat, attention=name)
-    return parity
+    return {"dropout_output_max_diff": (result-reference).abs().max().item(),
+            "gradient_max_diff": max((actual-expected).abs().max().item()
+                                      for actual, expected in zip(result_grad, reference_grad))}
+
+
+def check_four_track_folded(dataset, order, costs, profile, measure):
+    groups = [order[i:i+4] for i in range(0, len(order), 4)]
+    tokens, dense = max((padded_count(costs, group, profile), group) for group in groups)
+    VARIANTS["folded-four-tracks"] = profile | {"ordinary_tokens": tokens}, 4
+    stress = measure("folded-four-tracks", dataset, dense, "four-track-folded-stress", prefetch=True, workers=2,
+                     padded_tokens=tokens, locators=[dataset.entries[i]["locator"] for i in dense])
+    if stress["status"] != "complete":
+        return
+    options = ("2track-8frame", "folded-four-tracks")
+    indices = order[:64]
+    for i in indices:
+        dataset[i]
+    for repeat, pair in enumerate((options, options[::-1])):
+        for name in pair:
+            measure(name, dataset, indices, "folded-track-pair", prefetch=True, workers=2, repeat=repeat)
 
 
 def run(args):
@@ -320,12 +331,13 @@ def run(args):
 
         if args.verify_fast:
             record["execution"] = {key: prepared["config"][key] for key in ("execution_profile", "profile", "batching")}
-            validate_fast(prepared, dataset, order, record, destinations)
+            costs = validate_fast(prepared, dataset, order, record, destinations)
             VARIANTS["2track-8frame"] = prepared["config"]["profile"], prepared["config"]["batching"]["max_tracks"]
             try:
-                record["folded_cuda_parity"] = validate_folded_cuda(dataset, order, measure)
+                record["folded_cuda_parity"] = validate_folded_cuda()
             except AssertionError as error:
                 record["folded_cuda_parity"] = {"status": "failed", "message": str(error)}
+            check_four_track_folded(dataset, order, costs, prepared["config"]["profile"], measure)
             record["status"] = "complete"
             atomic_json(destinations, record)
             return

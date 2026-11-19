@@ -36,8 +36,9 @@ def _frame_chunks(counts, max_frames, max_padded_tokens):
 class SpatialReadout(nn.Module):
     """One learned query cross-attends to one frame's projected spatial tokens."""
 
-    def __init__(self):
+    def __init__(self, *, folded_attention=False):
         super().__init__()
+        self.folded_attention = folded_attention
         self.seed = nn.Parameter(torch.randn(1, 128) * .02)
         self.seed_norm = nn.LayerNorm(128)
         self.q = nn.Linear(128, 128, bias=False)
@@ -48,24 +49,35 @@ class SpatialReadout(nn.Module):
         self.ffn = nn.Sequential(nn.Linear(128, 512), nn.GELU(), nn.Dropout(.1), nn.Linear(512, 128))
         self.dropout = nn.Dropout(.1)
 
-    def forward(self, frames, seed=None):
+    def forward(self, frames, seed=None, *, folded=None):
         seed = self.seed if seed is None else seed
         h = pad_sequence(frames, batch_first=True)
         valid = torch.arange(h.shape[1], device=h.device)[None, :] < torch.tensor(
             [len(frame) for frame in frames], device=h.device)[:, None]
         b, n, _ = h.shape
-        q = self.q(self.seed_norm(seed)).reshape(1, 1, 4, 32).transpose(1, 2).expand(b, -1, -1, -1)
-        k, v = (linear(h).reshape(b, n, 4, 32).transpose(1, 2) for linear in (self.k, self.v))
-        with sdpa_kernel(SDPBackend.MATH):
-            y = F.scaled_dot_product_attention(q, k, v, attn_mask=valid[:, None, None, :],
-                                               dropout_p=.1 if self.training else 0.)
-        u = seed + self.dropout(self.out(y.transpose(1, 2).reshape(b, 128)))
+        query = self.q(self.seed_norm(seed))
+        if folded is None:
+            folded = self.folded_attention
+        if folded:
+            # The single query absorbs K, and linear V commutes with the weighted token sum.
+            q = torch.einsum("hd,hdw->hw", query.reshape(4, 32), self.k.weight.reshape(4, 32, 128)) * 32 ** -.5
+            scores = F.linear(h, q).transpose(1, 2)
+            weights = scores.masked_fill(~valid[:, None, :], float("-inf")).softmax(dim=-1)
+            pooled = F.dropout(weights, p=.1, training=self.training).bmm(h)
+            y = torch.einsum("bhw,hdw->bhd", pooled, self.v.weight.reshape(4, 32, 128))
+        else:
+            q = query.reshape(1, 1, 4, 32).transpose(1, 2).expand(b, -1, -1, -1)
+            k, v = (linear(h).reshape(b, n, 4, 32).transpose(1, 2) for linear in (self.k, self.v))
+            with sdpa_kernel(SDPBackend.MATH):
+                y = F.scaled_dot_product_attention(q, k, v, attn_mask=valid[:, None, None, :],
+                                                   dropout_p=.1 if self.training else 0.).transpose(1, 2)
+        u = seed + self.dropout(self.out(y.reshape(b, 128)))
         return u + self.dropout(self.ffn(self.norm_ffn(u)))
 
 
 class RGBPatchReadout(SpatialReadout):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, *, folded_attention=False):
+        super().__init__(folded_attention=folded_attention)
         self.feature_norm = nn.LayerNorm(768)
         self.project = nn.Linear(772, 128)
         self.token_norm = nn.LayerNorm(128)
@@ -78,8 +90,8 @@ class RGBPatchReadout(SpatialReadout):
 
 
 class UtoniaReadout(SpatialReadout):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, *, folded_attention=False):
+        super().__init__(folded_attention=folded_attention)
         self.stage3_norm = nn.LayerNorm(72)
         self.stage5_norm = nn.LayerNorm(216)
         self.stage3 = nn.Linear(77, 128)
@@ -105,12 +117,15 @@ class E005Classifier(nn.Module):
                 or profile.get("frame_tokens", 0) < 1 or profile.get("ordinary_tokens", 0) < 1):
             raise ValueError("Expected positive frame_chunk, frame_tokens and ordinary_tokens profile limits")
         self.arm, self.profile = arm, dict(profile)
+        folded = profile.get("fold_single_query", False)
+        if type(folded) is not bool:
+            raise ValueError("Expected a boolean fold_single_query setting")
         self.geometry = nn.Sequential(nn.Linear(20, 64), nn.GELU(), nn.Linear(64, 64), nn.GELU())
         self.geometry_norm = nn.LayerNorm(64)
-        self.rgb = RGBPatchReadout()
+        self.rgb = RGBPatchReadout(folded_attention=folded)
         self.rgb_norm = nn.LayerNorm(128)
         self.rgb_branch_dropout = nn.Dropout1d(.5)
-        self.lidar = UtoniaReadout() if arm == "g-rgb-utonia" else None
+        self.lidar = UtoniaReadout(folded_attention=folded) if arm == "g-rgb-utonia" else None
         self.lidar_norm = nn.LayerNorm(128) if self.lidar is not None else None
         self.fusion = nn.Linear(64 + 128 + 128 * int(self.lidar is not None) + len(BRANCH_FLAGS[arm]), 128)
         self.temporal = BiLSTMTemporalBlock(.1)

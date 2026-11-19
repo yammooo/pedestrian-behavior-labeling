@@ -26,6 +26,7 @@ DEFAULT_CACHE = Path("experiments/E005/loki-cache-full-20261117")
 PROFILE = {"frame_chunk": 2, "frame_tokens": 65_536, "ordinary_tokens": 65_536}
 AALTO_FAST_PROFILE = {"frame_chunk": 8, "frame_tokens": 262_144, "ordinary_tokens": 3_274_888, "fold_single_query": True}
 AALTO_FAST_TRACKS, AALTO_FAST_READERS = 2, 2
+AALTO_GPU = "NVIDIA GeForce RTX 4080 Laptop GPU"
 SPLITS = ("training", "validation")
 OBSERVATION_FLAGS = {"rgb-observed": "rgb_valid", "lidar-observed": "lidar_valid"}
 
@@ -156,7 +157,10 @@ def run(args):
     cache = (args.cache or root / DEFAULT_CACHE).resolve()
     if output == runs or not output.is_relative_to(runs) or output.is_relative_to(cache):
         raise ValueError("Use a fresh output directory under outputs/experiments/E005/runs")
-    if getattr(args, "aalto_fast", False):
+    if getattr(args, "aalto_fast", None) is None:
+        args.aalto_fast = (args.arm == DEFAULT_ARM and args.device == "cuda" and torch.cuda.is_available()
+                           and torch.cuda.get_device_name() == AALTO_GPU)
+    if args.aalto_fast:
         args.allocator_cap_bytes = enable_aalto_fast(args.arm, args.device)
     torch.set_num_threads(2)
     return run_attempt(SOURCE, args.arm, VARIANT, output, args.device,
@@ -170,6 +174,7 @@ def main():
     parser.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
     parser.add_argument("--outputs-root", type=Path, default=Path("outputs"))
     parser.add_argument("--cache", type=Path, help=f"Completed frozen cache under outputs root (default: {DEFAULT_CACHE})")
-    parser.add_argument("--aalto-fast", action="store_true", help="Use the calibrated Aalto CUDA execution profile")
+    parser.add_argument("--aalto-fast", action=argparse.BooleanOptionalAction,
+                        help="Use the calibrated profile (default for g-rgb-utonia on the RTX 4080 Laptop GPU)")
     parser.add_argument("--output", type=Path, required=True)
     run(parser.parse_args())

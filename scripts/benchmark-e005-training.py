@@ -2,6 +2,7 @@
 
 import argparse
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import nullcontext
 import itertools
 import json
 from pathlib import Path
@@ -221,28 +222,32 @@ def tune(dataset, order, measure, cap_bytes, record):
     for name in dict.fromkeys(("baseline", winner)):
         measure(name, samples, indices, "preloaded", prefetch=False, cohort=0)
 
+    paired_checks(dataset, order, measure)
+
+
+def paired_checks(dataset, order, measure):
     old_reader = {}
     source = "src/pedestrian_behavior/experiments/e005_cache.py"
     original = subprocess.check_output(["git", "show", f"bf222a7:{source}"], text=True)
     exec(compile(original, source, "exec"), old_reader)
     cache_type = type(dataset.cache)
-    for cohort, start in enumerate((2560, 4160)):
-        indices = order[start:start+64]
-        for old in ((True, False) if cohort == 0 else (False, True)):
-            methods = {name: getattr(old_reader["E005Cache"], name) for name in ("rgb_frame", "lidar_frame")} if old else {}
-            with patch.multiple(cache_type, **methods):
-                measure(winner, dataset, indices, "reader-pair", prefetch=True, workers=workers,
-                        cohort=cohort, reader="original" if old else "direct-fp16")
-
+    methods = {name: getattr(old_reader["E005Cache"], name) for name in ("rgb_frame", "lidar_frame")}
     folded = runpy.run_path(str(Path(__file__).with_name("benchmark-e005-single-query.py")))["folded_forward"]
     ordinary = SpatialReadout.forward
+    cases = (
+        ("original-pipeline", "baseline", 1, True, ordinary),
+        ("two-track-one-reader", "2track-8frame", 1, False, ordinary),
+        ("two-track-two-readers", "2track-8frame", 2, False, ordinary),
+        ("two-track-original-reader", "2track-8frame", 2, True, ordinary),
+        ("two-track-folded", "2track-8frame", 2, False, folded),
+    )
     for cohort, start in enumerate((2560, 4160)):
         indices = order[start:start+64]
-        cases = [("ordinary", ordinary), ("folded", folded)]
-        for tag, forward in cases[::1 if cohort == 0 else -1]:
-            with patch.object(SpatialReadout, "forward", forward):
-                measure(winner, dataset, indices, "attention-pair", prefetch=True, workers=workers,
-                        cohort=cohort, attention=tag)
+        for tag, variant, workers, old, forward in cases[::1 if cohort == 0 else -1]:
+            reader = patch.multiple(cache_type, **methods) if old else nullcontext()
+            with reader, patch.object(SpatialReadout, "forward", forward):
+                measure(variant, dataset, indices, "paired-pipeline", prefetch=True, workers=workers,
+                        cohort=cohort, case=tag)
 
 
 def run(args):
@@ -256,7 +261,7 @@ def run(args):
     torch.set_num_threads(2)
     seed_run(0)
     free, total = torch.cuda.mem_get_info()
-    cap = min(int(total * .89), free - 768 * 1024**2) if args.tune else int(total * .75)
+    cap = min(int(total * .89), free - 768 * 1024**2) if args.tune or args.pairs_from else int(total * .75)
     if cap < total * .75:
         raise ValueError("GPU memory is occupied")
     torch.cuda.set_per_process_memory_fraction(cap / total)
@@ -281,6 +286,17 @@ def run(args):
             atomic_json(destinations, record)
             print(record["rows"][-1], flush=True)
             return row
+
+        if args.pairs_from:
+            previous = json.loads(args.pairs_from.read_text())
+            assert previous["cache_manifest_sha256"] == record["cache_manifest_sha256"]
+            assert previous["locators"] == record["locators"]
+            VARIANTS.update(previous["variants"])
+            record["prior_calibration"] = str(args.pairs_from)
+            paired_checks(dataset, order, measure)
+            record["status"] = "complete"
+            atomic_json(destinations, record)
+            return
 
         if args.tune:
             record["cohort_starts"] = [0, 1280, 2560, 4160]
@@ -331,4 +347,5 @@ if __name__ == "__main__":
     parser.add_argument("--outputs-root", type=Path, default=Path("outputs"))
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--tune", action="store_true", help="Calibrate memory and compare multiple held batches")
+    parser.add_argument("--pairs-from", type=Path, help="Replay paired reader/attention controls from a calibration JSON")
     run(parser.parse_args())

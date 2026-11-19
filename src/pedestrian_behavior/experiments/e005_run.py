@@ -1,4 +1,4 @@
-"""Train one E005 spatial model on the frozen LOKI training split."""
+"""Train one E005 spatial model on a frozen source training split."""
 
 import argparse
 from concurrent.futures import ThreadPoolExecutor
@@ -92,25 +92,40 @@ def axes(arm):
             if key not in OBSERVATION_FLAGS or OBSERVATION_FLAGS[key] in e005.BRANCH_FLAGS[arm]}
 
 
-def assembly(args):
+def _cache_path(args, root, source):
+    if args.cache is not None:
+        return args.cache
+    if source != SOURCE:
+        raise ValueError("ROAD E005 requires an explicit spatial cache path")
+    return root / DEFAULT_CACHE
+
+
+def assembly(args, *, allow_partial=False):
     root = args.outputs_root.resolve()
-    baseline = e001b_run.assemble(SOURCE, "geometry", "B", e001_root=root / "experiments/E001",
+    source = getattr(args, "source", SOURCE)
+    baseline = e001b_run.assemble(source, "geometry", "B", e001_root=root / "experiments/E001",
                                  e001b_root=root / "experiments/E001b")
-    reference = baseline["datasets"][SOURCE]
-    cache = E005Cache(args.cache or root / DEFAULT_CACHE)
+    reference = baseline["datasets"][source]
+    cache = E005Cache(_cache_path(args, root, source), allow_partial=allow_partial)
     population = cache.record["population"]
     if (population["dataset"], population["setup_sha256"], population["manifest_sha256"]) != (
-            SOURCE, reference["setup_sha256"], reference["collection_sha256"]):
-        raise ValueError("E005 cache and frozen LOKI setup/collection differ")
+            source, reference["setup_sha256"], reference["collection_sha256"]):
+        raise ValueError(f"E005 cache and frozen {source} setup/collection differ")
 
-    datasets = {split: E005FeatureDataset(baseline["dataset"](SOURCE, split), cache, args.arm)
-                for split in SPLITS}
+    datasets = {}
+    for split in SPLITS:
+        dataset = baseline["dataset"](source, split)
+        if cache.record["status"] == "bounded-native-check":
+            dataset.entries = [entry for entry in dataset.entries if entry["locator"] in cache.tracks]
+        if not dataset.entries:
+            raise ValueError(f"E005 cache has no frozen {split} tracks")
+        datasets[split] = E005FeatureDataset(dataset, cache, args.arm)
     entries = {entry["locator"]: entry for dataset in datasets.values() for entry in dataset.entries}
     if entries.keys() != cache.tracks.keys() or any(
             any(entry[key] != cache.tracks[locator][key] for key in ("archive", "group", "split", "slots"))
             or entry["e001_sha256"] != cache.tracks[locator]["sha256"]
             for locator, entry in entries.items()):
-        raise ValueError("E005 cached track references differ from the frozen LOKI population")
+        raise ValueError(f"E005 cached track references differ from the frozen {source} population")
 
     lidar = args.arm == DEFAULT_ARM
     fast = getattr(args, "aalto_fast", False)
@@ -139,22 +154,23 @@ def assembly(args):
                              "population": population, "provenance": cache.record["provenance"]},
                    "batching": {"max_tracks": max_tracks, "prefetch_microbatches": workers if lidar else 0},
                    "held_out_tests": False, "exploratory": True},
-        "normalization": baseline["normalization"], "datasets": {SOURCE: reference},
+        "normalization": baseline["normalization"], "datasets": {source: reference},
         "build_model": lambda: e005.build_model(args.arm, profile),
-        "dataset": lambda source, split: datasets[split] if source == SOURCE else None,
+        "dataset": lambda dataset_source, split: datasets[split] if dataset_source == source else None,
         "batches": batches, "forward_batch": lambda model, batch, _: model(batch),
         "epoch_operation": partial(train_accumulated_epoch, peak_lr=SETTINGS["optimizer"]["lr"],
                                    warmup_steps=warmup),
-        "evaluation_splits": [(SOURCE, "validation")], "conditions": conditions,
+        "evaluation_splits": [(source, "validation")], "conditions": conditions,
         "kind": "exploratory-source-validation", "log_learning_rate": True, "close": cache.close,
     }
 
 
 def run(args):
+    source = getattr(args, "source", SOURCE)
     output = args.output.resolve()
     root = args.outputs_root.resolve()
     runs = (root / "experiments/E005/runs").resolve()
-    cache = (args.cache or root / DEFAULT_CACHE).resolve()
+    cache = _cache_path(args, root, source).resolve()
     if output == runs or not output.is_relative_to(runs) or output.is_relative_to(cache):
         raise ValueError("Use a fresh output directory under outputs/experiments/E005/runs")
     if getattr(args, "aalto_fast", None) is None:
@@ -163,13 +179,14 @@ def run(args):
     if args.aalto_fast:
         args.allocator_cap_bytes = enable_aalto_fast(args.arm, args.device)
     torch.set_num_threads(2)
-    return run_attempt(SOURCE, args.arm, VARIANT, output, args.device,
+    return run_attempt(source, args.arm, VARIANT, output, args.device,
                        settings=SETTINGS, assemble=lambda *_: assembly(args),
                        classes=CLASSES, axes=axes(args.arm))
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--source", choices=(SOURCE, "road-waymo"), default=SOURCE)
     parser.add_argument("--arm", choices=e005.ARMS, default=DEFAULT_ARM)
     parser.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
     parser.add_argument("--outputs-root", type=Path, default=Path("outputs"))

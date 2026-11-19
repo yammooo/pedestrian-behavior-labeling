@@ -107,6 +107,14 @@ class UtoniaReadout(SpatialReadout):
             frames.append(self.token_norm(torch.cat((h3, h5), 0)))
         return frames
 
+    def project_packed(self, stage3, stage5, device):
+        x3, x5 = (torch.cat(frames).to(device=device, dtype=torch.float32) for frames in (stage3, stage5))
+        projected, = self.project_frames((x3,), (x5,))
+        level3, level5 = projected.split((len(x3), len(x5)))
+        h3 = level3.split([len(frame) for frame in stage3])
+        h5 = level5.split([len(frame) for frame in stage5])
+        return [torch.cat((a, b)) for a, b in zip(h3, h5)]
+
 
 class E005Classifier(nn.Module):
     def __init__(self, arm, profile):
@@ -120,6 +128,9 @@ class E005Classifier(nn.Module):
         folded = profile.get("fold_single_query", False)
         if type(folded) is not bool:
             raise ValueError("Expected a boolean fold_single_query setting")
+        self.pack_lidar_projection = profile.get("pack_lidar_projection", False)
+        if type(self.pack_lidar_projection) is not bool:
+            raise ValueError("Expected a boolean pack_lidar_projection setting")
         self.geometry = nn.Sequential(nn.Linear(20, 64), nn.GELU(), nn.Linear(64, 64), nn.GELU())
         self.geometry_norm = nn.LayerNorm(64)
         self.rgb = RGBPatchReadout(folded_attention=folded)
@@ -164,6 +175,13 @@ class E005Classifier(nn.Module):
                           else encode(*cpu_inputs, module.seed))
             result = result.index_copy(0, torch.tensor(indices, device=device), descriptor)
         return result
+
+    def _project_lidar(self, values, device):
+        stage3, stage5 = values[::2], values[1::2]
+        if self.pack_lidar_projection:
+            return self.lidar.project_packed(stage3, stage5, device)
+        return self.lidar.project_frames([x.to(device=device, dtype=torch.float32) for x in stage3],
+                                         [x.to(device=device, dtype=torch.float32) for x in stage5])
 
     def forward(self, batch, *, mode=None):
         if mode not in (None, "ordinary", "recompute"):
@@ -215,9 +233,7 @@ class E005Classifier(nn.Module):
         if self.lidar is not None:
             lidar = self._readout(self.lidar, lidar_counts,
                 lambda indices: [value for i in indices for value in (stage3[i], stage5[i])],
-                lambda indices, values: self.lidar.project_frames(
-                    [values[2 * j].to(device=device, dtype=torch.float32) for j in range(len(indices))],
-                    [values[2 * j + 1].to(device=device, dtype=torch.float32) for j in range(len(indices))]), mode)
+                lambda _, values: self._project_lidar(values, device), mode)
             lidar = self.lidar_norm(lidar.reshape(b, t, 128)) * flags[..., 2:3]
             descriptors.append(lidar)
 

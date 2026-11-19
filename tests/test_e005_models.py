@@ -118,6 +118,24 @@ class E005ModelTest(unittest.TestCase):
         for candidate, reference in zip(folded.parameters(), standard.parameters()):
             torch.testing.assert_close(candidate.grad, reference.grad, atol=2e-6, rtol=2e-5)
 
+    def test_packed_lidar_preserves_outputs_and_gradients(self):
+        arm = "g-rgb-utonia"
+        batch = batch_for(arm)
+        batch["lidar_levels"][0][0] = tokens(0, 77)
+        profile = PROFILE | {"frame_chunk": 4, "fold_single_query": True}
+        standard = build_model(arm, profile).train()
+        packed = build_model(arm, profile | {"pack_lidar_projection": True}).train()
+        packed.load_state_dict(standard.state_dict())
+        torch.manual_seed(5)
+        expected = standard(batch)
+        expected.square().mean().backward()
+        torch.manual_seed(5)
+        actual = packed(batch)
+        actual.square().mean().backward()
+        torch.testing.assert_close(actual, expected, atol=2e-6, rtol=2e-5)
+        for candidate, reference in zip(packed.parameters(), standard.parameters()):
+            torch.testing.assert_close(candidate.grad, reference.grad, atol=2e-6, rtol=2e-5)
+
     def test_lidar_stage_tokens_remain_in_stage3_then_stage5_order(self):
         model = build_model("g-rgb-utonia", PROFILE).eval()
         batch = batch_for("g-rgb-utonia")

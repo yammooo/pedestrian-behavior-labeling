@@ -1,4 +1,4 @@
-"""Compare E005 execution settings on one matched, warmed-cache LOKI update."""
+"""Compare E005 execution settings on matched complete-track updates."""
 
 import argparse
 from contextlib import nullcontext
@@ -13,8 +13,9 @@ from unittest.mock import patch
 
 import torch
 
-from pedestrian_behavior.experiments.e005_cache import atomic_json
-from pedestrian_behavior.experiments.e005_run import DEFAULT_ARM, SETTINGS, SOURCE, SpatialBatches, assembly, enable_aalto_fast
+from pedestrian_behavior.experiments.e005_cache import atomic_json, collate_e005
+from pedestrian_behavior.experiments.e005_run import (AALTO_FAST_PROFILE, DEFAULT_ARM, SETTINGS, SOURCE, SpatialBatches,
+                                                     assembly, enable_aalto_fast)
 from pedestrian_behavior.models.e005 import SpatialReadout, build_model, _frame_chunks
 from pedestrian_behavior.training import seed_run
 
@@ -288,6 +289,89 @@ def check_four_track_folded(dataset, order, costs, profile, measure):
             measure(name, dataset, indices, "folded-track-pair", prefetch=True, workers=2, repeat=repeat)
 
 
+def check_packed_projection(dataset, indices, state):
+    batch = collate_e005([dataset[i] for i in indices])
+    observations = []
+    for packed in (False, True):
+        model = build_model(DEFAULT_ARM, AALTO_FAST_PROFILE | {"pack_lidar_projection": packed}).to(DEVICE)
+        model.load_state_dict(state)
+        seed_run(0)
+        logits = model(batch)
+        gradients = torch.autograd.grad(logits.square().mean(), tuple(model.parameters()))
+        observations.append((logits.detach().cpu(), tuple(g.detach().cpu() for g in gradients)))
+    (reference, reference_grads), (actual, actual_grads) = observations
+    torch.testing.assert_close(actual, reference, atol=3e-5, rtol=5e-4)
+    for value, expected in zip(actual_grads, reference_grads):
+        torch.testing.assert_close(value, expected, atol=3e-5, rtol=5e-4)
+    return {"logit_max_abs_diff": (actual-reference).abs().max().item(),
+            "gradient_max_abs_diff": max((x-y).abs().max().item() for x, y in zip(actual_grads, reference_grads))}
+
+
+def road_checks(prepared, dataset, order, state, record, measure, destination):
+    if len(order) < 128:
+        raise ValueError("The ROAD benchmark requires two disjoint 64-track updates")
+    costs = track_costs(dataset)
+    packed = AALTO_FAST_PROFILE | {"pack_lidar_projection": True}
+    wide = packed | {"ordinary_tokens": 4_194_304}
+    VARIANTS.update({"loki-fast": (AALTO_FAST_PROFILE, 2), "road-packed": (packed, 2), "road-wide": (wide, 4)})
+    cases = (("loki-fast", 2), ("road-packed", 2), ("road-wide", 2), ("road-packed", 4))
+    cohorts = (order[:64], order[64:128])
+    record["cohort_locators"] = [[dataset.entries[i]["locator"] for i in cohort] for cohort in cohorts]
+    measure("loki-fast", dataset, cohorts[0], "road-first-pass", prefetch=True, workers=2)
+    parity_indices = [i for i in order if all(any(level) for level in costs[i])][:2]
+    record["packed_projection_parity"] = check_packed_projection(dataset, parity_indices, state)
+    scores = {}
+    for n, indices in enumerate(cohorts):
+        for i in indices:
+            dataset[i]
+        for variant, workers in cases[::1 if n == 0 else -1]:
+            row = measure(variant, dataset, indices, "road-warmed", prefetch=True, workers=workers, cohort=n)
+            if row["status"] == "complete":
+                scores.setdefault((variant, workers), []).append(row["seconds"])
+    eligible = {case: median(times) for case, times in scores.items() if len(times) == len(cohorts)}
+    if ("loki-fast", 2) not in eligible:
+        raise RuntimeError("The reference LOKI fast profile failed on a ROAD representative update")
+    winner = min(eligible, key=eligible.get)
+    variant, workers = winner
+    profile, max_tracks = VARIANTS[variant]
+    dense = sorted(order, key=lambda i: padded_count(costs, [i], profile), reverse=True)[:max_tracks]
+    stress = (dense + [i for i in order[128:] + order[:128] if i not in dense])[:64]
+    model = build_model(DEFAULT_ARM, profile).to(DEVICE)
+    model.load_state_dict(state)
+    optimizer = torch.optim.AdamW(model.parameters(), **SETTINGS["optimizer"])
+    torch.cuda.empty_cache()
+    seed_run(0)
+    groups = [order[i:i+max_tracks] for i in range(0, len(order), max_tracks)]
+    counts = [(padded_count(costs, group, profile), group) for group in groups]
+    ordinary_count, ordinary_group = max((row for row in counts if row[0] <= profile["ordinary_tokens"]),
+                                         default=(0, []))
+    updates = [("representative", cohorts[0])]
+    if ordinary_group:
+        rest = [i for i in order[64:] + order[:64] if i not in ordinary_group]
+        updates.append(("ordinary-boundary", (ordinary_group + rest)[:64]))
+    updates.append(("dense", stress))
+    record["largest_probed_ordinary_group_tokens"] = ordinary_count
+    for offset, (label, indices) in enumerate(updates):
+        batches = OneUpdate(dataset, indices, max_tracks, True, workers)
+        torch.cuda.synchronize()
+        torch.cuda.reset_peak_memory_stats()
+        row = prepared["epoch_operation"](model, batches, optimizer, DEVICE,
+                                           SETTINGS["clip_norm"], step_offset=402+offset)
+        assert row["processed_tracks"] == 64 and row["optimizer_steps"] == 1
+        tokens = [padded_count(costs, indices[i:i+max_tracks], profile) for i in range(0, len(indices), max_tracks)]
+        row.update(workload=f"road-persistent-{label}", status="complete", variant=variant, workers=workers,
+                   max_padded_tokens=max(tokens), recompute_microbatches=sum(x > profile["ordinary_tokens"] for x in tokens),
+                   loader_wait_seconds=batches.stats["wait_seconds"], peak_allocated_bytes=torch.cuda.max_memory_allocated(),
+                   peak_reserved_bytes=torch.cuda.max_memory_reserved(),
+                   locators=[dataset.entries[i]["locator"] for i in indices])
+        record["rows"].append(row)
+        atomic_json(destination, record)
+        print({key: value for key, value in row.items() if key != "locators"}, flush=True)
+    record["winner"] = {"variant": variant, "profile": profile, "max_tracks": max_tracks, "workers": workers,
+                        "median_seconds": eligible[winner], "loki_fast_median_seconds": eligible[("loki-fast", 2)],
+                        "speedup": eligible[("loki-fast", 2)] / eligible[winner]}
+
+
 def run(args):
     output = args.output.resolve()
     root = args.outputs_root.resolve()
@@ -299,11 +383,11 @@ def run(args):
     torch.set_num_threads(2)
     seed_run(0)
     free, total = torch.cuda.mem_get_info()
-    cap = (enable_aalto_fast(DEFAULT_ARM, "cuda") if args.verify_fast else
+    cap = (enable_aalto_fast(DEFAULT_ARM, "cuda") if args.verify_fast or args.road else
            min(int(total * .89), free - 768 * 1024**2) if args.tune or args.pairs_from else int(total * .75))
     if cap < total * .75:
         raise ValueError("GPU memory is occupied")
-    if not args.verify_fast:
+    if not (args.verify_fast or args.road):
         torch.cuda.set_per_process_memory_fraction(cap / total)
     output.mkdir(parents=True, exist_ok=False)
     destinations = output / "benchmark.json"
@@ -311,10 +395,12 @@ def run(args):
               "torch": torch.__version__, "seed": 0, "rows": [],
               "gpu_total_bytes": total, "gpu_free_bytes": free, "allocator_cap_bytes": cap,
               "revision": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()}
-    prepared = assembly(SimpleNamespace(outputs_root=root, arm=DEFAULT_ARM, cache=None, aalto_fast=args.verify_fast,
-                                        allocator_cap_bytes=cap))
+    source = "road-waymo" if args.road else SOURCE
+    prepared = assembly(SimpleNamespace(outputs_root=root, arm=DEFAULT_ARM, source=source, cache=args.cache,
+                                        aalto_fast=args.verify_fast or args.road, allocator_cap_bytes=cap),
+                        allow_partial=args.road)
     try:
-        dataset = prepared["dataset"](SOURCE, "training")
+        dataset = prepared["dataset"](source, "training")
         order = torch.randperm(len(dataset), generator=torch.Generator().manual_seed(0)).tolist()
         indices = order[:64]
         record["locators"] = [dataset.entries[i]["locator"] for i in indices]
@@ -328,6 +414,12 @@ def run(args):
             atomic_json(destinations, record)
             print(record["rows"][-1], flush=True)
             return row
+
+        if args.road:
+            road_checks(prepared, dataset, order, state, record, measure, destinations)
+            record["status"] = "complete"
+            atomic_json(destinations, record)
+            return
 
         if args.verify_fast:
             record["execution"] = {key: prepared["config"][key] for key in ("execution_profile", "profile", "batching")}
@@ -401,8 +493,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--outputs-root", type=Path, default=Path("outputs"))
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--cache", type=Path, help="Explicit E005 cache path")
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--tune", action="store_true", help="Calibrate memory and compare multiple held batches")
     modes.add_argument("--pairs-from", type=Path, help="Replay paired reader/attention controls from a calibration JSON")
     modes.add_argument("--verify-fast", action="store_true", help="Check the production profile across three updates")
+    modes.add_argument("--road", action="store_true", help="Tune and stress the ROAD source on a bounded cache")
     run(parser.parse_args())

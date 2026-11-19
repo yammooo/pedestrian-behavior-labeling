@@ -108,7 +108,7 @@ class RoadSpatialFeatures:
         self.rgb_crops, self.lidar_sweeps = 0, 0
         self.prefetch = prefetch
 
-    def prepare(self, group, locators):
+    def prepare(self, group, locators, *, rgb_boxes=None):
         self.rgb.clear()
         self.sweeps.clear()
         self.anchors.clear()
@@ -161,6 +161,8 @@ class RoadSpatialFeatures:
                 if not np.isfinite(tokens).all():
                     raise ValueError("Nonfinite FP16 DINO features")
                 self.rgb[key, track] = tokens
+                if rgb_boxes is not None:
+                    rgb_boxes[key, track] = box
             self.rgb_crops += len(crops)
             crops.clear()
             crop_refs.clear()
@@ -188,20 +190,24 @@ class RoadSpatialFeatures:
         track = self.tracks[locator]
         return self.rgb.get((track["keys"][slot], track["id"]), EMPTY_RGB)
 
+    def lidar_target(self, locator, key):
+        track = self.tracks[locator]
+        boxes = self.sweeps[key][2]
+        if track["id"] not in boxes:
+            raise ValueError(f"Frozen usable ROAD observation lost its cuboid: {locator}/{key}")
+        center, size, yaw = boxes[track["id"]]
+        return [*center, *size, float(yaw)], self.anchors[track["keys"][0]]
+
     def lidar_frame(self, locator, slot):
         track = self.tracks[locator]
         key = track["keys"][slot]
         if not track["point_usable"][slot]:
             return EMPTY_LIDAR
-        stages, world, boxes = self.sweeps[key]
-        if track["id"] not in boxes:
-            raise ValueError(f"Frozen usable ROAD observation lost its cuboid: {locator}/{key}")
-        center, size, yaw = boxes[track["id"]]
-        box = [*center, *size, yaw]
-        anchor = self.anchors[track["keys"][0]]
+        stages, world, _ = self.sweeps[key]
+        box, anchor = self.lidar_target(locator, key)
         result = []
         for features, coords in stages:
-            relative = relative_xyz(coords, center, world, anchor)
+            relative = relative_xyz(coords, np.asarray(box[:3]), world, anchor)
             selected = np.linalg.norm(relative[:, :2], axis=1) <= 20.
             result.append(lidar_tokens(features[selected], coords[selected], box, world, anchor))
         return tuple(result)

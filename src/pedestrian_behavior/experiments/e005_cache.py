@@ -310,7 +310,7 @@ class E005Writer:
             raise RuntimeError("No E005 scene is open")
         safe = Path(self.scene)
         if safe.name != self.scene or safe.name in (".", ".."):
-            raise ValueError("Unsafe LOKI scene ID")
+            raise ValueError("Unsafe E005 scene ID")
         folder = self.root / "scenes" / safe
         folder.mkdir(parents=True)
         record = {"format": FORMAT, "group": self.scene, "source_stat_sha256": source_sha256,

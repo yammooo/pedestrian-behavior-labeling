@@ -1,7 +1,6 @@
 """Compare E005 execution settings on one matched, warmed-cache LOKI update."""
 
 import argparse
-from concurrent.futures import ThreadPoolExecutor
 from contextlib import nullcontext
 import itertools
 import json
@@ -9,14 +8,13 @@ from pathlib import Path
 import runpy
 from statistics import median
 import subprocess
-from time import perf_counter
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import torch
 
-from pedestrian_behavior.experiments.e005_cache import atomic_json, collate_e005
-from pedestrian_behavior.experiments.e005_run import DEFAULT_ARM, SETTINGS, SOURCE, SpatialBatches, assembly
+from pedestrian_behavior.experiments.e005_cache import atomic_json
+from pedestrian_behavior.experiments.e005_run import DEFAULT_ARM, SETTINGS, SOURCE, SpatialBatches, assembly, enable_aalto_fast
 from pedestrian_behavior.models.e005 import SpatialReadout, build_model, _frame_chunks
 from pedestrian_behavior.training import seed_run
 
@@ -33,49 +31,12 @@ TUNING_LAYOUTS = ((1, 2), (2, 8), (4, 8), (4, 16), (8, 16))
 
 
 class OneUpdate(SpatialBatches):
-    def __init__(self, dataset, indices, max_tracks, prefetch):
-        super().__init__(dataset, {"max_tracks": max_tracks}, prefetch=prefetch)
+    def __init__(self, dataset, indices, max_tracks, prefetch, workers):
+        super().__init__(dataset, {"max_tracks": max_tracks}, prefetch=prefetch, prefetch_workers=workers)
         self.indices = indices
 
     def __iter__(self):
         yield self.indices
-
-
-class ConcurrentUpdate(OneUpdate):
-    """Prefetch complete CPU microbatches with a bounded FIFO."""
-
-    def __init__(self, dataset, indices, max_tracks, workers):
-        super().__init__(dataset, indices, max_tracks, False)
-        self.workers = workers
-
-    def microbatches(self, indices):
-        size = self.profile["max_tracks"]
-        groups = iter(indices[i:i+size] for i in range(0, len(indices), size))
-        cache = self.dataset.cache
-        for name in cache.record["arrays"]:
-            cache._map(name)
-
-        def load(group):
-            return collate_e005([self.dataset[i] for i in group])
-
-        with ThreadPoolExecutor(max_workers=self.workers) as pool:
-            def submit(group):
-                before = perf_counter()
-                for i in group:
-                    cache._scene(self.dataset.entries[i]["group"])
-                self.stats["wait_seconds"] += perf_counter() - before
-                return pool.submit(load, group)
-
-            pending = [submit(group) for group in itertools.islice(groups, self.workers)]
-            while pending:
-                before = perf_counter()
-                batch = pending.pop(0).result()
-                self.stats["wait_seconds"] += perf_counter() - before
-                next_group = next(groups, None)
-                if next_group is not None:
-                    pending.append(submit(next_group))
-                yield batch
-                del batch
 
 
 def timed(prepared, state, dataset, indices, variant, *, prefetch, workers=1):
@@ -85,8 +46,7 @@ def timed(prepared, state, dataset, indices, variant, *, prefetch, workers=1):
     model = build_model(DEFAULT_ARM, profile).to(DEVICE)
     model.load_state_dict(state)
     optimizer = torch.optim.AdamW(model.parameters(), **SETTINGS["optimizer"])
-    batches = (ConcurrentUpdate(dataset, indices, max_tracks, workers) if workers > 1
-               else OneUpdate(dataset, indices, max_tracks, prefetch))
+    batches = OneUpdate(dataset, indices, max_tracks, prefetch, workers)
     torch.cuda.synchronize()
     torch.cuda.reset_peak_memory_stats()
     try:
@@ -250,6 +210,73 @@ def paired_checks(dataset, order, measure):
                         cohort=cohort, case=tag)
 
 
+def validate_fast(prepared, dataset, order, record, destinations):
+    """Run yielded batches through an unchanged model/optimizer across three real updates."""
+    profile = prepared["config"]["profile"]
+    costs = track_costs(dataset)
+    count = prepared["config"]["batching"]["max_tracks"]
+    cases = [(padded_count(costs, order[i:i+count], profile), order[i:i+count])
+             for i in range(0, len(order), count)]
+    ordinary = max(row for row in cases if row[0] <= profile["ordinary_tokens"])
+    dense = max(cases)
+    model = prepared["build_model"]().to(DEVICE)
+    optimizer = torch.optim.AdamW(model.parameters(), **SETTINGS["optimizer"])
+    batches = prepared["batches"](dataset, training=True, seed=0)
+
+    def update(indices, label, offset, stress_tokens=None):
+        class Selection:
+            def __iter__(self):
+                yield indices
+
+            microbatches = batches.microbatches
+
+        torch.cuda.reset_peak_memory_stats()
+        wait = batches.stats["wait_seconds"]
+        row = prepared["epoch_operation"](model, Selection(), optimizer, DEVICE,
+                                           SETTINGS["clip_norm"], step_offset=402+offset)
+        assert row["processed_tracks"] == 64 and row["optimizer_steps"] == 1
+        row.update(profile=profile, workload=label, loader_wait_seconds=batches.stats["wait_seconds"]-wait,
+                   stress_padded_tokens=stress_tokens, peak_allocated_bytes=torch.cuda.max_memory_allocated(),
+                   peak_reserved_bytes=torch.cuda.max_memory_reserved())
+        record["rows"].append(row)
+        atomic_json(destinations, record)
+        print(row, flush=True)
+
+    update(order[:64], "persistent-representative", 0)
+    for offset, (label, (tokens, prefix)) in enumerate((("persistent-ordinary", ordinary), ("persistent-dense", dense)), start=1):
+        rest = [i for i in order[offset*128:offset*128+64] if i not in prefix]
+        update(prefix + rest[:64-len(prefix)], label, offset, tokens)
+
+
+def validate_folded_cuda(dataset, order, measure):
+    folded = runpy.run_path(str(Path(__file__).with_name("benchmark-e005-single-query.py")))["folded_forward"]
+    ordinary = SpatialReadout.forward
+    seed_run(0)
+    layer = SpatialReadout().to(DEVICE).train()
+    frames = [torch.randn(n, 128, device=DEVICE, requires_grad=True) for n in (17, 4093, 21_859)]
+    args = frames + list(layer.parameters())
+    seed_run(0)
+    reference = ordinary(layer, frames)
+    reference_grad = torch.autograd.grad(reference.square().mean(), args)
+    seed_run(0)
+    result = folded(layer, frames)
+    result_grad = torch.autograd.grad(result.square().mean(), args)
+    torch.testing.assert_close(result, reference, atol=2e-6, rtol=2e-5)
+    for actual, expected in zip(result_grad, reference_grad):
+        torch.testing.assert_close(actual, expected, atol=2e-6, rtol=2e-5)
+    parity = {"dropout_output_max_diff": (result-reference).abs().max().item(),
+              "gradient_max_diff": max((actual-expected).abs().max().item()
+                                        for actual, expected in zip(result_grad, reference_grad))}
+    del layer, frames, args, result, reference, result_grad, reference_grad
+    configs = (("standard", ordinary), ("folded", folded))
+    for repeat, pair in enumerate((configs, configs[::-1])):
+        for name, forward in pair:
+            with patch.object(SpatialReadout, "forward", forward):
+                measure("2track-8frame", dataset, order[:64], "warm-attention-pair", prefetch=True,
+                        workers=2, repeat=repeat, attention=name)
+    return parity
+
+
 def run(args):
     output = args.output.resolve()
     root = args.outputs_root.resolve()
@@ -261,17 +288,20 @@ def run(args):
     torch.set_num_threads(2)
     seed_run(0)
     free, total = torch.cuda.mem_get_info()
-    cap = min(int(total * .89), free - 768 * 1024**2) if args.tune or args.pairs_from else int(total * .75)
+    cap = (enable_aalto_fast(DEFAULT_ARM, "cuda") if args.verify_fast else
+           min(int(total * .89), free - 768 * 1024**2) if args.tune or args.pairs_from else int(total * .75))
     if cap < total * .75:
         raise ValueError("GPU memory is occupied")
-    torch.cuda.set_per_process_memory_fraction(cap / total)
+    if not args.verify_fast:
+        torch.cuda.set_per_process_memory_fraction(cap / total)
     output.mkdir(parents=True, exist_ok=False)
     destinations = output / "benchmark.json"
     record = {"status": "incomplete", "variants": VARIANTS, "device": torch.cuda.get_device_name(),
               "torch": torch.__version__, "seed": 0, "rows": [],
               "gpu_total_bytes": total, "gpu_free_bytes": free, "allocator_cap_bytes": cap,
               "revision": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()}
-    prepared = assembly(SimpleNamespace(outputs_root=root, arm=DEFAULT_ARM, cache=None))
+    prepared = assembly(SimpleNamespace(outputs_root=root, arm=DEFAULT_ARM, cache=None, aalto_fast=args.verify_fast,
+                                        allocator_cap_bytes=cap))
     try:
         dataset = prepared["dataset"](SOURCE, "training")
         order = torch.randperm(len(dataset), generator=torch.Generator().manual_seed(0)).tolist()
@@ -279,6 +309,7 @@ def run(args):
         record["locators"] = [dataset.entries[i]["locator"] for i in indices]
         record["cache_manifest_sha256"] = prepared["config"]["cache"]["manifest_sha256"]
         state = build_model(DEFAULT_ARM, ORIGINAL_PROFILE).state_dict()
+
         def measure(variant, source, selected, workload, *, prefetch, workers=1, **extra):
             row = timed(prepared, state, source, selected, variant, prefetch=prefetch, workers=workers)
             extra |= {"profile": VARIANTS[variant][0], "max_tracks": VARIANTS[variant][1]}
@@ -286,6 +317,18 @@ def run(args):
             atomic_json(destinations, record)
             print(record["rows"][-1], flush=True)
             return row
+
+        if args.verify_fast:
+            record["execution"] = {key: prepared["config"][key] for key in ("execution_profile", "profile", "batching")}
+            validate_fast(prepared, dataset, order, record, destinations)
+            VARIANTS["2track-8frame"] = prepared["config"]["profile"], prepared["config"]["batching"]["max_tracks"]
+            try:
+                record["folded_cuda_parity"] = validate_folded_cuda(dataset, order, measure)
+            except AssertionError as error:
+                record["folded_cuda_parity"] = {"status": "failed", "message": str(error)}
+            record["status"] = "complete"
+            atomic_json(destinations, record)
+            return
 
         if args.pairs_from:
             previous = json.loads(args.pairs_from.read_text())
@@ -346,6 +389,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--outputs-root", type=Path, default=Path("outputs"))
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--tune", action="store_true", help="Calibrate memory and compare multiple held batches")
-    parser.add_argument("--pairs-from", type=Path, help="Replay paired reader/attention controls from a calibration JSON")
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument("--tune", action="store_true", help="Calibrate memory and compare multiple held batches")
+    modes.add_argument("--pairs-from", type=Path, help="Replay paired reader/attention controls from a calibration JSON")
+    modes.add_argument("--verify-fast", action="store_true", help="Check the production profile across three updates")
     run(parser.parse_args())

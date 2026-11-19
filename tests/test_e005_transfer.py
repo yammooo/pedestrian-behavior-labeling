@@ -64,17 +64,25 @@ class OnlineTransferTest(unittest.TestCase):
             return None, np.ones((len(crops), 16, 16, 768), np.float32)
 
         reader = SimpleNamespace(waymo_root=None, read_frames=lambda _, keys: {key: {"ego_pose": identity} for key in keys})
-        features = transfer.RoadSpatialFeatures(track_index, reader, {group: {}},
-            SimpleNamespace(descriptors=descriptors), SimpleNamespace(stages=stages))
-        dataset = E005FeatureDataset(Baseline(), features, transfer.ARM)
         model = build_model(transfer.ARM, e005_run.PROFILE)
+        folded = build_model(transfer.ARM, e005_run.AALTO_FAST_PROFILE)
+        folded.load_state_dict(model.state_dict())
+        predictions = []
         with (patch.object(transfer.road_waymo, "component_path", return_value=Path(__file__)),
               patch.object(transfer, "native_scene", native_points),
               patch.object(transfer, "native_camera", native_rgb)):
-            tracks = predict(model, transfer._batches(dataset, features), "cpu",
-                             forward_batch=lambda m, batch, _: m(batch))
+            for prefetch, classifier in ((False, model), (True, folded)):
+                features = transfer.RoadSpatialFeatures(track_index, reader, {group: {}},
+                    SimpleNamespace(descriptors=descriptors), SimpleNamespace(stages=stages), prefetch=prefetch)
+                dataset = E005FeatureDataset(Baseline(), features, transfer.ARM)
+                predictions.append(predict(classifier, transfer._batches(dataset, features, prefetch=prefetch), "cpu",
+                    forward_batch=lambda m, batch, _: m(batch, mode="ordinary") if prefetch else m(batch)))
 
-        self.assertEqual((lidar_calls, rgb_calls), ([2, 0], [1]))
+        self.assertEqual((lidar_calls, rgb_calls), ([2, 0, 2, 0], [1, 1]))
+        original, tracks = predictions
+        for left, right in zip(original, tracks):
+            self.assertEqual(left["locator"], right["locator"])
+            np.testing.assert_allclose(left["logits"], right["logits"], atol=1e-6, rtol=1e-6)
         self.assertEqual([row["logits"].shape for row in tracks], [(3, 4), (1, 4)])
         np.testing.assert_array_equal(tracks[0]["source_flags"]["rgb_valid"], [True, False, False])
         np.testing.assert_array_equal(tracks[0]["source_flags"]["lidar_valid"], [True, False, False])
@@ -85,6 +93,22 @@ class OnlineTransferTest(unittest.TestCase):
         np.testing.assert_array_equal(level5[:, 0], [5.])
         self.assertEqual(level3[1, 74], 5.)  # Vertical height alone does not exclude the token.
         self.assertEqual(features.lidar_frame(b, 0)[0].shape, (3, 77))
+
+    def test_prefetch_propagates_decoder_failure(self):
+        closed = []
+
+        def frames():
+            try:
+                yield 1
+                raise ValueError("invalid native frame")
+            finally:
+                closed.append(True)
+
+        decoded = transfer._one_ahead(frames())
+        self.assertEqual(next(decoded), 1)
+        with self.assertRaisesRegex(ValueError, "invalid native frame"):
+            next(decoded)
+        self.assertEqual(closed, [True])
 
     def test_in_progress_source_is_rejected_before_checkpoint_loading(self):
         with TemporaryDirectory() as tmp:

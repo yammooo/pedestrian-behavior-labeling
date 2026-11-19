@@ -2,6 +2,8 @@
 
 import argparse
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import closing
 from datetime import datetime, timezone
 import json
 from pathlib import Path
@@ -83,10 +85,11 @@ def _index_validation(baseline):
 class RoadSpatialFeatures:
     """Match E005's cache reader interface with one clip of in-memory features."""
 
-    def __init__(self, tracks, reader, scenes, dino, tiny):
+    def __init__(self, tracks, reader, scenes, dino, tiny, *, prefetch=True):
         self.tracks, self.reader, self.scenes, self.dino, self.tiny = tracks, reader, scenes, dino, tiny
         self.rgb, self.sweeps, self.anchors = {}, {}, {}
         self.rgb_crops, self.lidar_sweeps = 0, 0
+        self.prefetch = prefetch
 
     def prepare(self, group, locators):
         self.rgb.clear()
@@ -107,17 +110,19 @@ class RoadSpatialFeatures:
                 raise ValueError(f"Missing ROAD component {component} for {group}: {path}")
 
         # The native point reader verifies the frozen box associations before using them.
-        for frame in native_scene(self.reader, group, point_keys, ids, scene, include_rgb=False):
-            key, world = frame["key"], frame["world_from_native"]
-            if key in self.sweeps or key not in point_keys or not valid_pose(world):
-                raise ValueError(f"Invalid ROAD point timestamp or pose for {group}/{key}")
-            points = frame["points"]
-            with isolated_extraction():
-                stages = self.tiny.stages(points if points is not None else np.empty((0, 4), np.float32))
-            if any(not np.isfinite(features).all() for features, _ in stages):
-                raise ValueError("Nonfinite FP16 Tiny-Utonia features")
-            self.sweeps[key] = stages, world, frame["boxes"]
-            self.lidar_sweeps += 1
+        frames = native_scene(self.reader, group, point_keys, ids, scene, include_rgb=False)
+        with closing(_one_ahead(frames) if self.prefetch else frames) as decoded:
+            for frame in decoded:
+                key, world = frame["key"], frame["world_from_native"]
+                if key in self.sweeps or key not in point_keys or not valid_pose(world):
+                    raise ValueError(f"Invalid ROAD point timestamp or pose for {group}/{key}")
+                points = frame["points"]
+                with isolated_extraction():
+                    stages = self.tiny.stages(points if points is not None else np.empty((0, 4), np.float32))
+                if any(not np.isfinite(features).all() for features, _ in stages):
+                    raise ValueError("Nonfinite FP16 Tiny-Utonia features")
+                self.sweeps[key] = stages, world, frame["boxes"]
+                self.lidar_sweeps += 1
         if self.sweeps.keys() != point_keys:
             raise ValueError(f"Missing native ROAD point timestamps for {group}")
         first_keys = {track["keys"][0] for track in tracks if any(track["point_usable"])}
@@ -185,14 +190,27 @@ class RoadSpatialFeatures:
         return tuple(result)
 
 
-def _batches(dataset, features):
+def _one_ahead(iterator):
+    """Overlap CPU-only preparation with the current GPU work and retain one pending item."""
+    with closing(iterator), ThreadPoolExecutor(max_workers=1) as pool:
+        pending = pool.submit(next, iterator, None)
+        try:
+            while (item := pending.result()) is not None:
+                pending = pool.submit(next, iterator, None)
+                yield item
+        finally:
+            pending.cancel()
+
+
+def _batches(dataset, features, *, prefetch=True):
     groups = defaultdict(list)
     for index, entry in enumerate(dataset.entries):
         groups[entry["group"]].append(index)
     for step, (group, indices) in enumerate(sorted(groups.items()), 1):
         features.prepare(group, [dataset.entries[i]["locator"] for i in indices])
-        for index in indices:
-            yield collate_e005([dataset[index]])
+        batches = (collate_e005([dataset[index]]) for index in indices)
+        with closing(_one_ahead(batches) if prefetch else batches) as prepared:
+            yield from prepared
         if step == 1 or step % 5 == 0 or step == len(groups):
             print(f"ROAD validation clips: {step}/{len(groups)}", flush=True)
 
@@ -248,22 +266,28 @@ def run(args):
                                        Path(waymo_root) if waymo_root else None)
         if reader.sources["sha256"] != manifest["sources"]["sha256"]:
             raise ValueError("Frozen ROAD index mismatch")
+        profile = (e005_run.AALTO_FAST_PROFILE
+                   if device.type == "cuda" and torch.cuda.get_device_name(device) == e005_run.AALTO_GPU
+                   else config["profile"])
         provenance = {"command": sys.orig_argv, "revision": subprocess.check_output(
             ["git", "rev-parse", "HEAD"], text=True).strip(), "device": str(device), "torch": str(torch.__version__),
             "cuda": torch.version.cuda, "determinism": determinism, "source": SOURCE, "target": TARGET,
             "split": SPLIT, "held_out_tests": False, "selection": checkpoint["selection"],
             "source_checkpoint": str(path), "checkpoint_sha256": checksum(path), "normalization_source": SOURCE,
             "normalization": stats, "datasets": {SOURCE: reference, TARGET: target}, "encoders": encoders,
-            "waymo_root": str(reader.waymo_root), "probe_sha256": checksum(probe)}
+            "waymo_root": str(reader.waymo_root), "probe_sha256": checksum(probe),
+            "execution": {"readout_profile": profile, "readout_mode": "ordinary",
+                          "cpu_lookahead_sweeps": 1, "cpu_lookahead_tracks": 1}}
         write_json(output / "provenance.json", provenance)
         with isolated_extraction():
             dino = ImageEncoder(native["dino_code"], native["dino_weights"], device)
             tiny = TinyUtoniaEncoder(args.utonia_code or root / DEFAULT_UTONIA_CODE, tiny_checkpoint, device)
         features = RoadSpatialFeatures(index, reader, manifest["scenes"], dino, tiny)
         dataset = E005FeatureDataset(baseline, features, ARM)
-        model = e005.build_model(ARM, config["profile"]).to(device)
+        model = e005.build_model(ARM, profile).to(device)
         model.load_state_dict(checkpoint["model_state"], strict=True)
-        tracks = predict(model, _batches(dataset, features), device, forward_batch=lambda model, batch, _: model(batch))
+        tracks = predict(model, _batches(dataset, features), device,
+                         forward_batch=lambda model, batch, _: model(batch, mode="ordinary"))
         if len(tracks) != len(index) or {track["locator"] for track in tracks} != index.keys():
             raise ValueError("Predictions do not cover the complete frozen ROAD validation split")
 

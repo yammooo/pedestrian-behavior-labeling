@@ -295,6 +295,8 @@ def check_execution_parity(dataset, indices, state, candidate, *, training):
     observations = []
     for profile in (AALTO_FAST_PROFILE, candidate):
         model = build_model(DEFAULT_ARM, profile).to(DEVICE).train(training)
+        # cuDNN needs a training-mode LSTM for backward; this one-layer LSTM has no dropout.
+        model.temporal.lstm.train()
         model.load_state_dict(state)
         seed_run(0)
         logits = model(batch)

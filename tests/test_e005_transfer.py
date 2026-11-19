@@ -75,24 +75,50 @@ class OnlineTransferTest(unittest.TestCase):
                 features = transfer.RoadSpatialFeatures(track_index, reader, {group: {}},
                     SimpleNamespace(descriptors=descriptors), SimpleNamespace(stages=stages), prefetch=prefetch)
                 dataset = E005FeatureDataset(Baseline(), features, transfer.ARM)
-                predictions.append(predict(classifier, transfer._batches(dataset, features, prefetch=prefetch), "cpu",
-                    forward_batch=lambda m, batch, _: m(batch, mode="ordinary") if prefetch else m(batch)))
+                batches = transfer._batches(dataset, features, prefetch=prefetch)
+                if prefetch:
+                    records = transfer._extract_embedding_records(classifier, batches, "cpu")
+                else:
+                    predictions = predict(classifier, batches, "cpu", forward_batch=lambda m, batch, _: m(batch))
 
         self.assertEqual((lidar_calls, rgb_calls), ([2, 0, 2, 0], [1, 1]))
-        original, tracks = predictions
-        for left, right in zip(original, tracks):
-            self.assertEqual(left["locator"], right["locator"])
-            np.testing.assert_allclose(left["logits"], right["logits"], atol=1e-6, rtol=1e-6)
-        self.assertEqual([row["logits"].shape for row in tracks], [(3, 4), (1, 4)])
-        np.testing.assert_array_equal(tracks[0]["source_flags"]["rgb_valid"], [True, False, False])
-        np.testing.assert_array_equal(tracks[0]["source_flags"]["lidar_valid"], [True, False, False])
-        np.testing.assert_array_equal(tracks[1]["source_flags"]["rgb_valid"], [False])
+        for row in predictions:
+            row["group"] = group
+        _, max_delta = transfer._check_embedding_predictions(records, predictions, smoke=False)
+        self.assertLess(max_delta, 2e-6)
+        self.assertEqual([row["features"].shape for row in records], [(3, 128), (1, 128)])
+        for row in records:
+            self.assertEqual(row["features"].dtype, np.float32)
+            with torch.no_grad():
+                logits = folded.head(torch.from_numpy(row["features"])).numpy()
+            np.testing.assert_allclose(row["source_logits"], logits, atol=1e-6, rtol=1e-6)
+        with self.assertRaisesRegex(ValueError, "locators differ"):
+            transfer._check_embedding_predictions(records[:1], predictions, smoke=False)
+        anchor, _ = transfer._check_embedding_predictions(records[:1], predictions, smoke=True)
+        self.assertEqual(len(anchor), 1)
+        changed = records[0] | {"targets": np.ones(3, dtype=np.int64)}
+        with self.assertRaisesRegex(ValueError, "replay differs"):
+            transfer._check_embedding_predictions([changed], predictions, smoke=True)
+        np.testing.assert_array_equal(records[0]["source_flags"]["rgb_valid"], [True, False, False])
+        np.testing.assert_array_equal(records[0]["source_flags"]["lidar_valid"], [True, False, False])
+        np.testing.assert_array_equal(records[1]["source_flags"]["rgb_valid"], [False])
         level3, level5 = features.lidar_frame(a, 0)
         self.assertEqual((level3.shape, level5.shape), ((2, 77), (1, 221)))
         np.testing.assert_array_equal(level3[:, 0], [3., 3.])
         np.testing.assert_array_equal(level5[:, 0], [5.])
         self.assertEqual(level3[1, 74], 5.)  # Vertical height alone does not exclude the token.
         self.assertEqual(features.lidar_frame(b, 0)[0].shape, (3, 77))
+
+    def test_smoke_selects_whole_clips_without_using_targets(self):
+        entries = [{"group": group, "slots": slots} for group, count, slots in
+                   (("big", 15, 20), ("tiny", 3, 1), ("quick-a", 13, 2), ("quick-b", 13, 3))
+                   for _ in range(count)]
+        training = transfer._select_smoke_clips(entries, "training")
+        validation = transfer._select_smoke_clips(entries, "validation")
+
+        self.assertEqual({row["group"] for row in training}, {"quick-a", "quick-b"})
+        self.assertEqual(len(training), 26)
+        self.assertEqual({row["group"] for row in validation}, {"tiny", "quick-a"})
 
     def test_prefetch_propagates_decoder_failure(self):
         closed = []

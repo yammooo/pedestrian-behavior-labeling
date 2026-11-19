@@ -1095,6 +1095,19 @@ uv run --no-project --python "$PWD/outputs/experiments/E002a/extractor-env/bin/p
 
 Use the actual completed LOKI attempt path if it differs. The command uses its selected checkpoint and normalization, encodes ROAD observations online and writes ROAD validation predictions and metrics. [Transfer protocol](experiments/E005-spatial-representations/README.md#loki-to-road-waymo-validation).
 
+### E005 ROAD-Waymo head budgets
+
+From the same Aalto checkout and mounted ROAD volume, run:
+
+```bash
+export PYTHONPATH="$PWD/src" OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+uv run --no-project --python "$PWD/outputs/experiments/E002a/extractor-env/bin/python" \
+  python scripts/train-e005-road-head.py \
+  --waymo-root /run/media/user20/F47C60057C5FC152/projects/waymo_v2
+```
+
+The first launch extracts and checks frozen embeddings using CUDA, then fits the heads on CPU. Later launches reuse the completed cache. Results are local under `outputs/experiments/E005/head-budgets/runs/`. [Budgets and reporting](experiments/E005-spatial-representations/README.md#road-waymo-head-budgets).
+
 ## E004c adaptation-depth label budgets
 
 [E004c](experiments/E004c-adaptation-depth-budgets/README.md) compares source-initialized temporal+head adaptation with target-only task-model training at 25, 100 and 1,000 LOKI tracks, using the same five E004a draws. Existing head-only and unadapted-source results are reused.

@@ -278,7 +278,16 @@ def _annotation_caption(rows):
     return "\n".join(lines)
 
 
-def make_report(rows: list[dict], output: Path) -> dict:
+def _class_summary(rows, fields):
+    metrics = {}
+    for field in fields:
+        values = [row[field] for row in rows if row[field] is not None]
+        mean, sd = _mean_sd(values)
+        metrics[field] = {"mean": mean, "sd": sd, "n": len(values)}
+    return metrics
+
+
+def make_report(rows: list[dict], output: Path, *, all_tracks=ALL_TRACKS) -> dict:
     """Write budget summaries and the two fixed E004a plots."""
     if not rows:
         raise ValueError("E004a report requires at least one run")
@@ -303,12 +312,18 @@ def make_report(rows: list[dict], output: Path) -> dict:
     summary = []
     for budget in sorted(grouped):
         group = grouped[budget]
-        anchor = budget in (0, ALL_TRACKS)
+        anchor = budget in (0, all_tracks)
         f1_mean, f1_sd = _mean_sd([float(row["macro_f1"]) for row in group], anchor)
         ce_mean, ce_sd = _mean_sd([float(row["track_ce"]) for row in group], anchor)
         entry = {"budget": budget, "n": len(group), "draws": [row.get("draw") for row in group],
                  "macro_f1_mean": f1_mean, "macro_f1_sd": f1_sd, "track_ce_mean": ce_mean, "track_ce_sd": ce_sd,
                  "targets": {}}
+        include_classes = all("assessment_classes" in row for row in group)
+        if include_classes:
+            fields = ("precision", "recall", "f1", "support")
+            entry["classes"] = {name: _class_summary(
+                [{field: row["assessment_classes"][field][index] for field in fields} for row in group], fields)
+                for index, name in enumerate(CLASS_NAMES)}
         for target in targets:
             observed = [_target_result(row["coverage"], target) for row in group]
             coverage_values = [float(item["assessment"]["coverage"]) for item in observed]
@@ -325,17 +340,22 @@ def make_report(rows: list[dict], output: Path) -> dict:
                 "assessment_error_n_nonempty": len(errors), "overrun_count": int(overruns),
                 "empty_assessment_count": int(empties), "reject_all_count": int(reject_all),
             }
+            if include_classes:
+                entry["targets"][str(target)]["classes"] = {name: _class_summary(
+                    [row["assessment"]["classes"][index] for row in observed],
+                    ("gt_class_retention", "accepted_precision", "automated_correct_fraction"))
+                    for index, name in enumerate(CLASS_NAMES)}
         summary.append(entry)
 
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
     caption = _annotation_caption(rows)
-    report = {"targets": list(targets), "all_tracks": ALL_TRACKS, "summary": summary, "runs": runs, "caption": caption}
+    report = {"targets": list(targets), "all_tracks": all_tracks, "summary": summary, "runs": runs, "caption": caption}
     _json_dump(output / "budget-report.json", report)
     _write_csv(output / "budget-summary.csv", summary, targets)
     _write_run_csv(output / "budget-runs.csv", runs, targets)
-    _plot_f1(summary, output, caption)
-    _plot_coverage(summary, output, targets, caption)
+    _plot_f1(summary, output, caption, all_tracks)
+    _plot_coverage(summary, output, targets, caption, all_tracks)
     return report
 
 
@@ -349,10 +369,10 @@ def _write_csv(path, rows, targets):
         writer = csv.DictWriter(stream, fieldnames=fields)
         writer.writeheader()
         for row in rows:
-            flat = {key: value for key, value in row.items() if key != "targets"}
+            flat = {key: value for key, value in row.items() if key not in ("targets", "classes")}
             flat["draws"] = json.dumps(row["draws"])
             for target, metrics in row["targets"].items():
-                flat.update({f"target_{float(target):g}_{key}": value for key, value in metrics.items()})
+                flat.update({f"target_{float(target):g}_{key}": value for key, value in metrics.items() if key != "classes"})
             writer.writerow(flat)
 
 
@@ -385,7 +405,7 @@ def _write_run_csv(path, rows, targets):
             writer.writerow(flat)
 
 
-def _plot_axes(summary, ylabel, ylim=None):
+def _plot_axes(summary, ylabel, ylim, all_tracks):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -396,13 +416,16 @@ def _plot_axes(summary, ylabel, ylim=None):
     ax.set_ylabel(ylabel)
     if ylim:
         ax.set_ylim(*ylim)
-    ax.set_xticks(sorted({0, ALL_TRACKS, *(row["budget"] for row in summary)}))
+    ticks = {0, *(row["budget"] for row in summary)}
+    if all_tracks is not None:
+        ticks.add(all_tracks)
+    ax.set_xticks(sorted(ticks))
     ax.set_xticklabels([f"{value:,}" for value in ax.get_xticks()])
     return plt, fig, ax
 
 
-def _plot_f1(summary, output, caption):
-    plt, fig, ax = _plot_axes(summary, "Track-weighted macro-F1 (%)", (0, 100))
+def _plot_f1(summary, output, caption, all_tracks):
+    plt, fig, ax = _plot_axes(summary, "Track-weighted macro-F1 (%)", (0, 100), all_tracks)
     budgets = [row["budget"] for row in summary]
     means = np.asarray([row["macro_f1_mean"] * 100 for row in summary])
     deviations = np.asarray([row["macro_f1_sd"] * 100 if row["macro_f1_sd"] is not None else 0 for row in summary])
@@ -415,8 +438,8 @@ def _plot_f1(summary, output, caption):
     plt.close(fig)
 
 
-def _plot_coverage(summary, output, targets, caption):
-    plt, fig, ax = _plot_axes(summary, "Track-weighted automatic coverage (%)", (0, 100))
+def _plot_coverage(summary, output, targets, caption, all_tracks):
+    plt, fig, ax = _plot_axes(summary, "Track-weighted automatic coverage (%)", (0, 100), all_tracks)
     budgets = [row["budget"] for row in summary]
     colors = ("#d1495b", "#00798c", "#edae49", "#30638e")
     for target, color in zip(targets, colors):

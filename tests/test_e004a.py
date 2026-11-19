@@ -161,7 +161,8 @@ class E004aRunTest(unittest.TestCase):
         training, development, assessment = [_record("train", "train")], [_record("dev", "dev")], [_record("audit", "audit")]
         cache = {"root": Path("cache"),
             "head": {"weight": np.zeros((4, 128), dtype=np.float32), "bias": np.zeros(4, dtype=np.float32)},
-            "manifest": {"normalization": {}, "source_head": {"state_sha256": "test-head"},
+            "manifest": {"normalization": {}, "source_checkpoint_sha256": e004a_run.SOURCE_SHA256,
+                "source_head": {"state_sha256": "test-head"},
                 "derived_features": {"training": {"sha256": "train-cache"},
                                      "validation": {"sha256": "validation-cache"}}}}
         plan = {"population": {"development": {"tracks": 1, "groups": 1, "gt_timesteps": 1,

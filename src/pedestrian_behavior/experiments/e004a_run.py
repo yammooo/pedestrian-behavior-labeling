@@ -390,7 +390,8 @@ def _wandb_risk_table(analysis):
 
 def _run_one(attempt, cache, training_rows, development_rows, assessment_rows, plan_row,
              plan, device, smoke, early_checks=False, *, experiment="E004a",
-             run_name_prefix="e004a-road-to-loki-head", run_name_suffix=""):
+             run_name_prefix="e004a-road-to-loki-head", run_name_suffix="",
+             source=SOURCE, target=TARGET, wandb_enabled=True):
     budget, draw = plan_row["budget"], plan_row["draw"]
     suffix = "all" if budget == ALL_TRACKS else f"{budget:04d}"
     fit_dir = attempt / (f"budget-{suffix}" if draw is None else f"budget-{suffix}-draw-{draw:02d}")
@@ -415,19 +416,21 @@ def _run_one(attempt, cache, training_rows, development_rows, assessment_rows, p
             "check_interval_updates": None if early_checks else SETTINGS["updates_per_check"],
             "patience_checks": None if early_checks else SETTINGS["patience_checks"],
             "patience_updates": EARLY_PATIENCE_UPDATES if early_checks else None, "smoke": smoke}
-        config = {"experiment": experiment, "source": SOURCE, "target": TARGET,
+        source_sha = cache["manifest"]["source_checkpoint_sha256"]
+        config = {"experiment": experiment, "source": source, "target": target,
             "architecture": ARCHITECTURE, "trainable_parameters": 516,
-            "source_checkpoint_sha256": SOURCE_SHA256, "source_head_sha256": cache["manifest"]["source_head"]["state_sha256"],
+            "source_checkpoint_sha256": source_sha, "source_head_sha256": cache["manifest"]["source_head"]["state_sha256"],
             "feature_cache": {split: cache["manifest"]["derived_features"][split]["sha256"]
                               for split in ("training", "validation")},
             "budget_tracks": budget, "draw": draw, "training_seed": 0,
             "early_checks": early_checks,
-            "development_groups": DEVELOPMENT_GROUPS, "assessment_groups": ASSESSMENT_GROUPS,
+            "development_groups": plan["population"]["development"]["groups"],
+            "assessment_groups": plan["population"]["assessment"]["groups"],
             "settings": settings, "training_subset_groups": len({row["group"] for row in training_rows}),
             "training_subset_gt_timesteps": int(sum(row["gt_valid"].sum() for row in training_rows)),
             "development_label_access": plan["population"]["development"],
             "assessment_label_access": plan["population"]["assessment"],
-            "normalization_source": SOURCE, "held_out_tests": False}
+            "normalization_source": source, "held_out_tests": False}
         selection_screening = None
         if "screening_access" in plan:
             config["sampling"] = plan_row.get("sampling", {})
@@ -443,36 +446,39 @@ def _run_one(attempt, cache, training_rows, development_rows, assessment_rows, p
             "selection_screening": selection_screening,
             "determinism": seed_info,
             "early_checks": early_checks,
-            "source_checkpoint_sha256": SOURCE_SHA256, "cache_manifest": str(cache["root"] / "cache.json"),
+            "source_checkpoint_sha256": source_sha, "cache_manifest": str(cache["root"] / "cache.json"),
             "actual_optimizer_updates": 0, "selected_update": None})
         run_name = f"{run_name_prefix}-n{budget:04d}-d{draw:02d}-s0" if draw is not None else \
             f"{run_name_prefix}-n{budget:04d}-s0"
         run_name += run_name_suffix
         if early_checks:
             run_name += "-early-checks"
-        run = wandb.init(entity="yammo-unipd", project="pedestrian-behaviour-labeling", name=run_name,
-            job_type="smoke" if smoke else "comparison", config=config,
-            dir=str(fit_dir.resolve()), save_code=False, resume="never", mode="offline" if smoke else "online")
-        run.define_metric("optimizer_step", hidden=True, summary="none")
-        run.define_metric("train/ce_step", step_metric="optimizer_step", step_sync=False, summary="none")
-        run.define_metric("optimizer_check", hidden=True, summary="none")
-        run.define_metric("train/*", step_metric="optimizer_check", step_sync=False)
-        run.define_metric("development/*", step_metric="optimizer_check", step_sync=False)
+        if wandb_enabled:
+            run = wandb.init(entity="yammo-unipd", project="pedestrian-behaviour-labeling", name=run_name,
+                job_type="smoke" if smoke else "comparison", config=config,
+                dir=str(fit_dir.resolve()), save_code=False, resume="never", mode="offline" if smoke else "online")
+            run.define_metric("optimizer_step", hidden=True, summary="none")
+            run.define_metric("train/ce_step", step_metric="optimizer_step", step_sync=False, summary="none")
+            run.define_metric("optimizer_check", hidden=True, summary="none")
+            run.define_metric("train/*", step_metric="optimizer_check", step_sync=False)
+            run.define_metric("development/*", step_metric="optimizer_check", step_sync=False)
 
         def on_step(step, loss):
             row = {"optimizer_step": step, "training_ce": loss}
             with (fit_dir / "steps.jsonl").open("a") as step_file:
                 step_file.write(json.dumps(row, allow_nan=False) + "\n")
-            run.log({"optimizer_step": step, "train/ce_step": loss})
+            if run is not None:
+                run.log({"optimizer_step": step, "train/ce_step": loss})
 
         history_path = fit_dir / "history.json"
         def on_check(row, history):
             shared_run.write_json(history_path, history)
             step = row.get("optimizer_step", row["epoch"] * SETTINGS["updates_per_check"])
-            run.log({"optimizer_check": step, "development/track_ce": row["validation_ce"],
-                "development/macro_f1": row["validation_f1"],
-                **({"train/track_ce": row["training_ce"], "train/macro_f1": row["training_f1"]}
-                   if row["training_ce"] is not None else {})})
+            if run is not None:
+                run.log({"optimizer_check": step, "development/track_ce": row["validation_ce"],
+                    "development/macro_f1": row["validation_f1"],
+                    **({"train/track_ce": row["training_ce"], "train/macro_f1": row["training_f1"]}
+                       if row["training_ce"] is not None else {})})
 
         def validate(current):
             return prediction_metrics(predict(current, development_batches, device), len(CLASSES))
@@ -504,7 +510,7 @@ def _run_one(attempt, cache, training_rows, development_rows, assessment_rows, p
         selected_update = int(selected["selection"]["optimizer_step"] if early_checks else
             selected["epoch"] * SETTINGS["updates_per_check"])
         metadata = {"status": "complete", "experiment": experiment, "budget": budget, "draw": draw,
-            "training_seed": 0, "early_checks": early_checks, "source_checkpoint_sha256": SOURCE_SHA256,
+            "training_seed": 0, "early_checks": early_checks, "source_checkpoint_sha256": source_sha,
             "source_head_sha256": config["source_head_sha256"],
             "selected_update": selected_update, "selected_epoch": selected["epoch"],
             "stopping_reason": fit_result["stopping_reason"],
@@ -523,22 +529,24 @@ def _run_one(attempt, cache, training_rows, development_rows, assessment_rows, p
             exposure=exposure, determinism=seed_info)
         shared_run.write_json(provenance_path, provenance)
         plot_path = _plots(fit_dir / "plots", fit_result["history"])
-        risk_table = _wandb_risk_table(analysis)
-        run.log({"assessment/full_coverage_macro_f1": assessment_metrics["track_weighted"]["macro_f1"],
-            "assessment/track_ce": assessment_metrics["track_ce"],
-            "assessment/risk_targets": risk_table, "assessment/class_f1": wandb.Table(
-                columns=["class", "precision", "recall", "f1", "support"],
-                data=[[name] + [assessment_metrics["track_weighted"][key][index]
-                       for key in ("precision", "recall", "f1", "support")]
-                      for index, name in enumerate(CLASSES)]),
-            "details/fit-history": wandb.Image(str(plot_path))})
-        run.finish()
-        run = None
+        if run is not None:
+            run.log({"assessment/full_coverage_macro_f1": assessment_metrics["track_weighted"]["macro_f1"],
+                "assessment/track_ce": assessment_metrics["track_ce"],
+                "assessment/risk_targets": _wandb_risk_table(analysis), "assessment/class_f1": wandb.Table(
+                    columns=["class", "precision", "recall", "f1", "support"],
+                    data=[[name] + [assessment_metrics["track_weighted"][key][index]
+                           for key in ("precision", "recall", "f1", "support")]
+                          for index, name in enumerate(CLASSES)]),
+                "details/fit-history": wandb.Image(str(plot_path))})
+            run.finish()
+            run = None
         local["status"] = "complete"
         shared_run.write_json(fit_dir / "status.json", local)
         return {"budget": budget, "draw": draw,
             "experiment": experiment,
             "macro_f1": assessment_metrics["track_weighted"]["macro_f1"],
+            "assessment_classes": {key: assessment_metrics["track_weighted"][key]
+                                   for key in ("precision", "recall", "f1", "support")},
             "track_ce": assessment_metrics["track_ce"], "coverage": analysis,
             "annotation_access": metadata["annotation_access"], "fit_dir": str(fit_dir),
             "selected_update": selected_update, "stopping_reason": fit_result["stopping_reason"],
@@ -562,8 +570,9 @@ def _evaluate_zero(attempt, cache, development_rows, assessment_rows, plan, earl
     assessment_groups = {row["group"] for row in assessment_rows}
     dev_tracks = [row for row in cache["source_validation"] if row["group"] in dev_groups]
     assessment_tracks = [row for row in cache["source_validation"] if row["group"] in assessment_groups]
-    if len(dev_tracks) != len(development_rows) or len(assessment_tracks) != len(assessment_rows):
-        raise ValueError("Zero anchor source-validation predictions do not match the frozen group split")
+    for predictions, records in ((dev_tracks, development_rows), (assessment_tracks, assessment_rows)):
+        if sorted(row["locator"] for row in predictions) != sorted(row["locator"] for row in records):
+            raise ValueError("Zero anchor source-validation predictions do not match the frozen group split")
     _save_predictions(output / "development-predictions.npz", dev_tracks)
     _save_predictions(output / "assessment-predictions.npz", assessment_tracks)
     analysis = e004a_analysis.analyze_checkpoint(dev_tracks, assessment_tracks,
@@ -571,13 +580,16 @@ def _evaluate_zero(attempt, cache, development_rows, assessment_rows, plan, earl
     dev_metrics, assessment_metrics = prediction_metrics(dev_tracks, len(CLASSES)), prediction_metrics(assessment_tracks, len(CLASSES))
     summary = {"status": "complete", "experiment": experiment, "budget": 0, "draw": None,
         "early_checks": early_checks,
-        "source_checkpoint_sha256": SOURCE_SHA256, "selected_update": 0,
+        "source_checkpoint_sha256": cache["manifest"]["source_checkpoint_sha256"],
+        "source_head_sha256": cache["manifest"]["source_head"]["state_sha256"], "selected_update": 0,
         "selection": {"epoch": 0, "f1": dev_metrics["track_weighted"]["macro_f1"], "ce": dev_metrics["track_ce"]},
         "development_metrics": dev_metrics, "assessment_metrics": assessment_metrics,
         "coverage": analysis, "annotation_access": _annotation_access(plan, []),
         "kind": "original source head; no optimizer", "held_out_tests": False}
     shared_run.write_json(output / "selected-metrics.json", summary)
     return {"budget": 0, "draw": None, "macro_f1": assessment_metrics["track_weighted"]["macro_f1"],
+        "assessment_classes": {key: assessment_metrics["track_weighted"][key]
+                               for key in ("precision", "recall", "f1", "support")},
         "experiment": experiment, "track_ce": assessment_metrics["track_ce"], "coverage": analysis,
         "annotation_access": summary["annotation_access"], "fit_dir": str(output), "selected_update": 0,
         "stopping_reason": "source-anchor", "early_checks": early_checks}

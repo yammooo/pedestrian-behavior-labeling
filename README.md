@@ -1075,7 +1075,7 @@ uv run --no-project --python "$PWD/outputs/experiments/E002a/extractor-env/bin/p
   --output "outputs/experiments/E005/runs/loki-g-rgb-utonia-s0-$(date +%Y%m%d-%H%M%S)"
 ```
 
-The default cache is `outputs/experiments/E005/loki-cache-full-20261117`. The run selects a checkpoint on LOKI validation. Use `--arm g-rgb` and a fresh output name for geometry plus spatial RGB. [Recipe and access](experiments/E005-spatial-representations/README.md#loki-training-pilot).
+The default cache is `outputs/experiments/E005/loki-cache-full-20261117`. Add `--aalto-fast` to use the calibrated profile for `g-rgb-utonia` on Aalto's idle RTX 4080. It keeps the 64-track optimizer batch and FP32 model precision. The run selects a checkpoint on LOKI validation. Use `--arm g-rgb` and a fresh output name for geometry plus spatial RGB. [Recipe and access](experiments/E005-spatial-representations/README.md#loki-training-pilot) · [Throughput measurements](experiments/E005-spatial-representations/README.md#training-throughput-benchmark-2026-11-19).
 
 ### E005 ROAD-Waymo transfer
 

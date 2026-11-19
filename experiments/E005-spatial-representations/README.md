@@ -1,6 +1,6 @@
 # E005 — Spatial representation upgrades
 
-**Status: full LOKI cache complete and training launcher verified, 2026-11-18.** The user approved retiring the old ROAD D-DITR derived cache to free space. E004c remains stopped with its outputs preserved.
+**Status: LOKI pilot complete, 2026-11-19.** The user approved retiring the old ROAD D-DITR derived cache to free space. E004c remains stopped with its outputs preserved.
 
 ## Question and scope
 
@@ -75,6 +75,31 @@ Train `g-rgb-utonia` with geometry, DINO patches and both Tiny-Utonia levels. Th
 Reuse the E002a source recipe: equal-track cross-entropy, AdamW at 3e-4 with three epochs of linear warmup, 1e-4 weight decay, gradient clipping at 1.0, and 100 epochs with patience 15. Each update covers up to 64 complete tracks via gradient accumulation. Physical LiDAR batches contain one track and prefetch one batch. The geometry plus RGB arm uses up to four tracks per physical batch. Spatial chunks are bounded at two frames and 65,536 padded tokens. The largest cached LiDAR frame has 31,497 tokens. [Training command](../../README.md#e005-loki-training).
 
 On Aalto, launcher revision `36b5a2a` passed a CUDA smoke with the full cache: two 102-frame training tracks in one optimizer update, two 101-frame validation tracks, checkpoint reload, prediction export and offline W&B logging. Peak GPU allocation was 244 MB in this bounded run. Evidence: `outputs/experiments/E005/acceptance/20261118-053924Z-trainer-smoke/` on Aalto. Full pilot training remains user-launched.
+
+The user-launched `outputs/experiments/E005/runs/loki-g-rgb-utonia-s0-20261118-074440` completed 29 epochs in **24.21 h**. `best.pt` selected epoch 14 at **79.36% LOKI validation F1 / 0.361 CE**. Training took **21.67 h**, averaging about **44.8 min per epoch** and **20.1 s per optimizer update**. The 15-epoch patience window ran after the last improvement at epoch 14. Peak allocated GPU memory was 388 MB. The old two-layer Transformer fusion reference reached 74.68% F1. A matched old-feature BiLSTM control remains pending.
+
+### Training throughput benchmark (2026-11-19)
+
+On the Aalto RTX 4080, [the benchmark](../../scripts/benchmark-e005-training.py) replayed the same 64 seed-0 LOKI training tracks and initial weights, with one prefetch and two timed updates per profile in forward and reverse order. File pages for this subset were warmed. The source pilot and training defaults were untouched. Reported memory is peak CUDA allocated/reserved decimal GB.
+
+| Profile | Median update (s) | Exposed loader wait (s) | Peak allocated / reserved (GB) |
+|---|---:|---:|---:|
+| Baseline: two frames, one track, 65,536 ordinary tokens | 14.62 | 4.51 | 0.34 / 0.96 |
+| One million ordinary tokens, otherwise baseline | 11.36 | 4.53 | 3.09 / 3.69 |
+| Also use eight frames and 262,144 tokens per spatial chunk | 11.06 | 4.90 | 3.17 / 3.64 |
+| Also use four tracks per physical batch | 10.97 | 3.18 | 2.80 / 3.00 |
+
+The higher ordinary threshold saves **22%** end to end with identical measured training CE and F1 on this update. Peak speedup is **1.33×**, or **25% less time**. Adding larger chunks and batches saves only another 3.5% versus the threshold change, within run-to-run variation. With the same inputs preloaded in CPU RAM, baseline and four-track updates take 8.71 and 7.40 s, including host-to-device transfer and training compute. The four-track profile passes both the densest grouped recomputation case (4.69 million padded tokens) and a near-threshold ordinary case (998,728 tokens, 3.14 GB peak allocation).
+
+Raise the ordinary threshold first if the next training run needs this speedup. These are warmed, bounded measurements and do not establish sustained epoch throughput. CPU suite: 310 tests passed, 13 skipped. [Timing and memory evidence](../../outputs/experiments/E005/benchmarks/e005-chunks-20261119/benchmark.json).
+
+The subsequent calibration used measured bytes per padded token to find dense real batches near the RTX 4080's allocator limit. Ordinary execution fit the densest single track (2.116M tokens, 6.72 GB reserved), a 3.275M-token two-track group (9.80 GB), and a 3.405M-token four-track group (10.23 GB). Two and four tracks were nearly tied on the warmed updates. Two tracks reduced padding and allocator reserve and were selected for deployment with two reader workers. The reader now assembles the same FP16 tokens directly, skipping the FP32 intermediate array.
+
+On two held 64-track cohorts, the original pipeline took **18.17 / 14.82 s** and the tuned layout and reader took **5.99 / 5.59 s**. Median **16.50 → 5.79 s** is **2.85× faster**. The fast profile uses two whole tracks per microbatch, eight frames and at most 262,144 padded tokens per spatial chunk, recomputation above 3,274,888 padded tokens per microbatch, and two bounded reader workers. Enable it with `--aalto-fast` on Aalto. Batch membership, FP32 model precision and input features are preserved. Changing physical batch shapes can change the order of dropout draws. These short benchmarks do not establish a full-epoch speedup. The calibration run saved its layout and stress measurements before a benchmark wrapper failed in the final paired checks. A separate replay completed those checks. [Calibration](../../outputs/experiments/E005/benchmarks/e005-tune-20261119/benchmark.json) · [Paired replay](../../outputs/experiments/E005/benchmarks/e005-tune-pairs-20261119/benchmark.json).
+
+The opt-in profile also avoids materializing per-token keys and values. With one query per head, the key projection can be applied to the query before scoring, and the value projection can be applied after the weighted sum. The mask, dropout, trainable parameters and model definition are preserved. On a warmed matched replay this brought a 5.34 s update to 4.72 s and reduced peak reserve from 10.28 GB to 5.46 GB. Seeded CUDA parity checks found a maximum attention output difference of 2.84e-7 and gradient difference of 3.36e-8. [Persistent-update and attention evidence](../../outputs/experiments/E005/benchmarks/e005-fast-verify-20261119/benchmark.json).
+
+The deployed fast profile at `3c77bd4` completed three consecutive 64-track updates using the same model and optimizer, including 3.275M padded tokens in ordinary mode and 4.312M in recompute mode. It peaked at **6.23 GB allocated / 6.99 GB reserved**. Four-track folded attention also fit a 4.691M-token ordinary stress batch at **10.03 GB reserved**. Warm comparisons had similar model time near 4.44 s after subtracting exposed loader wait. The deployed two-track profile keeps the lower memory and padding load. [Final verification](../../outputs/experiments/E005/benchmarks/e005-fast-folded-20261119/benchmark.json).
 
 ## LOKI to ROAD-Waymo validation
 

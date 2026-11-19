@@ -15,10 +15,14 @@ BRANCH_FLAGS = {"g-rgb": ("geometry_valid", "rgb_valid"),
                 "g-rgb-utonia": ("geometry_valid", "rgb_valid", "lidar_valid")}
 
 
-def _frame_chunks(counts, max_frames, max_padded_tokens):
+def _frame_chunks(counts, max_frames, max_padded_tokens, *, sort_by_size=False):
     """Bound padded tokens while retaining each complete frame's token set."""
     chunk, maximum = [], 0
-    for index, count in enumerate(counts):
+    order = range(len(counts))
+    if sort_by_size:
+        order = sorted(order, key=counts.__getitem__, reverse=True)
+    for index in order:
+        count = counts[index]
         if not count:
             continue
         if count > max_padded_tokens:
@@ -131,6 +135,9 @@ class E005Classifier(nn.Module):
         self.pack_lidar_projection = profile.get("pack_lidar_projection", False)
         if type(self.pack_lidar_projection) is not bool:
             raise ValueError("Expected a boolean pack_lidar_projection setting")
+        self.sort_frames_by_tokens = profile.get("sort_frames_by_tokens", False)
+        if type(self.sort_frames_by_tokens) is not bool:
+            raise ValueError("Expected a boolean sort_frames_by_tokens setting")
         self.geometry = nn.Sequential(nn.Linear(20, 64), nn.GELU(), nn.Linear(64, 64), nn.GELU())
         self.geometry_norm = nn.LayerNorm(64)
         self.rgb = RGBPatchReadout(folded_attention=folded)
@@ -159,12 +166,16 @@ class E005Classifier(nn.Module):
 
     def _padded_tokens(self, counts):
         return sum(len(indices) * max(counts[i] for i in indices) for indices in
-                   _frame_chunks(counts, self.profile["frame_chunk"], self.profile["frame_tokens"]))
+                   self._chunks(counts))
+
+    def _chunks(self, counts):
+        return _frame_chunks(counts, self.profile["frame_chunk"], self.profile["frame_tokens"],
+                             sort_by_size=self.sort_frames_by_tokens)
 
     def _readout(self, module, counts, inputs, project, mode):
         device = self.head.weight.device
         result = self.head.weight.new_zeros((len(counts), 128))
-        for indices in _frame_chunks(counts, self.profile["frame_chunk"], self.profile["frame_tokens"]):
+        for indices in self._chunks(counts):
             cpu_inputs = inputs(indices)
 
             def encode(*values, frame_indices=tuple(indices)):

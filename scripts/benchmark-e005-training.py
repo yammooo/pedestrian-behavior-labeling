@@ -93,7 +93,8 @@ def padded_count(costs, indices, profile):
     total = 0
     for levels in zip(*(costs[i] for i in indices)):
         counts = list(itertools.chain.from_iterable(levels))
-        chunks = _frame_chunks(counts, profile["frame_chunk"], profile["frame_tokens"])
+        chunks = _frame_chunks(counts, profile["frame_chunk"], profile["frame_tokens"],
+                               sort_by_size=profile.get("sort_frames_by_tokens", False))
         total += sum(len(chunk) * max(counts[i] for i in chunk) for chunk in chunks)
     return total
 
@@ -289,11 +290,11 @@ def check_four_track_folded(dataset, order, costs, profile, measure):
             measure(name, dataset, indices, "folded-track-pair", prefetch=True, workers=2, repeat=repeat)
 
 
-def check_packed_projection(dataset, indices, state):
+def check_execution_parity(dataset, indices, state, candidate, *, training):
     batch = collate_e005([dataset[i] for i in indices])
     observations = []
-    for packed in (False, True):
-        model = build_model(DEFAULT_ARM, AALTO_FAST_PROFILE | {"pack_lidar_projection": packed}).to(DEVICE)
+    for profile in (AALTO_FAST_PROFILE, candidate):
+        model = build_model(DEFAULT_ARM, profile).to(DEVICE).train(training)
         model.load_state_dict(state)
         seed_run(0)
         logits = model(batch)
@@ -307,25 +308,47 @@ def check_packed_projection(dataset, indices, state):
             "gradient_max_abs_diff": max((x-y).abs().max().item() for x, y in zip(actual_grads, reference_grads))}
 
 
-def road_checks(prepared, dataset, order, state, record, measure, destination):
+def road_checks(prepared, dataset, order, state, record, measure, destination, *, tune_chunks):
     if len(order) < 128:
         raise ValueError("The ROAD benchmark requires two disjoint 64-track updates")
     costs = track_costs(dataset)
-    packed = AALTO_FAST_PROFILE | {"pack_lidar_projection": True}
-    wide = packed | {"ordinary_tokens": 4_194_304}
-    VARIANTS.update({"loki-fast": (AALTO_FAST_PROFILE, 2), "road-packed": (packed, 2), "road-wide": (wide, 4)})
-    cases = (("loki-fast", 2), ("road-packed", 2), ("road-wide", 2), ("road-packed", 4))
+    VARIANTS["loki-fast"] = AALTO_FAST_PROFILE, 2
+    if tune_chunks:
+        larger = AALTO_FAST_PROFILE | {"frame_chunk": 16, "frame_tokens": 524_288}
+        bucketed = larger | {"sort_frames_by_tokens": True}
+        wide_bucketed = bucketed | {"frame_chunk": 32}
+        VARIANTS.update({"road-16": (larger, 2), "road-16-bucketed": (bucketed, 2),
+                         "road-32-bucketed": (wide_bucketed, 2),
+                         "road-32-bucketed-packed": (wide_bucketed | {"pack_lidar_projection": True}, 2)})
+        cases = (("loki-fast", 2), ("road-16", 2), ("road-16-bucketed", 2),
+                 ("road-32-bucketed", 2), ("road-32-bucketed-packed", 2))
+        parity_name, parity_candidate = "size_order_parity", VARIANTS["road-32-bucketed-packed"][0]
+    else:
+        packed = AALTO_FAST_PROFILE | {"pack_lidar_projection": True}
+        wide = packed | {"ordinary_tokens": 4_194_304}
+        VARIANTS.update({"road-packed": (packed, 2), "road-wide": (wide, 4)})
+        cases = (("loki-fast", 2), ("road-packed", 2), ("road-wide", 2), ("road-packed", 4))
+        parity_name, parity_candidate = "packed_projection_parity", packed
     cohorts = (order[:64], order[64:128])
     record["cohort_locators"] = [[dataset.entries[i]["locator"] for i in cohort] for cohort in cohorts]
     measure("loki-fast", dataset, cohorts[0], "road-first-pass", prefetch=True, workers=2)
     parity_indices = [i for i in order if all(any(level) for level in costs[i])][:2]
-    record["packed_projection_parity"] = check_packed_projection(dataset, parity_indices, state)
+    record[parity_name] = check_execution_parity(dataset, parity_indices, state, parity_candidate,
+                                                 training=not tune_chunks)
+
+    def tokens_per_batch(indices, profile, max_tracks):
+        return [padded_count(costs, indices[i:i+max_tracks], profile) for i in range(0, len(indices), max_tracks)]
+
     scores = {}
     for n, indices in enumerate(cohorts):
         for i in indices:
             dataset[i]
         for variant, workers in cases[::1 if n == 0 else -1]:
-            row = measure(variant, dataset, indices, "road-warmed", prefetch=True, workers=workers, cohort=n)
+            profile, max_tracks = VARIANTS[variant]
+            tokens = tokens_per_batch(indices, profile, max_tracks)
+            row = measure(variant, dataset, indices, "road-warmed", prefetch=True, workers=workers, cohort=n,
+                          padded_tokens=sum(tokens), max_padded_tokens=max(tokens),
+                          recompute_microbatches=sum(x > profile["ordinary_tokens"] for x in tokens))
             if row["status"] == "complete":
                 scores.setdefault((variant, workers), []).append(row["seconds"])
     eligible = {case: median(times) for case, times in scores.items() if len(times) == len(cohorts)}
@@ -358,7 +381,7 @@ def road_checks(prepared, dataset, order, state, record, measure, destination):
         row = prepared["epoch_operation"](model, batches, optimizer, DEVICE,
                                            SETTINGS["clip_norm"], step_offset=402+offset)
         assert row["processed_tracks"] == 64 and row["optimizer_steps"] == 1
-        tokens = [padded_count(costs, indices[i:i+max_tracks], profile) for i in range(0, len(indices), max_tracks)]
+        tokens = tokens_per_batch(indices, profile, max_tracks)
         row.update(workload=f"road-persistent-{label}", status="complete", variant=variant, workers=workers,
                    max_padded_tokens=max(tokens), recompute_microbatches=sum(x > profile["ordinary_tokens"] for x in tokens),
                    loader_wait_seconds=batches.stats["wait_seconds"], peak_allocated_bytes=torch.cuda.max_memory_allocated(),
@@ -380,14 +403,15 @@ def run(args):
         raise ValueError("Use a fresh directory inside outputs/experiments/E005/benchmarks")
     if not torch.cuda.is_available():
         raise ValueError("The E005 benchmark requires CUDA")
+    road = args.road or args.road_chunks
     torch.set_num_threads(2)
     seed_run(0)
     free, total = torch.cuda.mem_get_info()
-    cap = (enable_aalto_fast(DEFAULT_ARM, "cuda") if args.verify_fast or args.road else
+    cap = (enable_aalto_fast(DEFAULT_ARM, "cuda") if args.verify_fast or road else
            min(int(total * .89), free - 768 * 1024**2) if args.tune or args.pairs_from else int(total * .75))
     if cap < total * .75:
         raise ValueError("GPU memory is occupied")
-    if not (args.verify_fast or args.road):
+    if not (args.verify_fast or road):
         torch.cuda.set_per_process_memory_fraction(cap / total)
     output.mkdir(parents=True, exist_ok=False)
     destinations = output / "benchmark.json"
@@ -395,10 +419,10 @@ def run(args):
               "torch": torch.__version__, "seed": 0, "rows": [],
               "gpu_total_bytes": total, "gpu_free_bytes": free, "allocator_cap_bytes": cap,
               "revision": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()}
-    source = "road-waymo" if args.road else SOURCE
+    source = "road-waymo" if road else SOURCE
     prepared = assembly(SimpleNamespace(outputs_root=root, arm=DEFAULT_ARM, source=source, cache=args.cache,
-                                        aalto_fast=args.verify_fast or args.road, allocator_cap_bytes=cap),
-                        allow_partial=args.road)
+                                        aalto_fast=args.verify_fast or road, allocator_cap_bytes=cap),
+                        allow_partial=road)
     try:
         dataset = prepared["dataset"](source, "training")
         order = torch.randperm(len(dataset), generator=torch.Generator().manual_seed(0)).tolist()
@@ -415,8 +439,8 @@ def run(args):
             print(record["rows"][-1], flush=True)
             return row
 
-        if args.road:
-            road_checks(prepared, dataset, order, state, record, measure, destinations)
+        if road:
+            road_checks(prepared, dataset, order, state, record, measure, destinations, tune_chunks=args.road_chunks)
             record["status"] = "complete"
             atomic_json(destinations, record)
             return
@@ -499,4 +523,5 @@ if __name__ == "__main__":
     modes.add_argument("--pairs-from", type=Path, help="Replay paired reader/attention controls from a calibration JSON")
     modes.add_argument("--verify-fast", action="store_true", help="Check the production profile across three updates")
     modes.add_argument("--road", action="store_true", help="Tune and stress the ROAD source on a bounded cache")
+    modes.add_argument("--road-chunks", action="store_true", help="Compare larger and size-ordered ROAD chunks")
     run(parser.parse_args())

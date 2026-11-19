@@ -4,7 +4,7 @@ from unittest.mock import patch
 import torch
 from torch.utils.checkpoint import checkpoint as torch_checkpoint
 
-from pedestrian_behavior.models.e005 import ARMS, build_model
+from pedestrian_behavior.models.e005 import ARMS, _frame_chunks, build_model
 
 
 PROFILE = {"frame_chunk": 1, "frame_tokens": 1024, "ordinary_tokens": 1}
@@ -134,6 +134,24 @@ class E005ModelTest(unittest.TestCase):
         actual.square().mean().backward()
         torch.testing.assert_close(actual, expected, atol=2e-6, rtol=2e-5)
         for candidate, reference in zip(packed.parameters(), standard.parameters()):
+            torch.testing.assert_close(candidate.grad, reference.grad, atol=2e-6, rtol=2e-5)
+
+    def test_size_ordered_chunks_preserve_frame_positions_and_gradients(self):
+        counts = [2, 9, 0, 9, 2, 2]
+        ordered = list(_frame_chunks(counts, 3, 18, sort_by_size=True))
+        self.assertEqual(ordered, [[1, 3], [0, 4, 5]])
+        arm = "g-rgb-utonia"
+        batch = batch_for(arm)
+        batch["lidar_levels"][0][0] = tokens(0, 77)
+        profile = PROFILE | {"fold_single_query": True}
+        standard = build_model(arm, profile).eval()
+        bucketed = build_model(arm, profile | {"frame_chunk": 4, "sort_frames_by_tokens": True}).eval()
+        bucketed.load_state_dict(standard.state_dict())
+        expected, actual = standard(batch), bucketed(batch)
+        expected.square().mean().backward()
+        actual.square().mean().backward()
+        torch.testing.assert_close(actual, expected, atol=2e-6, rtol=2e-5)
+        for candidate, reference in zip(bucketed.parameters(), standard.parameters()):
             torch.testing.assert_close(candidate.grad, reference.grad, atol=2e-6, rtol=2e-5)
 
     def test_lidar_stage_tokens_remain_in_stage3_then_stage5_order(self):

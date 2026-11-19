@@ -48,12 +48,14 @@ The frontal annotation population differs from LOKI's 3D-first population. Addit
 
 ## Acquired index and access (2026-10-02)
 
-On SSH host `aalto`:
+Original locations on SSH host `aalto`:
 
 - ROAD-Waymo: `/media/user20/F47C60057C5FC152/projects/road_waymo`
 - Waymo Perception v2: `/media/user20/F47C60057C5FC152/projects/waymo_v2`
 - Handoff to read first: `/home/user20/road_waymo_mapping/MERGED_PEDESTRIANS.md`
 - Verified index: `/home/user20/road_waymo_mapping/merged_pedestrians_20261002/`
+
+Use `/run/media/user20/T9/pedestrian-datasets/road_waymo` and `/run/media/user20/T9/pedestrian-datasets/waymo_v2` for the current raw copies. The 2026-11-19 copy matched the original checksums. The native check resolved the same 13,566 component paths across the 798 manifest scenes and read sample camera and LiDAR rows. Keep using the merged index above and pass the new `--waymo-root`. [Aalto mount and overrides](../../README.md#aalto-native-dataset-paths).
 
 Use `pedestrians.csv.gz` for annotations and `scene_manifest.json` for original modality paths. `report.json`, `export_audit.json`, `clip_summary.json`, and `road_label_definitions.json` contain provenance, coverage and native vocabularies. The manifest covers **798 distinct scenes/clips**: ROAD's 600 train and 198 validation clips, all drawn from Waymo **training**. ROAD's 202 test videos have no downloaded behaviour annotation JSON and contribute no rows. ROAD and Waymo split names are not interchangeable; preserve both split fields.
 

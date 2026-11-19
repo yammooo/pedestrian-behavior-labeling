@@ -57,6 +57,12 @@ git rev-parse HEAD
 
 Develop and validate locally, commit reviewed changes including `uv.lock` and push them, then pull and sync the intended revision on `aalto`. Verify its commit before a run; record any uncommitted changes. Run the installed package from this checkout instead of copying individual code files. Dataset paths remain machine-specific, and generated outputs stay ignored. Historical gallery workspaces remain evidence, not the current code checkout.
 
+## Aalto native dataset paths
+
+The Samsung T9 holds the raw datasets under `/run/media/user20/T9/pedestrian-datasets/`. Use `loki_data` for `--loki-root` or the LOKI `--native-input`, and `waymo_v2` for `--waymo-root`. The original ROAD package is `road_waymo`. The merged ROAD index is still at `/home/user20/road_waymo_mapping/merged_pedestrians_20261002`.
+
+If the T9 is unmounted, run `udisksctl mount --block-device /dev/disk/by-label/T9` on Aalto and use the reported mount path. Pass the native-root overrides when older manifests reference the former internal mount. Keep the paths recorded in frozen experiment artifacts for provenance.
+
 ## Inspect LOKI
 
 ```bash
@@ -114,9 +120,9 @@ Run the browser viewer on `aalto` from its isolated checkout. It reads completed
 ```bash
 cd /home/user20/projects/pedestrian-behavior-labeling-viewer
 uv run --locked --extra cu118 python -m pedestrian_behavior.inspection.predictions \
-  --loki-root /run/media/user20/F47C60057C5FC152/projects/loki_data \
+  --loki-root /run/media/user20/T9/pedestrian-datasets/loki_data \
   --road-index /home/user20/road_waymo_mapping/merged_pedestrians_20261002 \
-  --waymo-root /run/media/user20/F47C60057C5FC152/projects/waymo_v2
+  --waymo-root /run/media/user20/T9/pedestrian-datasets/waymo_v2
 ```
 
 From the ThinkPad, forward the loopback port and open [the viewer](http://127.0.0.1:8765):
@@ -243,7 +249,7 @@ uv run --locked --extra cpu python scripts/prepare-e001b.py \
 
 On `aalto`, use an isolated Git worktree and its own uv environment while E001 runs; do not pull/sync into the active training checkout. Pass absolute E001 collection/setup paths from `/home/user20/projects/pedestrian-behavior-labeling`, use `--extra cu118`, and set `--native-input` to the current mounted `loki_data` path (below) or `/home/user20/road_waymo_mapping/merged_pedestrians_20261002`. Write separate E001b outputs. The command requires a fresh directory, retains failure evidence and checks all original collection/setup file hashes before/after.
 
-The dataset partition can mount at `/run/media/user20/F47C60057C5FC152/projects` instead of the older `/media/user20/...` path stored in frozen manifests. Check the actual mount before preparation. On 2026-10-09, native Waymo files were verified under `/run/media/...`. Use the explicit E001b `--waymo-root` override; it retains native checksum checks and does not rewrite E001 references. From the isolated E001b checkout on `aalto`:
+Use the [current Aalto dataset paths](#aalto-native-dataset-paths) for native reads. The E001b `--waymo-root` override preserves the frozen E001 references and their checksum checks. From the isolated E001b checkout on `aalto`:
 
 ```bash
 cd /home/user20/projects/pedestrian-behavior-labeling-e001b
@@ -251,11 +257,11 @@ cd /home/user20/projects/pedestrian-behavior-labeling-e001b
   --collection /home/user20/projects/pedestrian-behavior-labeling/outputs/experiments/E001/reader-preparation/road-waymo \
   --setup /home/user20/projects/pedestrian-behavior-labeling/outputs/experiments/E001/data-setup/road-waymo/setup.json \
   --native-input /home/user20/road_waymo_mapping/merged_pedestrians_20261002 \
-  --waymo-root /run/media/user20/F47C60057C5FC152/projects/waymo_v2 \
+  --waymo-root /run/media/user20/T9/pedestrian-datasets/waymo_v2 \
   --output /home/user20/projects/pedestrian-behavior-labeling/outputs/experiments/E001b/bbox-native/road-waymo
 ```
 
-For LOKI native reads at this mount, pass `/run/media/user20/F47C60057C5FC152/projects/loki_data` as `--native-input`. Existing saved LOKI caches need no regeneration for a mount-path change. To restore an unmounted partition, run `udisksctl mount --block-device /dev/nvme0n1p3 --options ro` in a terminal on the laptop and use the mount location it reports. An `AlreadyMounted` response reports the current location; it does not mean the stored `/media/...` path exists.
+For LOKI native reads, pass `/run/media/user20/T9/pedestrian-datasets/loki_data` as `--native-input`. Reuse the existing saved LOKI caches.
 
 For saved-cache sample construction, call `pedestrian_behavior.experiments.e001b.dataset_from_extension(collection, setup_path, extension, split, configuration, baseline_statistics, bbox_statistics)`, with configuration `availability` or `geometry`. Both statistics come from the **training source**, including for opposite-dataset evaluation. Read the extension's `baseline_normalization` and `normalization` fields. Samples use unchanged E001 targets/references, with 14 or 20 input columns. The [E001b training commands](#e001b-training-and-evaluation) reuse the shared attempt runner.
 
@@ -269,7 +275,7 @@ Recompute native inputs while preserving E001/E001b. Run at the intended Git rev
 uv run --locked --extra cu118 python scripts/prepare-e001c.py \
   --collection /home/user20/projects/pedestrian-behavior-labeling/outputs/experiments/E001/reader-preparation/loki \
   --setup /home/user20/projects/pedestrian-behavior-labeling/outputs/experiments/E001/data-setup/loki/setup.json \
-  --native-input /run/media/user20/F47C60057C5FC152/projects/loki_data \
+  --native-input /run/media/user20/T9/pedestrian-datasets/loki_data \
   --loki-transform configs/loki-transform.json \
   --output /home/user20/projects/pedestrian-behavior-labeling/outputs/experiments/E001c/box-cache/loki
 
@@ -277,7 +283,7 @@ uv run --locked --extra cu118 python scripts/prepare-e001c.py \
   --collection /home/user20/projects/pedestrian-behavior-labeling/outputs/experiments/E001/reader-preparation/road-waymo \
   --setup /home/user20/projects/pedestrian-behavior-labeling/outputs/experiments/E001/data-setup/road-waymo/setup.json \
   --native-input /home/user20/road_waymo_mapping/merged_pedestrians_20261002 \
-  --waymo-root /run/media/user20/F47C60057C5FC152/projects/waymo_v2 \
+  --waymo-root /run/media/user20/T9/pedestrian-datasets/waymo_v2 \
   --output /home/user20/projects/pedestrian-behavior-labeling/outputs/experiments/E001c/box-cache/road-waymo
 ```
 
@@ -1054,7 +1060,7 @@ export PYTHONPATH="$PWD/src" OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_TH
 e005_python="$PWD/outputs/experiments/E002a/extractor-env/bin/python"
 uv run --no-project --python "$e005_python" python scripts/cache-e005.py \
   --device cuda --scope bounded \
-  --loki-root /run/media/user20/F47C60057C5FC152/projects/loki_data \
+  --loki-root /run/media/user20/T9/pedestrian-datasets/loki_data \
   --utonia-code outputs/experiments/E002a/dependencies/utonia \
   --tiny-checkpoint outputs/experiments/E005/online-probe-20261117/utonia_tiny.pth \
   --output outputs/experiments/E005/loki-check
@@ -1077,6 +1083,25 @@ uv run --no-project --python "$PWD/outputs/experiments/E002a/extractor-env/bin/p
 
 The default cache is `outputs/experiments/E005/loki-cache-full-20261117`. `g-rgb-utonia` uses the calibrated profile by default on Aalto's idle RTX 4080 Laptop GPU. It keeps the 64-track optimizer batch and FP32 model precision. Use `--no-aalto-fast` to select the original execution profile. The run selects a checkpoint on LOKI validation. Use `--arm g-rgb` and a fresh output name for geometry plus spatial RGB. [Recipe and access](experiments/E005-spatial-representations/README.md#loki-training-pilot) · [Throughput measurements](experiments/E005-spatial-representations/README.md#training-throughput-benchmark-2026-11-19).
 
+### E005 ROAD-Waymo cache and training check
+
+On Aalto, use the T9 for raw Waymo and the internal SSD for the feature cache:
+
+```bash
+cd /home/user20/projects/pedestrian-behavior-labeling-e002b-evaluation
+export PYTHONPATH="$PWD/src" OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+extractor="$PWD/outputs/experiments/E002a/extractor-env/bin/python"
+cache="/run/media/user20/F47C60057C5FC152/projects/e005-road-cache-bounded-$(date +%Y%m%d-%H%M%S)"
+benchmark="outputs/experiments/E005/benchmarks/road-bounded-$(date +%Y%m%d-%H%M%S)"
+
+uv run --no-project --python "$extractor" python scripts/cache-e005-road.py \
+  --waymo-root /run/media/user20/T9/pedestrian-datasets/waymo_v2 --output "$cache" &&
+uv run --no-project --python "$extractor" python scripts/benchmark-e005-training.py \
+  --road --cache "$cache" --output "$benchmark"
+```
+
+This checks a six-clip cache and times matched CUDA updates. `train-e005.py --source road-waymo` requires a complete ROAD cache supplied by `--cache`. Aalto uses the measured eight-frame layout with frames ordered by token count for `g-rgb-utonia`. [Protocol and measurements](experiments/E005-spatial-representations/README.md#road-waymo-cache-and-training-check).
+
 ### E005 ROAD-Waymo transfer
 
 After the LOKI training attempt completes, run this in the same Aalto checkout with the native ROAD-Waymo volume mounted:
@@ -1089,7 +1114,7 @@ export PYTHONPATH="$PWD/src" OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_TH
 uv run --no-project --python "$PWD/outputs/experiments/E002a/extractor-env/bin/python" \
   python scripts/evaluate-e005-transfer.py --device cuda \
   --source-run outputs/experiments/E005/runs/loki-g-rgb-utonia-s0-20261118-074440 \
-  --waymo-root /run/media/user20/F47C60057C5FC152/projects/waymo_v2 \
+  --waymo-root /run/media/user20/T9/pedestrian-datasets/waymo_v2 \
   --output "outputs/experiments/E005/transfer/loki-to-road-$(date +%Y%m%d-%H%M%S)"
 ```
 
@@ -1103,7 +1128,7 @@ From the same Aalto checkout and mounted ROAD volume, run:
 export PYTHONPATH="$PWD/src" OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
 uv run --no-project --python "$PWD/outputs/experiments/E002a/extractor-env/bin/python" \
   python scripts/train-e005-road-head.py \
-  --waymo-root /run/media/user20/F47C60057C5FC152/projects/waymo_v2
+  --waymo-root /run/media/user20/T9/pedestrian-datasets/waymo_v2
 ```
 
 The first launch extracts and checks frozen embeddings using CUDA, then fits the heads on CPU. Later launches reuse the completed cache. Results are local under `outputs/experiments/E005/head-budgets/runs/`. [Budgets and reporting](experiments/E005-spatial-representations/README.md#road-waymo-head-budgets).

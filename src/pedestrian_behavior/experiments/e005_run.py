@@ -25,6 +25,7 @@ DEFAULT_ARM = "g-rgb-utonia"
 DEFAULT_CACHE = Path("experiments/E005/loki-cache-full-20261117")
 PROFILE = {"frame_chunk": 2, "frame_tokens": 65_536, "ordinary_tokens": 65_536}
 AALTO_FAST_PROFILE = {"frame_chunk": 8, "frame_tokens": 262_144, "ordinary_tokens": 3_274_888, "fold_single_query": True}
+AALTO_ROAD_FAST_PROFILE = AALTO_FAST_PROFILE | {"sort_frames_by_tokens": True}
 AALTO_FAST_TRACKS, AALTO_FAST_READERS = 2, 2
 AALTO_GPU = "NVIDIA GeForce RTX 4080 Laptop GPU"
 SPLITS = ("training", "validation")
@@ -130,6 +131,8 @@ def assembly(args, *, allow_partial=False):
     lidar = args.arm == DEFAULT_ARM
     fast = getattr(args, "aalto_fast", False)
     profile = AALTO_FAST_PROFILE if fast else PROFILE
+    if fast and source == "road-waymo":
+        profile = AALTO_ROAD_FAST_PROFILE
     max_tracks = AALTO_FAST_TRACKS if fast else 1 if lidar else 4
     workers = AALTO_FAST_READERS if fast else 1
     warmup = SETTINGS["warmup_epochs"] * ((len(datasets["training"]) + 63) // 64)

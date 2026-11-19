@@ -28,7 +28,7 @@ Updated **2026-11-16**. We are developing a reliable **offline, given-track pede
 
 ## Next work
 
-1. Run the [E005 ROAD head-budget probe](../experiments/E005-spatial-representations/README.md#road-waymo-head-budgets) at 25–1,000 labeled tracks. The matched LOKI BiLSTM with old DINO CLS and D-DITR features remains pending.
+1. The [E005 ROAD bounded cache and GPU benchmark](../experiments/E005-spatial-representations/README.md#road-waymo-cache-and-training-check) passed. Full ROAD cache preparation and training are pending. A ROAD-trained E005 enables comparison on the same LOKI assessment and draws as E004a.
 2. Resolve the observed calibration-to-assessment error gap before describing automatic acceptance as reliable. Retain class retention and achieved errors; statistical risk guarantees and uncertainty over new recordings remain open. No additional experiment is launched by this review.
 3. Arrange a separate backup for valuable checkpoints/predictions; external storage is **TBD**. Keep the [closure schedule](research.md#schedule); broader sweeps remain deferred while the authorized E005 preparation proceeds.
 

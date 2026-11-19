@@ -951,7 +951,7 @@ Official HF `model.safetensors` is also accepted: SHA256 `9a21ac3df0c63839d62612
 
 Use an isolated ignored `outputs/experiments/E002a/extractor-env`; never change E001 environments or add CUDA encoder dependencies to the main project. [Pinned direct dependencies](requirements.txt); save the fully resolved freeze/check output with execution evidence. CUDA 12.6 PyTorch wheels and matching prebuilt FlashAttention/torch-scatter avoid the host's older CUDA 11.7 compiler. Author PTv3 source is loaded without its eager imports of unrelated custom-op architectures; source files are not patched. The adapter verifies code revisions and weight/config hashes.
 
-Code moves through Git; verify the remote revision. Native mount on aalto is `/run/media/user20/F47C60057C5FC152/projects`, not the old `/media` path. Native data remains read-only. Example from repository root (set paths to the pinned author clones/weights):
+Code moves through Git; verify the remote revision. Use the [current Aalto dataset paths](../../README.md#aalto-native-dataset-paths). Native data remains read-only. Example from repository root (set paths to the pinned author clones/weights):
 
 ```bash
 probe_root="$PWD/outputs/experiments/E002a"
@@ -962,8 +962,8 @@ uv run --no-project --python "$probe_root/extractor-env/bin/python" python scrip
   --ditr-weights "$probe_root/weights/ditr-nuscenes.pth" \
   --dino-code "$probe_root/dependencies/dinov3" \
   --dino-weights /path/to/official-dinov3-vitb16.pth \
-  --loki-root /run/media/user20/F47C60057C5FC152/projects/loki_data \
-  --waymo-root /run/media/user20/F47C60057C5FC152/projects/waymo_v2
+  --loki-root /run/media/user20/T9/pedestrian-datasets/loki_data \
+  --waymo-root /run/media/user20/T9/pedestrian-datasets/waymo_v2
 ```
 
 `--road-index` and `--outputs-root` override frozen-reference storage locations without rewriting manifests. Output directory must be fresh and under `outputs-root/experiments/E002a`. Omitting `--dino-weights` explicitly produces partial LiDAR/crop evidence; there is no alternate RGB checkpoint fallback. Results are local `probe.json`, `report.md`, `index.html`, `panels/`, `fixtures/` and `workloads.json`; failures retain traceback/status and propagate. No resume/retry framework.

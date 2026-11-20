@@ -1120,6 +1120,22 @@ uv run --no-project --python "$PWD/outputs/experiments/E002a/extractor-env/bin/p
 
 Use the actual completed LOKI attempt path if it differs. The command uses its selected checkpoint and normalization, encodes ROAD observations online and writes ROAD validation predictions and metrics. [Transfer protocol](experiments/E005-spatial-representations/README.md#loki-to-road-waymo-validation).
 
+### E005 direct ROAD-Waymo to LOKI evaluation
+
+From the same Aalto checkout, use the selected ROAD checkpoint and the existing LOKI cache:
+
+```bash
+export PYTHONPATH="$PWD/src" OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+uv run --no-project --python "$PWD/outputs/experiments/E002a/extractor-env/bin/python" \
+  python scripts/evaluate-e005-road-to-loki.py --device cuda \
+  --source-run outputs/experiments/E005/runs/road-waymo-g-rgb-utonia-s0-20261120-030721 \
+  --cache outputs/experiments/E005/loki-cache-full-20261117 \
+  --reference outputs/experiments/E004a/runs/20261113-082847-737608Z \
+  --output "outputs/experiments/E005/transfer/road-to-loki-direct-$(date +%Y%m%d-%H%M%S)"
+```
+
+This applies ROAD normalization and evaluates all 1,861 LOKI validation tracks with the original source head. It also reports the same development and assessment partitions as E004a. [Protocol](experiments/E005-spatial-representations/README.md#direct-road-waymo-to-loki-validation).
+
 ### E005 ROAD-Waymo head budgets
 
 From the same Aalto checkout and mounted ROAD volume, run:

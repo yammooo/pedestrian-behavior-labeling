@@ -1136,6 +1136,23 @@ uv run --no-project --python "$PWD/outputs/experiments/E002a/extractor-env/bin/p
 
 This applies ROAD normalization and evaluates all 1,861 LOKI validation tracks with the original source head. It also reports the same development and assessment partitions as E004a. [Protocol](experiments/E005-spatial-representations/README.md#direct-road-waymo-to-loki-validation).
 
+### E005 matched LOKI head budgets
+
+From the same Aalto checkout, run the matched head fits after direct evaluation:
+
+```bash
+export PYTHONPATH="$PWD/src" OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+uv run --no-project --python "$PWD/outputs/experiments/E002a/extractor-env/bin/python" \
+  python scripts/train-e005-road-to-loki-head.py --device cuda \
+  --source-run outputs/experiments/E005/runs/road-waymo-g-rgb-utonia-s0-20261120-030721 \
+  --cache outputs/experiments/E005/loki-cache-full-20261117 \
+  --reference outputs/experiments/E004a/runs/20261113-082847-737608Z \
+  --direct outputs/experiments/E005/transfer/road-to-loki-direct-20261120 \
+  --output "outputs/experiments/E005/head-budgets/runs/road-to-loki-$(date +%Y%m%d-%H%M%S)"
+```
+
+The run uses the exact E004a LOKI track IDs for 30 fits and keeps its validation partitions. [Protocol](experiments/E005-spatial-representations/README.md#matched-loki-head-budgets).
+
 ### E005 ROAD-Waymo head budgets
 
 From the same Aalto checkout and mounted ROAD volume, run:

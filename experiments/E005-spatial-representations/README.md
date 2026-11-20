@@ -119,6 +119,12 @@ The 16- and 32-frame layouts took **9.20–14.03 s/update**, against **8.37 s** 
 
 Evaluate the ROAD-selected E005 checkpoint on all 1,861 frozen LOKI validation tracks using the existing LOKI spatial cache and ROAD training statistics. Compare the unchanged source heads on the exact E004a split, with 930 LOKI development/calibration tracks and 931 assessment tracks. The checkpoint is selected only on ROAD validation. LOKI labels are used for scoring and, separately, choosing confidence thresholds on the calibration partition. Held-out tests remain closed. [Command](../../README.md#e005-direct-road-waymo-to-loki-evaluation) · [E004a reference](../E004a-head-label-budget/README.md#evaluation-and-annotation-accounting).
 
+### Matched LOKI head budgets
+
+Starting from the same ROAD-selected E005 checkpoint, fit only the original classification head at 25, 50, 100, 250, 500 and 1,000 LOKI fitting tracks, with five draws per budget. Each fit uses the exact saved track IDs and labels from the E004a early-check run. Extract the frozen 128-D features once for the 3,099 unique fitting tracks and all 1,861 validation tracks. Replay the saved direct validation predictions to verify the embeddings.
+
+Use the E004a early-check fit recipe, with the same 930 development/calibration tracks for checkpoint and cutoff selection and the same 931 assessment tracks for reporting. The primary comparison is paired at 100 fitting tracks. Report track-weighted coverage and observed error at the 5% calibration target alongside macro-F1. The 930 development/calibration tracks remain additional label access. [E004a early-check protocol](../E004a-head-label-budget/README.md#early-check-rerun-2026-11-13).
+
 ## LOKI to ROAD-Waymo validation
 
 Evaluate the completed `g-rgb-utonia` run's LOKI-selected `best.pt` once on the frozen ROAD-Waymo validation split (1,110 tracks across 78 clips). Use the checkpoint's LOKI geometry statistics throughout. Compute DINO patch features and Tiny-Utonia stage features from native ROAD observations online. Reuse each encoded sweep for the eligible pedestrians in its clip, then release that clip's tensors. Only predictions, metrics and run evidence are saved to disk. [Command](../../README.md#e005-road-waymo-transfer).

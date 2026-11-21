@@ -126,6 +126,7 @@ def fit(model, batches, validate, optimizer, device, output, checkpoint_referenc
             "validation_ce": validation["track_ce"],
             "validation_f1": validation["track_weighted"]["macro_f1"],
             "selected": selected, "non_improving_epochs": stale, "stopping_reason": None}
+        row.update({key: value for key, value in validation.items() if key.startswith("val/")})
         if check_updates is not None:
             row["optimizer_step"] = 0
         history.append(row)
@@ -156,6 +157,7 @@ def fit(model, batches, validate, optimizer, device, output, checkpoint_referenc
             raise ValueError("Training operation did not reach the scheduled optimizer update")
         validation = validate(model)
         row.update(validation_ce=validation["track_ce"], validation_f1=validation["track_weighted"]["macro_f1"])
+        row.update({key: value for key, value in validation.items() if key.startswith("val/")})
         strict_improvement = best is None or row["validation_f1"] > best["f1"]
         best, stale, selected = select_epoch(best, row["validation_f1"], row["validation_ce"], epoch, stale)
         if check_updates is not None:

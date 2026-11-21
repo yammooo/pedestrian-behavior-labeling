@@ -197,7 +197,8 @@ def run_attempt(source, configuration, variant, output, device, smoke=False, *, 
         dataset = prepared["dataset"]
         batching = prepared.get("batches", track_batches)
         training = batching(dataset(source, "training"), training=True, seed=settings["seed"])
-        validation = batching(dataset(source, "validation"), seed=settings["seed"])
+        validation = (None if "validation_metrics" in prepared else
+                      batching(dataset(source, "validation"), seed=settings["seed"]))
         # The same training loader survives every epoch; smoke only restricts iteration.
         class SmokeBatches:
             def __iter__(self):
@@ -237,6 +238,7 @@ def run_attempt(source, configuration, variant, output, device, smoke=False, *, 
             write_json(output/"provenance.json", provenance)
             metrics = {"epoch": row["epoch"], "val/loss": row["validation_ce"],
                        "val/macro_f1": row["validation_f1"]}
+            metrics.update({key: value for key, value in row.items() if key.startswith("val/")})
             if row["training_ce"] is not None:
                 metrics.update({"train/loss_epoch": row["training_ce"], "train/macro_f1": row["training_f1"]})
             masking = row.get("masking")
@@ -257,8 +259,10 @@ def run_attempt(source, configuration, variant, output, device, smoke=False, *, 
             run.log(metrics)
         optimizer = (prepared["optimizer_factory"](model) if "optimizer_factory" in prepared else
                      torch.optim.AdamW((p for p in model.parameters() if p.requires_grad), **settings["optimizer"]))
+        validate = (prepared["validation_metrics"] if "validation_metrics" in prepared else
+                    lambda m: prediction_metrics(validation_predictions(m), len(classes)))
         fitted = fit(model, SmokeBatches() if smoke and not prepared.get("custom_smoke") else training,
-                     lambda m: prediction_metrics(validation_predictions(m), len(classes)),
+                     validate,
                      optimizer, device, output,
                      {"config": config, "normalization": statistics, "provenance_file": "provenance.json"}, on_epoch,
                      epochs=1 if smoke else settings["epochs"], patience=settings["patience"], clip_norm=settings["clip_norm"], on_step=on_step,

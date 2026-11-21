@@ -1166,6 +1166,30 @@ uv run --no-project --python "$PWD/outputs/experiments/E002a/extractor-env/bin/p
 
 The first launch extracts and checks frozen embeddings using CUDA, then fits the heads on CPU. Later launches reuse the completed cache. Results are local under `outputs/experiments/E005/head-budgets/runs/`. [Budgets and reporting](experiments/E005-spatial-representations/README.md#road-waymo-head-budgets).
 
+### E005 joint training
+
+From the Aalto experiment checkout, calibrate the mixed CUDA workload, then launch one seed-0 joint run using the selected execution profile:
+
+```bash
+cd /home/user20/projects/pedestrian-behavior-labeling-e002b-evaluation
+git pull --ff-only
+export PYTHONPATH="$PWD/src" OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+extractor="$PWD/outputs/experiments/E002a/extractor-env/bin/python"
+e005="$PWD/outputs/experiments/E005"
+loki="$e005/loki-cache-full-20261117"
+road="/run/media/user20/F47C60057C5FC152/projects/e005-road-cache-full-20261119-224937"
+stamp="$(date +%Y%m%d-%H%M%S)"
+calibration="$e005/benchmarks/joint-$stamp"
+
+uv run --no-project --python "$extractor" python scripts/benchmark-e005-training.py \
+  --joint --loki-cache "$loki" --road-cache "$road" --output "$calibration" &&
+uv run --no-project --python "$extractor" python scripts/train-e005.py \
+  --source joint --device cuda --loki-cache "$loki" --road-cache "$road" \
+  --joint-profile "$calibration/benchmark.json" --output "$e005/runs/joint-g-rgb-utonia-s0-$stamp"
+```
+
+[Joint protocol](experiments/E005-spatial-representations/README.md#joint-training).
+
 ## E004c adaptation-depth label budgets
 
 [E004c](experiments/E004c-adaptation-depth-budgets/README.md) compares source-initialized temporal+head adaptation with target-only task-model training at 25, 100 and 1,000 LOKI tracks, using the same five E004a draws. Existing head-only and unadapted-source results are reused.

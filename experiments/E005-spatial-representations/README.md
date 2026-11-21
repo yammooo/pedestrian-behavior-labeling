@@ -144,3 +144,11 @@ Can a small number of labeled ROAD tracks restore Waiting-to-cross performance w
 Fit the original 516-parameter head at **25, 50, 100, 250, 500 and 1,000 tracks** over five nested, recording-diverse draws. Every fit starts from the same source head. The zero-budget anchor is the unchanged head. Use the [E004a early-check recipe](../E004a-head-label-budget/README.md#early-check-rerun-2026-11-13). Split ROAD validation clips in half with seed 0 for development/calibration (39 clips, 418 tracks, 17,487 GT timesteps) and assessment (39 clips, 692 tracks, 27,901 GT timesteps). Fitting budgets count complete labeled tracks. The 418 development/calibration tracks are additional label access.
 
 Report assessment track-weighted macro-F1, class precision, recall and F1, and achieved coverage and error at the E004a calibration targets, with 5% the main target. Save the budget figures and numerical results locally. ROAD validation was inspected during development. A label-savings comparison requires a target-only control on these draws. Held-out tests stay closed. [Launch command](../../README.md#e005-road-waymo-head-budgets).
+
+### Joint training
+
+Train one seed-0 `g-rgb-utonia` model with a shared head on both frozen training populations. The model and optimizer recipe match the single-source runs. Use one pooled, training-only geometry normalization and reuse both spatial caches.
+
+Shuffle each source independently and cycle through its tracks across epochs. Each epoch uses 6,477 draws per source and 203 optimizer updates. Regular updates accumulate 32 tracks per source and the final update accumulates 13 per source. Whole tracks and their native availability masks enter the unchanged equal-track loss.
+
+Evaluate the full ROAD and LOKI validation sets separately each epoch. Select by the mean of their track-weighted macro-F1 scores, then the mean track CE, then the earlier epoch. Keep the new dataset outside training and checkpoint selection. The Aalto calibration compares matched balanced updates and verifies the fastest eligible layout on a longer-track workload. [Commands](../../README.md#e005-joint-training).

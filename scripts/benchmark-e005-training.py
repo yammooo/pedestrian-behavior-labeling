@@ -14,8 +14,8 @@ from unittest.mock import patch
 import torch
 
 from pedestrian_behavior.experiments.e005_cache import atomic_json, collate_e005
-from pedestrian_behavior.experiments.e005_run import (AALTO_FAST_PROFILE, DEFAULT_ARM, SETTINGS, SOURCE, SpatialBatches,
-                                                     assembly, enable_aalto_fast)
+from pedestrian_behavior.experiments.e005_run import (AALTO_FAST_PROFILE, AALTO_ROAD_FAST_PROFILE, DEFAULT_ARM, SETTINGS,
+                                                     SOURCE, SpatialBatches, assembly, enable_aalto_fast)
 from pedestrian_behavior.models.e005 import SpatialReadout, build_model, _frame_chunks
 from pedestrian_behavior.training import seed_run
 
@@ -31,23 +31,24 @@ DEVICE = torch.device("cuda")
 TUNING_LAYOUTS = ((1, 2), (2, 8), (4, 8), (4, 16), (8, 16))
 
 
-class OneUpdate(SpatialBatches):
-    def __init__(self, dataset, indices, max_tracks, prefetch, workers):
-        super().__init__(dataset, {"max_tracks": max_tracks}, prefetch=prefetch, prefetch_workers=workers)
+class OneUpdate:
+    def __init__(self, dataset, indices, max_tracks, prefetch, workers, batch_type=SpatialBatches):
+        batches = batch_type(dataset, {"max_tracks": max_tracks}, prefetch=prefetch, prefetch_workers=workers)
+        self.microbatches, self.stats = batches.microbatches, batches.stats
         self.indices = indices
 
     def __iter__(self):
         yield self.indices
 
 
-def timed(prepared, state, dataset, indices, variant, *, prefetch, workers=1):
+def timed(prepared, state, dataset, indices, variant, *, prefetch, workers=1, batch_type=SpatialBatches):
     profile, max_tracks = VARIANTS[variant]
     seed_run(0)
     torch.cuda.empty_cache()
     model = build_model(DEFAULT_ARM, profile).to(DEVICE)
     model.load_state_dict(state)
     optimizer = torch.optim.AdamW(model.parameters(), **SETTINGS["optimizer"])
-    batches = OneUpdate(dataset, indices, max_tracks, prefetch, workers)
+    batches = OneUpdate(dataset, indices, max_tracks, prefetch, workers, batch_type)
     torch.cuda.synchronize()
     torch.cuda.reset_peak_memory_stats()
     try:
@@ -409,11 +410,11 @@ def run(args):
     torch.set_num_threads(2)
     seed_run(0)
     free, total = torch.cuda.mem_get_info()
-    cap = (enable_aalto_fast(DEFAULT_ARM, "cuda") if args.verify_fast or road else
+    cap = (enable_aalto_fast(DEFAULT_ARM, "cuda") if args.verify_fast or road or args.joint else
            min(int(total * .89), free - 768 * 1024**2) if args.tune or args.pairs_from else int(total * .75))
     if cap < total * .75:
         raise ValueError("GPU memory is occupied")
-    if not (args.verify_fast or road):
+    if not (args.verify_fast or road or args.joint):
         torch.cuda.set_per_process_memory_fraction(cap / total)
     output.mkdir(parents=True, exist_ok=False)
     destinations = output / "benchmark.json"
@@ -421,6 +422,9 @@ def run(args):
               "torch": torch.__version__, "seed": 0, "rows": [],
               "gpu_total_bytes": total, "gpu_free_bytes": free, "allocator_cap_bytes": cap,
               "revision": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()}
+    if args.joint:
+        joint_checks(args, root, cap, record, destinations)
+        return
     source = "road-waymo" if road else SOURCE
     prepared = assembly(SimpleNamespace(outputs_root=root, arm=DEFAULT_ARM, source=source, cache=args.cache,
                                         aalto_fast=args.verify_fast or road, allocator_cap_bytes=cap),
@@ -515,6 +519,72 @@ def run(args):
         prepared["close"]()
 
 
+def joint_checks(args, root, cap, record, destination):
+    """Compare complete balanced training updates and confirm the winner under a longer-track workload."""
+    prepared = assembly(SimpleNamespace(outputs_root=root, arm=DEFAULT_ARM, source="joint", cache=None,
+                                        loki_cache=args.loki_cache, road_cache=args.road_cache, joint_profile=None,
+                                        aalto_fast=True, allocator_cap_bytes=cap))
+    try:
+        dataset = prepared["dataset"]("joint", "training")
+        logical = prepared["batches"](dataset, training=True, seed=0)
+        cohorts = list(itertools.islice(logical, 2))
+        state = build_model(DEFAULT_ARM, ORIGINAL_PROFILE).state_dict()
+        base = AALTO_ROAD_FAST_PROFILE
+        VARIANTS.update({
+            "joint-reference": (base, 2),
+            "joint-16-frames": (base | {"frame_chunk": 16, "frame_tokens": 524_288}, 2),
+            "joint-32-frames": (base | {"frame_chunk": 32, "frame_tokens": 524_288}, 2),
+            "joint-four-tracks": (base | {"frame_chunk": 16, "frame_tokens": 524_288,
+                                          "ordinary_tokens": 4_194_304}, 4),
+            "joint-eight-tracks": (base | {"frame_chunk": 32, "frame_tokens": 524_288}, 8),
+        })
+        cases = (("joint-reference", 2), ("joint-16-frames", 2), ("joint-32-frames", 2),
+                 ("joint-four-tracks", 2), ("joint-eight-tracks", 2), ("joint-reference", 4),
+                 ("joint-four-tracks", 4))
+        record["source"] = "joint"
+        record["cohort_locators"] = [[dataset.entries[i]["locator"] for i in cohort] for cohort in cohorts]
+
+        def measure(name, workers, indices, workload):
+            row = timed(prepared, state, dataset, indices, name, prefetch=True, workers=workers,
+                        batch_type=type(logical))
+            row.update(workload=workload, workers=workers)
+            record["rows"].append(row)
+            atomic_json(destination, record)
+            print(row, flush=True)
+            return row
+
+        measure(*cases[0], cohorts[0], "warmup")
+        scores = {}
+        for i, cohort in enumerate(cohorts):
+            for name, workers in cases[::1 if i == 0 else -1]:
+                row = measure(name, workers, cohort, f"matched-{i}")
+                if row["status"] == "complete" and row["peak_reserved_bytes"] < cap * .95:
+                    scores.setdefault((name, workers), []).append(row["seconds"])
+        ranked = sorted((case for case in scores if len(scores[case]) == len(cohorts)),
+                        key=lambda case: median(scores[case]))
+        # Put long tracks from both sources together and keep a full balanced update.
+        long_tracks = []
+        for source_indices in dataset.source_indices.values():
+            longest = sorted(source_indices, key=lambda i: dataset.entries[i]["slots"], reverse=True)[:4]
+            same_source = set(source_indices)
+            rest = [i for i in cohorts[1] if i in same_source and i not in longest]
+            long_tracks.append((longest + rest)[:32])
+        longest_first = list(itertools.chain.from_iterable(zip(*long_tracks, strict=True)))
+        for name, workers in ranked:
+            row = measure(name, workers, longest_first, "long-tracks")
+            if row["status"] == "complete" and row["peak_reserved_bytes"] < cap * .95:
+                profile, tracks = VARIANTS[name]
+                record["winner"] = {"variant": name, "profile": profile, "max_tracks": tracks,
+                                    "workers": workers, "median_seconds": median(scores[name, workers])}
+                record["status"] = "complete"
+                atomic_json(destination, record)
+                print("Selected", record["winner"], flush=True)
+                return
+        raise RuntimeError("No joint execution layout passed the CUDA calibration")
+    finally:
+        prepared["close"]()
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--outputs-root", type=Path, default=Path("outputs"))
@@ -526,4 +596,7 @@ if __name__ == "__main__":
     modes.add_argument("--verify-fast", action="store_true", help="Check the production profile across three updates")
     modes.add_argument("--road", action="store_true", help="Tune and stress the ROAD source on a bounded cache")
     modes.add_argument("--road-chunks", action="store_true", help="Compare larger and size-ordered ROAD chunks")
+    modes.add_argument("--joint", action="store_true", help="Compare execution layouts on balanced ROAD + LOKI updates")
+    parser.add_argument("--loki-cache", type=Path, help="Complete LOKI cache for the joint benchmark")
+    parser.add_argument("--road-cache", type=Path, help="Complete ROAD cache for the joint benchmark")
     run(parser.parse_args())

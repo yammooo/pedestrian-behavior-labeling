@@ -527,7 +527,8 @@ class E005FeatureDataset:
             flags.append(lidar_valid)
             source_flags["lidar_valid"] = lidar_valid.numpy()
             sample["lidar_levels"] = (stage3, stage5)
-        return sample | {"flags": torch.stack(flags, -1).float(), "prediction_metadata": {"source_flags": source_flags}}
+        return sample | {"flags": torch.stack(flags, -1).float(), "prediction_metadata": {
+            "group": self.entries[index]["group"], "source_flags": source_flags}}
 
 
 def collate_e005(samples):

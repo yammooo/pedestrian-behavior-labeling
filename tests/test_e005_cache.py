@@ -16,6 +16,7 @@ from pedestrian_behavior.experiments.e005_cache import (
     rgb_patch_cues,
 )
 from pedestrian_behavior.data.preparation import checksum
+from pedestrian_behavior.evaluation import predict, prediction_metrics
 
 
 def make_cache(root):
@@ -53,7 +54,7 @@ def make_cache(root):
 
 
 class Baseline:
-    entries = [{"locator": "a"}, {"locator": "b"}]
+    entries = [{"locator": "a", "group": "scenario_001"}, {"locator": "b", "group": "scenario_001"}]
     rows = {
         "a": (3, "a", "a.npz"),
         "b": (1, "b", "b.npz"),
@@ -106,6 +107,9 @@ class E005CacheTest(unittest.TestCase):
             self.assertEqual(tuple(batch["lidar_levels"][0][3].shape), (1, 77))
             self.assertEqual(tuple(batch["lidar_levels"][1][4].shape), (0, 221))
             self.assertTrue(batch["flags"][1, 0, 2].item())
+            tracks = predict(torch.nn.Identity(), [batch], torch.device("cpu"),
+                             lambda _, b, device: torch.zeros((*b["targets"].shape, 4), device=device))
+            self.assertEqual(prediction_metrics(tracks, 4)["denominators"]["groups"], 1)
             cache.close()
 
             with (root / "arrays" / "stage3_features.bin").open("r+b") as stream:

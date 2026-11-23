@@ -34,6 +34,9 @@ E005_RUNS = {
     "road-waymo": "road-waymo-g-rgb-utonia-s0-20261120-030721",
     "joint": "joint-g-rgb-utonia-s0-20261122-001910",
 }
+E005_LOKI_RUN = "loki-g-rgb-utonia-s0-20261118-074440"
+DEFAULT_SUBSET_PLAN = Path(
+    "outputs/experiments/E006c/runs/euro-pvi-head-adaptation-20261123-133549/subset-plans.json")
 CLASS_NAMES = ("MOVING", "STOPPED", "WAITING_TO_CROSS", "CROSSING")
 BUDGETS = (25, 50, 100, 250)
 DRAWS = tuple(range(5))
@@ -100,7 +103,7 @@ def _check_audit(path, dataset):
     return audit, cal_groups, fit_groups, dev_groups, assessment_groups
 
 
-def _load_models(outputs_root, e006b_run, device):
+def _load_models(outputs_root, e006b_run, device, sources=None):
     summary_path = e006b_run / "summary.json"
     status_path = e006b_run / "status.json"
     if not summary_path.is_file() or json.loads(status_path.read_text()).get("status") != "complete":
@@ -110,7 +113,9 @@ def _load_models(outputs_root, e006b_run, device):
         raise ValueError("E006b assessment lineage does not match the frozen audit")
 
     models, evidence = {}, {}
-    for source, run_name in E005_RUNS.items():
+    all_runs = E005_RUNS | {"loki": E005_LOKI_RUN}
+    for source in (tuple(E005_RUNS) if sources is None else sources):
+        run_name = all_runs[source]
         run = outputs_root / "experiments/E005/runs" / run_name
         config = json.loads((run / "config.json").read_text())
         checkpoint_path = run / "best.pt"
@@ -144,7 +149,7 @@ def _load_models(outputs_root, e006b_run, device):
     tiny_sha = checksum(tiny_path)
     if ({"dino": dino_sha, "tiny_utonia": tiny_sha} != summary["encoder_sha256"]):
         raise ValueError("E006b frozen encoder assets differ from the completed assessment")
-    for source in E005_RUNS:
+    for source in models:
         caches = models[source]["config"]["caches"].values() if source == "joint" else (
             models[source]["config"]["cache"],)
         for cache in caches:
@@ -309,6 +314,44 @@ def _split_records(results, fit_sequences, dev_sequences, assessment_sequences):
     return output
 
 
+def _load_saved_subset_plan(path, rows, fit_groups, dev_groups, assessment_groups):
+    plan = json.loads(Path(path).read_text())
+    expected_groups = {"fit_groups": fit_groups, "development_groups": dev_groups,
+                      "assessment_groups": assessment_groups}
+    if plan.get("experiment") != "E006c" or any(
+            [tuple(group) for group in plan.get(name, [])] != groups
+            for name, groups in expected_groups.items()):
+        raise ValueError("Saved E006c subset plan uses a different frozen split")
+    protocol = plan.get("protocol", {})
+    if (protocol.get("budget_tracks") != list(BUDGETS) or protocol.get("draws") != list(DRAWS)
+            or protocol.get("fit_seed") != 0 or protocol.get("error_target") != .05):
+        raise ValueError("Saved E006c subset plan uses a different fit design")
+    runs = plan.get("runs", [])
+    by_key = {(int(row["budget"]), int(row["draw"])): row for row in runs}
+    if len(runs) != len(BUDGETS) * len(DRAWS) or set(by_key) != {
+            (budget, draw) for budget in BUDGETS for draw in DRAWS}:
+        raise ValueError("Saved E006c subset plan does not contain all 20 budget/draw selections")
+    available = {row["locator"]: row for row in rows}
+    selections = {}
+    for key, run in by_key.items():
+        selected = run.get("selected_tracks", [])
+        budget, draw = key
+        locators = [entry["locator"] for entry in selected]
+        if (len(locators) != budget or len(set(locators)) != budget
+                or not set(locators) <= available.keys()):
+            raise ValueError(f"Saved E006c selection {key} does not match the frozen fit pool")
+        selections[key] = locators
+    for draw in DRAWS:
+        for small, large in zip(BUDGETS, BUDGETS[1:]):
+            if selections[large, draw][:small] != selections[small, draw]:
+                raise ValueError(f"Saved E006c selections are not nested for draw {draw}")
+    population = e004a_run._population_summary(rows)
+    saved_population = plan.get("population", {}).get("training")
+    if saved_population != population:
+        raise ValueError("Saved E006c subset plan has different training-pool provenance")
+    return plan
+
+
 def _summary(rows):
     grouped = defaultdict(list)
     for row in rows:
@@ -385,14 +428,16 @@ def _plots(output, summaries):
     import matplotlib.pyplot as plt
 
     output.mkdir(parents=True, exist_ok=True)
-    colors = {"road-waymo": "#4477AA", "joint": "#228833"}
+    colors = {"road-waymo": "#4477AA", "joint": "#228833", "loki": "#CC6677"}
+    present = {row["source"] for row in summaries}
+    source_order = [source for source in ("road-waymo", "joint", "loki") if source in present]
     for name, metric, ylabel in (
         ("budget-f1", "assessment_macro_f1", "Track-weighted macro-F1 (%)"),
         ("budget-coverage-5pct", "coverage_5pct", "Track-weighted coverage at 5% calibration error (%)"),
     ):
         fig, ax = plt.subplots(figsize=(7.2, 4.6))
         ax.set_xscale("symlog", linthresh=1)
-        for source in E005_RUNS:
+        for source in source_order:
             points = [row for row in summaries if row["source"] == source]
             xs = [row["budget"] for row in points]
             means = [row[metric + "_mean"] * 100 for row in points]
@@ -417,17 +462,25 @@ def _plots(output, summaries):
 
 def run(args):
     output = args.output.resolve()
+    source_mode = getattr(args, "source", "matched")
+    if source_mode not in ("matched", "loki"):
+        raise ValueError(f"Unknown E006c source mode: {source_mode}")
     if output.exists():
         raise FileExistsError(f"Use a fresh E006c output directory: {output}")
     output.mkdir(parents=True)
-    status = {"status": "incomplete", "experiment": "E006c", "held_out_tests": False}
+    status = {"status": "incomplete", "experiment": "E006c", "source_mode": source_mode,
+              "held_out_tests": False}
     e004a_run.shared_run.write_json(output / "status.json", status)
     started = time.monotonic()
     provenance = {"command": getattr(sys, "orig_argv", sys.argv),
                   "started_utc": datetime.now(timezone.utc).isoformat(),
                   "dataset": str(args.dataset.resolve()), "audit": str(args.audit.resolve()),
                   "e006b_run": str(args.e006b_run.resolve()), "device": args.device,
-                  "fit_device": args.fit_device, "held_out_tests": False}
+                  "fit_device": args.fit_device, "source_mode": source_mode,
+                  "held_out_tests": False}
+    if source_mode == "loki":
+        provenance["saved_subset_plan"] = str(args.subset_plan.resolve())
+        provenance["saved_subset_plan_sha256"] = checksum(args.subset_plan)
     try:
         if args.device != "cuda" or not torch.cuda.is_available():
             raise RuntimeError("E006c frozen E005 encoder extraction requires CUDA")
@@ -437,8 +490,9 @@ def run(args):
         determinism = seed_run(0)
         torch.cuda.reset_peak_memory_stats(args.device)
         audit, cal_groups, fit_groups, dev_groups, assessment_groups = _check_audit(args.audit, args.dataset)
+        selected_sources = ("road-waymo", "joint") if source_mode == "matched" else ("loki",)
         models, model_evidence, probe, tiny_path, e006b = _load_models(
-            args.outputs_root, args.e006b_run, args.device)
+            args.outputs_root, args.e006b_run, args.device, selected_sources)
         if args.smoke:
             encoded, tiny_sweeps = _extract(args, cal_groups, assessment_groups, models, probe, tiny_path,
                                             smoke=True)
@@ -503,28 +557,34 @@ def run(args):
             torch.cuda.empty_cache()
 
         all_results, pair_plan = [], {source: {} for source in split_results}
-        plan = {"status": "planned", "experiment": "E006c", "draw_seed": 1,
-            "fit_groups": [list(group) for group in fit_groups],
-            "development_groups": [list(group) for group in dev_groups],
-            "assessment_groups": [list(group) for group in assessment_groups],
-            "population": {name: e004a_run._population_summary(split_results["road-waymo"][name])
-                           for name in ("training", "development", "assessment")},
-            "validation_split": {"development_groups": sorted({row["group"]
-                                                                  for row in split_results["road-waymo"]["development"]}),
-                                 "assessment_groups": sorted({row["group"]
-                                                              for row in split_results["road-waymo"]["assessment"]})},
-            "protocol": {"budget_tracks": list(budgets), "draws": list(draws),
-                         "fit_seed": 0, "error_target": .05,
-                         "fit_parameter_count": 516, "fit_optimizer": e004a_run.SETTINGS["optimizer"],
-                         "check_updates": [0, *e004a_run._check_schedule(True, e004a_run.SETTINGS["max_updates"])],
-                         "patience_updates": e004a_run.EARLY_PATIENCE_UPDATES},
-            "runs": []}
-        for draw in draws:
-            order = e004a_run.recording_round_robin(split_results["road-waymo"]["training"], draw)
-            for budget in budgets:
-                selected = order[:budget]
-                plan["runs"].append({"budget": budget, "draw": draw,
-                    "selected_tracks": [e004a_run._track_label_record(row) for row in selected]})
+        reference_source = "road-waymo" if "road-waymo" in split_results else "loki"
+        if source_mode == "loki" and not args.smoke:
+            plan = _load_saved_subset_plan(args.subset_plan, split_results["loki"]["training"],
+                                           fit_groups, dev_groups, assessment_groups)
+        else:
+            plan = {"status": "planned", "experiment": "E006c", "draw_seed": 1,
+                "fit_groups": [list(group) for group in fit_groups],
+                "development_groups": [list(group) for group in dev_groups],
+                "assessment_groups": [list(group) for group in assessment_groups],
+                "population": {name: e004a_run._population_summary(split_results[reference_source][name])
+                               for name in ("training", "development", "assessment")},
+                "validation_split": {"development_groups": sorted({row["group"]
+                                                                      for row in split_results[reference_source]["development"]}),
+                                     "assessment_groups": sorted({row["group"]
+                                                                  for row in split_results[reference_source]["assessment"]})},
+                "protocol": {"budget_tracks": list(budgets), "draws": list(draws),
+                             "fit_seed": 0, "error_target": .05,
+                             "fit_parameter_count": 516, "fit_optimizer": e004a_run.SETTINGS["optimizer"],
+                             "check_updates": [0, *e004a_run._check_schedule(True, e004a_run.SETTINGS["max_updates"])],
+                             "patience_updates": e004a_run.EARLY_PATIENCE_UPDATES},
+                "runs": []}
+            for draw in draws:
+                order = e004a_run.recording_round_robin(
+                    split_results[reference_source]["training"], draw)
+                for budget in budgets:
+                    selected = order[:budget]
+                    plan["runs"].append({"budget": budget, "draw": draw,
+                        "selected_tracks": [e004a_run._track_label_record(row) for row in selected]})
         pair_plan_rows = {(row["budget"], row["draw"]): row for row in plan["runs"]}
         plan_path = output / "subset-plans.json"
         e004a_run.shared_run.write_json(plan_path, plan)
@@ -572,21 +632,23 @@ def run(args):
                       f"assessment F1={result['macro_f1']:.4f}", flush=True)
 
         if not args.smoke:
-            for budget in BUDGETS:
-                for draw in DRAWS:
-                    if pair_plan["road-waymo"][budget, draw] != pair_plan["joint"][budget, draw]:
-                        raise ValueError("Paired E006c arm subsets differ")
+            if source_mode == "matched":
+                for budget in BUDGETS:
+                    for draw in DRAWS:
+                        if pair_plan["road-waymo"][budget, draw] != pair_plan["joint"][budget, draw]:
+                            raise ValueError("Paired E006c arm subsets differ")
             _plots(output / "report", _summary(all_results))
         report = {"status": "complete", "experiment": "E006c",
-            "kind": "smoke" if args.smoke else "matched-head-adaptation",
+            "kind": "smoke" if args.smoke else "loki-only-head-adaptation" if source_mode == "loki"
+                else "matched-head-adaptation", "source_mode": source_mode,
             "split": {"fit_groups": [list(group) for group in fit_groups],
                       "development_groups": [list(group) for group in dev_groups],
                       "assessment_groups": [list(group) for group in assessment_groups]},
             "class_names": list(CLASS_NAMES), "budgets": list(budgets), "draws": list(draws),
             "fit_count": sum(row["budget"] > 0 for row in all_results), "results": all_results,
             "summary": _summary(all_results) if not args.smoke else [],
-            "paired_differences": _paired(all_results) if not args.smoke else [],
-            "paired_summary": _paired_summary(all_results) if not args.smoke else [],
+            "paired_differences": _paired(all_results) if not args.smoke and source_mode == "matched" else [],
+            "paired_summary": _paired_summary(all_results) if not args.smoke and source_mode == "matched" else [],
             "representation_caches": summaries,
             "encoders": {"dino_sha256": e006b["encoder_sha256"]["dino"],
                          "tiny_utonia_sha256": e006b["encoder_sha256"]["tiny_utonia"],

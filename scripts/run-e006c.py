@@ -3,7 +3,9 @@
 import argparse
 from pathlib import Path
 
-from pedestrian_behavior.experiments.e006c_head import AUDIT, DATASET, E006B_RUN, run
+from pedestrian_behavior.experiments.e006c_head import (
+    AUDIT, DATASET, DEFAULT_SUBSET_PLAN, E006B_RUN, run,
+)
 
 
 def main():
@@ -16,6 +18,10 @@ def main():
     parser.add_argument("--device", choices=("cuda",), default="cuda")
     parser.add_argument("--fit-device", choices=("cpu", "cuda"), default="cpu")
     parser.add_argument("--smoke", action="store_true", help="Use only three calibration sequences")
+    parser.add_argument("--source", choices=("matched", "loki"), default="matched",
+                        help="Train the original ROAD/joint pair, or a separate LOKI-only arm")
+    parser.add_argument("--subset-plan", type=Path, default=DEFAULT_SUBSET_PLAN,
+                        help="Completed matched E006c plan reused by --source loki")
     run(parser.parse_args())
 
 

@@ -524,6 +524,7 @@ def run(args):
                     "bias": model_record["model_state"]["head.bias"].numpy().copy()}
             head_sha = e004a_run._head_digest(head["weight"], head["bias"])
             manifest = {"source_checkpoint_sha256": model_evidence[source]["checkpoint_sha256"],
+                "normalization": _canonical(model_record["normalization"]),
                 "source_head": {"state_sha256": head_sha},
                 "derived_features": {"training": {"sha256": summaries[source]["training"]["sha256"]},
                                      "validation": {"sha256": summaries[source]["development"]["sha256"]}}}

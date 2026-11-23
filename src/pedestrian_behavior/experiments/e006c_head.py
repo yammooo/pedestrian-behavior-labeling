@@ -14,7 +14,7 @@ import torch
 
 from pedestrian_behavior.data.feature_cache import isolated_extraction
 from pedestrian_behavior.data.preparation import checksum
-from pedestrian_behavior.evaluation import load_predictions
+from pedestrian_behavior.evaluation import load_predictions, prediction_metrics
 from pedestrian_behavior.experiments import e003b_run, e004a_run
 from pedestrian_behavior.experiments.e005_cache import TinyUtoniaEncoder, collate_e005
 from pedestrian_behavior.experiments.e005_transfer import (
@@ -237,28 +237,44 @@ def _metric_tracks(rows):
              "source_flags": row["source_flags"], "conditions": {}} for row in rows]
 
 
-def _check_e006b_replay(assessment, source, e006b_run):
+def _compare_e006b_reference(assessment, source, e006b_run):
     baseline_path = e006b_run / f"{source}-predictions.npz"
     baseline = load_predictions(baseline_path)
     current = {row["locator"]: row for row in assessment}
     if len(current) != 469 or set(current) != {row["locator"] for row in baseline}:
         raise ValueError(f"E006c assessment tracks differ from E006b {source} predictions")
-    maximum = 0.
+    absolute_differences, context_flips, gt_flips, current_tracks = [], 0, 0, []
     for row in baseline:
         found = current[row["locator"]]
         if (found["sequence"] != row["group"]
+                or found["archive"] != row["archive"]
                 or found["frame_indices"] != row["frame_indices"]
                 or not np.array_equal(found["targets"], row["targets"])
                 or not np.array_equal(found["gt_valid"], row["gt_valid"])):
             raise ValueError(f"E006c assessment labels/mask differ from E006b for {row['locator']}")
+        if found["source_logits"].shape != row["logits"].shape:
+            raise ValueError(f"E006c assessment timestep count differs from E006b for {row['locator']}")
         for flag in ("rgb_valid", "lidar_valid"):
             if not np.array_equal(found["source_flags"][flag], row["source_flags"][flag]):
                 raise ValueError(f"E006c assessment {flag} differs from E006b")
-        error = np.max(np.abs(found["source_logits"] - row["logits"]))
-        maximum = max(maximum, float(error))
-        if not np.allclose(found["source_logits"], row["logits"], rtol=1e-5, atol=2e-5):
-            raise ValueError(f"E006c source logits do not reproduce E006b for {row['locator']} (max {error})")
-    return {"tracks": len(current), "max_abs_logit_difference": maximum, "reference": str(baseline_path)}
+        old_logits, new_logits = row["logits"], found["source_logits"]
+        absolute_differences.append(np.abs(new_logits.astype(np.float64) - old_logits.astype(np.float64)).ravel())
+        flips = new_logits.argmax(-1) != old_logits.argmax(-1)
+        context_flips += int(flips.sum())
+        gt_flips += int((flips & found["gt_valid"]).sum())
+        current_tracks.append({"group": found["group"], "logits": new_logits,
+            "targets": found["targets"], "gt_valid": found["gt_valid"]})
+
+    differences = np.concatenate(absolute_differences)
+    old_metrics = prediction_metrics(baseline, len(CLASS_NAMES))["track_weighted"]
+    new_metrics = prediction_metrics(current_tracks, len(CLASS_NAMES))["track_weighted"]
+    return {"tracks": len(current), "context_logits_compared": int(differences.size),
+        "max_abs_logit_difference": float(differences.max()),
+        "mean_abs_logit_difference": float(differences.mean()),
+        "argmax_flip_context_slots": context_flips, "argmax_flip_gt_slots": gt_flips,
+        "historical_e006b_anchor": {"track_weighted_macro_f1": old_metrics["macro_f1"]},
+        "current_e006c_anchor": {"track_weighted_macro_f1": new_metrics["macro_f1"]},
+        "reference": str(baseline_path)}
 
 
 def _save_features(output, source, split, records, audit_sha, checkpoint_sha):
@@ -473,12 +489,13 @@ def run(args):
                     output, source, key, rows[key], AUDIT_SHA256,
                     model_evidence[source]["checkpoint_sha256"])
             if not args.smoke:
-                summaries[source]["e006b_replay"] = _check_e006b_replay(rows["assessment"], source, args.e006b_run)
+                summaries[source]["historical_e006b_comparison"] = _compare_e006b_reference(
+                    rows["assessment"], source, args.e006b_run)
 
         provenance["representation_caches"] = summaries
-        provenance["frozen_assessment_replay"] = {
-            source: value["e006b_replay"] for source, value in summaries.items()
-            if "e006b_replay" in value}
+        provenance["historical_e006b_comparison"] = {
+            source: value["historical_e006b_comparison"] for source, value in summaries.items()
+            if "historical_e006b_comparison" in value}
 
         # Drop the large frozen encoders before the small, repeated head fits.
         del models
@@ -575,6 +592,7 @@ def run(args):
                          "tiny_utonia_sha256": e006b["encoder_sha256"]["tiny_utonia"],
                          "tiny_sweeps": tiny_sweeps},
             "source_models": model_evidence, "audit_sha256": AUDIT_SHA256,
+            "historical_e006b_comparison": provenance["historical_e006b_comparison"],
             "assessment_used_for_selection_or_cutoffs": False,
         }
         _write(output / "summary.json", report)

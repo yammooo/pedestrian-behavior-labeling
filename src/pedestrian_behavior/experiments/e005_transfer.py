@@ -370,11 +370,11 @@ def run(args):
         write_json(output / "status.json", status)
 
 
-def _extract_embedding_records(model, batches, device):
+def _extract_embedding_records(model, batches, device, *, mode="ordinary"):
     captured = []
 
     def forward(model, batch, _):
-        logits = model(batch, mode="ordinary")
+        logits = model(batch, mode=mode)
         features, = captured
         captured.clear()
         if (features.shape != (*logits.shape[:2], 128) or features.dtype != torch.float32
@@ -389,7 +389,8 @@ def _extract_embedding_records(model, batches, device):
         records = predict(model, batches, device, forward_batch=forward)
     for row in records:
         row["source_logits"] = row.pop("logits")
-        row["group"] = json.loads(row["locator"])["clip"]
+        identity = json.loads(row["locator"])
+        row["group"] = identity.get("clip", identity.get("scenario"))
     return records
 
 

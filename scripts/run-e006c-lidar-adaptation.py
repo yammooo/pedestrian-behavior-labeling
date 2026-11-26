@@ -146,9 +146,8 @@ def _assessment_pair(current, baseline):
         raise ValueError("Assessment tracks differ from E006c head-only")
     for old in baseline:
         row = by_id[old["locator"]]
-        if any(not np.array_equal(row[key], old[key]) for key in
-               ("frame_indices", "targets", "gt_valid")):
-            raise ValueError("Assessment frames differ from E006c head-only")
+        if any(not np.array_equal(row[key], old[key]) for key in ("group", "targets", "gt_valid")):
+            raise ValueError("Assessment groups, labels or masks differ from E006c head-only")
 
     def accepted_errors(rows):
         data = e004a_analysis._population(rows)
@@ -229,7 +228,7 @@ def _fit_one(args, source_checkpoint, split, plan_row, head_only):
     save_predictions(fit_dir / "development-predictions.npz", dev_rows)
     save_predictions(fit_dir / "assessment-predictions.npz", assessment_rows)
     coverage = e004a_analysis.analyze_checkpoint(dev_rows, assessment_rows, fit_dir / "risk-analysis")
-    head_dir = head_only / "confidence-inputs" / "loki" / fit_dir.name
+    head_dir = head_only / "loki" / fit_dir.name
     paired = _assessment_pair(assessment_rows, load_predictions(head_dir / "assessment-predictions.npz"))
     result = {"budget": budget, "draw": draw, "selected_update": best["optimizer_step"],
               "actual_optimizer_updates": step, "stopping_reason": stopping_reason,

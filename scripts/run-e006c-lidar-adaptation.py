@@ -53,19 +53,20 @@ def _records_for(args, groups, probe, tiny_path, normalization):
     with isolated_extraction():
         dino = ImageEncoder(probe["dino_code"], probe["dino_weights"], args.device)
         tiny = TinyUtoniaEncoder(args.outputs_root / DEFAULT_UTONIA_CODE, tiny_path, args.device)
-        for index, sequence_id in enumerate(capture_groups, 1):
-            sequence = adapter.load_sequence(sequence_id)
+    for index, sequence_id in enumerate(capture_groups, 1):
+        sequence = adapter.load_sequence(sequence_id)
+        with isolated_extraction():
             records = adapter.encode_sequence(sequence, dino, tiny, args.device)
-            for record in records:
-                sample = sample_for(record, normalization)
-                sample["prediction_metadata"] = sample["prediction_metadata"] | {
-                    "sequence": sequence_id, "capture_group": capture_groups[sequence_id]}
-                sample["group"] = capture_groups[sequence_id]
-                sample["sequence"] = sequence_id
-                output.append(sample)
-            if index == 1 or index % 10 == 0 or index == len(capture_groups):
-                print(f"Encoded {index}/{len(capture_groups)} sequences: {sequence_id}", flush=True)
-            del sequence, records
+        for record in records:
+            sample = sample_for(record, normalization)
+            sample["prediction_metadata"] = sample["prediction_metadata"] | {
+                "sequence": sequence_id, "capture_group": capture_groups[sequence_id]}
+            sample["group"] = capture_groups[sequence_id]
+            sample["sequence"] = sequence_id
+            output.append(sample)
+        if index == 1 or index % 10 == 0 or index == len(capture_groups):
+            print(f"Encoded {index}/{len(capture_groups)} sequences: {sequence_id}", flush=True)
+        del sequence, records
     if not output:
         raise ValueError("Euro-PVI extraction produced no tracks")
     return output
@@ -167,7 +168,8 @@ def _assessment_pair(current, baseline):
 def _fit_one(args, source_checkpoint, split, plan_row, head_only):
     budget, draw = plan_row["budget"], plan_row["draw"]
     selected = {entry["locator"] for entry in plan_row["selected_tracks"]}
-    fit_rows = [row for row in split["training"] if row["locator"] in selected]
+    fit_rows = sorted((row for row in split["training"] if row["locator"] in selected),
+                      key=lambda row: row["locator"])
     if len(fit_rows) != budget:
         raise ValueError(f"Subset has {len(fit_rows)} tracks, expected {budget}")
     fit_dir = args.output / f"budget-{budget:04d}-draw-{draw:02d}"
@@ -252,7 +254,7 @@ def run(args):
     try:
         torch.set_num_threads(2)
         seed_run(0)
-        _, _, fit_groups, dev_groups, assessment_groups = _check_audit(args.audit, args.dataset)
+        _, cal_groups, fit_groups, dev_groups, assessment_groups = _check_audit(args.audit, args.dataset)
         models, evidence, probe, tiny_path, _ = _load_models(args.outputs_root, args.e006b_run, args.device, ("loki",))
         model_record = models["loki"]["checkpoint"]
         head_only = args.outputs_root / HEAD_ONLY_RUN.relative_to("outputs")
@@ -263,7 +265,7 @@ def run(args):
                 != evidence["loki"]["checkpoint_sha256"]
                 or plan_sha != checksum(head_only / "subset-plans.json")):
             raise ValueError("E006c head-only checkpoint or subset plan mismatch")
-        samples = _records_for(args, fit_groups + dev_groups + assessment_groups, probe, tiny_path,
+        samples = _records_for(args, cal_groups + assessment_groups, probe, tiny_path,
                                models["loki"]["normalization"])
         extraction_seconds = time.monotonic() - started
         by_split = {"training": [], "development": [], "assessment": []}

@@ -63,7 +63,7 @@ def _records_for(args, groups, probe, tiny_path, normalization):
                 sample["group"] = capture_groups[sequence_id]
                 sample["sequence"] = sequence_id
                 output.append(sample)
-            if index == 1 or index % 10 == 0 or index == len(sequences):
+            if index == 1 or index % 10 == 0 or index == len(capture_groups):
                 print(f"Encoded {index}/{len(capture_groups)} sequences: {sequence_id}", flush=True)
             del sequence, records
     if not output:

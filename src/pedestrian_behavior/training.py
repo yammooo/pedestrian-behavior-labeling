@@ -92,7 +92,7 @@ def train_epoch(model, batches, optimizer, device, clip_norm, on_step=None, step
 
 def fit(model, batches, validate, optimizer, device, output, checkpoint_references, on_epoch,
         epochs, patience, clip_norm, on_step=None, epoch_operation=train_epoch, initial_candidate=False,
-        check_updates=None, patience_updates=None):
+        check_updates=None, patience_updates=None, checkpoint_callback=None):
     unbounded = epochs is None
     if unbounded:
         if check_updates is None or iter(check_updates) is not check_updates:
@@ -136,6 +136,8 @@ def fit(model, batches, validate, optimizer, device, output, checkpoint_referenc
             evidence["optimizer_step"] = 0
         save_checkpoint(Path(output)/"best.pt", model, evidence)
         save_checkpoint(Path(output)/"last.pt", model, evidence)
+        if checkpoint_callback is not None:
+            checkpoint_callback(output, model, evidence)
         on_epoch(row, history)
     epoch_numbers = count(1) if unbounded else range(1, epochs+1)
     for epoch in epoch_numbers:
@@ -179,6 +181,8 @@ def fit(model, batches, validate, optimizer, device, output, checkpoint_referenc
         if selected:
             save_checkpoint(Path(output)/"best.pt", model, evidence)
         save_checkpoint(Path(output)/"last.pt", model, evidence)
+        if checkpoint_callback is not None:
+            checkpoint_callback(output, model, evidence)
         on_epoch(row, history)
         if reason:
             break

@@ -169,7 +169,7 @@ def run_attempt(source, configuration, variant, output, device, smoke=False, *, 
         if device.type == "cuda":
             torch.cuda.reset_peak_memory_stats(device)
         prepared = assemble(source, configuration, variant)
-        if smoke and not prepared.get("custom_smoke") and (source != "road-waymo" or variant != "B" or device.type != "cuda"):
+        if smoke and not (prepared.get("custom_smoke") or prepared.get("supports_smoke")) and (source != "road-waymo" or variant != "B" or device.type != "cuda"):
             raise ValueError("Smoke requires ROAD BiLSTM on CUDA")
         status["kind"] = prepared.get("kind", status["kind"])
         statistics = prepared["normalization"]
@@ -218,9 +218,12 @@ def run_attempt(source, configuration, variant, output, device, smoke=False, *, 
         run_name = prepared.get("run_name", run_name)
         run = wandb.init(entity="yammo-unipd", project="pedestrian-behaviour-labeling", name=run_name,
                          job_type=status["kind"], config=config | {"provenance": provenance},
-                         dir=str(output.resolve()), save_code=False, resume="never", mode="online")
+                         dir=str(output.resolve()), save_code=False, resume="never",
+                         mode=prepared.get("wandb_mode", "online"))
         provenance["wandb"] = {"id": run.id, "url": run.url}
         configure_logging(run)
+        if "contrastive" in settings:
+            run.define_metric("train/contrastive_loss", step_metric="epoch", step_sync=False)
         def on_step(step, loss):
             row = {"optimizer_step": step, "training_ce": loss}
             if prepared.get("log_learning_rate"):
@@ -256,6 +259,15 @@ def run_attempt(source, configuration, variant, output, device, smoke=False, *, 
                         metrics[f"details/masking/branch_retention/{branch}"] = value
                 for reason, count in masking.get("rejection_reasons", {}).items():
                     metrics[f"details/masking/rejections/{reason}"] = count
+            contrastive = row.get("contrastive")
+            if contrastive:
+                metrics["train/contrastive_loss"] = contrastive["loss"]
+                metrics["details/contrastive/opportunities"] = contrastive["opportunities"]
+                metrics["details/contrastive/pairs"] = contrastive["pairs"]
+                for source, counts in contrastive.get("opportunities_by_source", {}).items():
+                    metrics[f"details/contrastive/opportunities/{source}"] = counts
+                for source, counts in contrastive.get("pairs_by_source", {}).items():
+                    metrics[f"details/contrastive/pairs/{source}"] = counts
             run.log(metrics)
         optimizer = (prepared["optimizer_factory"](model) if "optimizer_factory" in prepared else
                      torch.optim.AdamW((p for p in model.parameters() if p.requires_grad), **settings["optimizer"]))
@@ -267,7 +279,9 @@ def run_attempt(source, configuration, variant, output, device, smoke=False, *, 
                      {"config": config, "normalization": statistics, "provenance_file": "provenance.json"}, on_epoch,
                      epochs=1 if smoke else settings["epochs"], patience=settings["patience"], clip_norm=settings["clip_norm"], on_step=on_step,
                      **({"epoch_operation": prepared["epoch_operation"]} if "epoch_operation" in prepared else {}),
-                     initial_candidate=prepared.get("initial_candidate", False))
+                     initial_candidate=prepared.get("initial_candidate", False),
+                     **({"checkpoint_callback": prepared["checkpoint_callback"]}
+                        if "checkpoint_callback" in prepared else {}))
         selected = reload_checkpoint(output/"best.pt", model, device)
         evaluations = {}
         evaluation_splits = prepared.get("evaluation_splits", [(d, "validation-smoke" if smoke else "test") for d in ([source] if smoke else list(prepared["datasets"]))])

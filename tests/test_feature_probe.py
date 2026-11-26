@@ -122,6 +122,10 @@ class FeatureProbeTest(unittest.TestCase):
         expected -= expected.min(0)
         np.testing.assert_array_equal(grid[inverse], expected)
         np.testing.assert_array_equal(voxel_sample(points)[0], selected)
+        crop = [0, 1, 3]
+        origin = np.floor(points[:, :3].astype(np.float64) / .05).astype(np.int64).min(0)
+        _, crop_inverse, crop_grid = voxel_sample(points[crop], grid_origin=origin)
+        np.testing.assert_array_equal(crop_grid[crop_inverse], expected[crop])
         with self.assertRaises(ValueError):
             voxel_sample(np.empty((0, 4)))
         points[0, 3] = np.nan

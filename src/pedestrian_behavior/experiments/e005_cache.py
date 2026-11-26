@@ -94,7 +94,7 @@ class TinyUtoniaEncoder:
         self.calls = 0
         self.seconds = 0.
 
-    def stages(self, native_points):
+    def stages(self, native_points, *, grid_origin=None):
         points = np.asarray(native_points, dtype=np.float32)
         if points.ndim != 2 or points.shape[1] != 4 or not np.isfinite(points).all():
             raise ValueError("Expected finite full-sweep XYZ+strength points")
@@ -104,7 +104,7 @@ class TinyUtoniaEncoder:
         started = time.perf_counter()
         scaled = points.copy()
         scaled[:, :3] *= .2
-        selected, _, grid = voxel_sample(scaled, grid_size=.01)
+        selected, _, grid = voxel_sample(scaled, grid_size=.01, grid_origin=grid_origin)
         coord = torch.from_numpy(scaled[selected, :3]).to(self.device)
         zeros = torch.zeros_like(coord)
         data = {"coord": coord, "grid_coord": torch.from_numpy(grid).int().to(self.device),

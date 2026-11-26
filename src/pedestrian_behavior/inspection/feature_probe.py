@@ -151,16 +151,23 @@ def relative_xyz(points, center, world_from_native, anchor):
     return ((points-center) @ world_from_native[:3, :3].T @ initial_from_world.T).astype(np.float32)
 
 
-def voxel_sample(points, grid_size=.05):
+def voxel_sample(points, grid_size=.05, *, grid_origin=None):
     """Deterministic one-native-return per voxel, with exact native inverse map.
 
     Uses the author's FNV grid ordering; picks the first native return instead
     of the random return used by their validation loader. No averaging/TTA.
+    A supplied absolute grid origin preserves pooling alignment after cropping.
     """
     if points.ndim != 2 or points.shape[1] != 4 or not len(points) or not np.isfinite(points).all():
         raise ValueError("Expected finite nonempty XYZ+strength")
     grid = np.floor(points[:, :3].astype(np.float64)/grid_size).astype(np.int64)
-    grid -= grid.min(0)
+    if grid_origin is None:
+        grid_origin = grid.min(0)
+    else:
+        grid_origin = np.asarray(grid_origin)
+        if grid_origin.shape != (3,) or grid_origin.dtype.kind != "i" or (grid_origin > grid.min(0)).any():
+            raise ValueError("Voxel grid origin must be an integer cell at or below the points")
+    grid -= grid_origin
     key = np.full(len(grid), np.uint64(14695981039346656037), dtype=np.uint64)
     for axis in range(3):
         key *= np.uint64(1099511628211)

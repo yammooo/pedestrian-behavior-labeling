@@ -203,6 +203,10 @@ def run_attempt(source, configuration, variant, output, device, smoke=False, *, 
         class SmokeBatches:
             def __iter__(self):
                 return islice(training, 2)
+
+            def microbatches(self, indices):
+                return training.microbatches(indices)
+
         def validation_predictions(m):
             tracks = predict(m, islice(validation, 1) if smoke and not prepared.get("custom_smoke") else validation, device,
                              prepared.get("forward_batch"))

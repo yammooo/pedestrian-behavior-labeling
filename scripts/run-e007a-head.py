@@ -26,7 +26,9 @@ from pedestrian_behavior.training import seed_run
 
 
 DEFAULT_E007A_RUN = Path("outputs/experiments/E007a/runs/joint-s0-20261126-170812")
+E006A_RUN = Path("experiments/E005/runs/joint-g-rgb-utonia-s0-20261122-001910")
 CHECKPOINTS = ("best-f1", "best-ce")
+CONTROL = "plain-ce-epoch6"
 FIT_BUDGET = 100
 ERROR_TARGET = 0.05
 SUBSET_PLAN_SHA256 = "556d549ea3fa45692974078e8a14ab8b922d553f45339d30bd31105aaa0f2de1"
@@ -34,6 +36,49 @@ SUBSET_PLAN_SHA256 = "556d549ea3fa45692974078e8a14ab8b922d553f45339d30bd31105aaa
 
 def _canonical(value):
     return json.loads(json.dumps(value))
+
+
+def _load_model(path, checkpoint, config, device):
+    model = build_model(config["arm"], config["profile"]).to(device).eval()
+    state = checkpoint["model_state"]
+    model.load_state_dict(state, strict=True)
+    return (
+        {"model": model, "config": config, "checkpoint": checkpoint,
+         "normalization": checkpoint["normalization"]},
+        {"run": str(path.parent.resolve()), "checkpoint": str(path.resolve()),
+         "checkpoint_sha256": checksum(path), "epoch": checkpoint["epoch"],
+         "selection": checkpoint["selection"],
+         "source_head_sha256": e004a_run._head_digest(
+             state["head.weight"].cpu().numpy(), state["head.bias"].cpu().numpy())},
+    )
+
+
+def _load_control(run_root, reference, device):
+    path = run_root / "last.pt"
+    checkpoint = torch.load(path, map_location="cpu", weights_only=True)
+    config = json.loads((run_root / "config.json").read_text())
+    status = json.loads((run_root / "status.json").read_text())
+    original = json.loads((reference / "config.json").read_text())
+    source_stats = json.loads((reference / "provenance.json").read_text())["source_statistics"]
+    if (status["status"] != "complete" or checkpoint["epoch"] != 6
+            or checkpoint["stopping_reason"] != "budget"
+            or _canonical(checkpoint["config"]) != config
+            or _canonical(checkpoint["normalization"]) != source_stats
+            or config["settings"] != (original["settings"] | {"epochs": 6})
+            or any(config[key] != original[key] for key in
+                   ("source", "arm", "experiment", "variant", "profile", "batching",
+                    "joint_sampling", "determinism", "held_out_tests", "smoke_limits"))
+            or {s: r["manifest_sha256"] for s, r in config["caches"].items()}
+            != {s: r["manifest_sha256"] for s, r in original["caches"].items()}):
+        raise ValueError("Expected the completed six-epoch replay of the original E006a recipe")
+    history = json.loads((run_root / "history.json").read_text())
+    original_history = json.loads((reference / "history.json").read_text())[:6]
+    metrics = [key for key in original_history[0] if key.startswith("val/")]
+    for actual, expected in zip(history, original_history, strict=True):
+        if actual["epoch"] != expected["epoch"] or not np.allclose(
+                [actual[k] for k in metrics], [expected[k] for k in metrics], atol=1e-7, rtol=1e-7):
+            raise ValueError(f"E006a source validation replay differs at epoch {actual['epoch']}")
+    return _load_model(path, checkpoint, config, device)
 
 
 def _load_e007a_models(run_root, device):
@@ -68,20 +113,8 @@ def _load_e007a_models(run_root, device):
         elif _canonical(checkpoint["normalization"]) != _canonical(normalization):
             raise ValueError("E007a selection checkpoints use different frozen normalization")
 
-        state = checkpoint["model_state"]
-        if (state.get("head.weight") is None or tuple(state["head.weight"].shape) != (4, 128)
-                or state.get("head.bias") is None or tuple(state["head.bias"].shape) != (4,)):
-            raise ValueError(f"E007a {name} does not contain the original Linear(128, 4) head")
-        model = build_model(config["arm"], config["profile"]).to(device).eval()
-        model.load_state_dict(state, strict=True)
-        models[name] = {"model": model, "config": config, "checkpoint": checkpoint,
-                        "normalization": checkpoint["normalization"]}
-        weight = state["head.weight"].cpu().numpy().copy()
-        bias = state["head.bias"].cpu().numpy().copy()
-        evidence[name] = {"run": str(run_root.resolve()), "checkpoint": str(path.resolve()),
-            "checkpoint_sha256": checksum(path), "selection": checkpoint.get("selection"),
-            "source_head_sha256": e004a_run._head_digest(weight, bias)}
-    return models, evidence, config
+        models[name], evidence[name] = _load_model(path, checkpoint, config, device)
+    return models, evidence
 
 
 def _check_encoder_lineage(config, e006b):
@@ -132,7 +165,7 @@ def _add_fixed_coverage(result):
 
 def _summary(rows):
     output = []
-    for checkpoint in CHECKPOINTS:
+    for checkpoint in dict.fromkeys(row["checkpoint"] for row in rows):
         for budget in sorted({row["budget"] for row in rows if row["checkpoint"] == checkpoint}):
             group = [row for row in rows if row["checkpoint"] == checkpoint and row["budget"] == budget]
             metrics = {"assessment_macro_f1": [row["macro_f1"] for row in group],
@@ -248,7 +281,8 @@ def run(args):
     provenance = {"command": getattr(sys, "orig_argv", sys.argv),
         "started_utc": datetime.now(timezone.utc).isoformat(), "dataset": str(args.dataset.resolve()),
         "audit": str(args.audit.resolve()), "e006b_run": str(args.e006b_run.resolve()),
-        "e007a_run": str(args.e007a_run.resolve()), "subset_plan": str(args.subset_plan.resolve()),
+                  "source_run": str((args.e006a_epoch6_run or args.e007a_run).resolve()),
+                  "subset_plan": str(args.subset_plan.resolve()),
         "device": args.device, "fit_device": args.fit_device, "smoke": args.smoke,
         "held_out_tests": False}
     try:
@@ -258,10 +292,17 @@ def run(args):
         plan_sha = checksum(args.subset_plan)
         if plan_sha != SUBSET_PLAN_SHA256:
             raise ValueError("E007a follow-up must use the pinned completed E006c subset plan")
-        models, evidence, e007a_config = _load_e007a_models(args.e007a_run.resolve(), args.device)
+        if args.e006a_epoch6_run:
+            model, record = _load_control(
+                args.e006a_epoch6_run.resolve(), args.outputs_root / E006A_RUN, args.device)
+            models, evidence = {CONTROL: model}, {CONTROL: record}
+        else:
+            models, evidence = _load_e007a_models(args.e007a_run.resolve(), args.device)
+        reference_model = next(iter(models))
         _, _, probe, tiny_path, e006b = _load_models(
             args.outputs_root, args.e006b_run, args.device, sources=())
-        _check_encoder_lineage(e007a_config, e006b)
+        for model in models.values():
+            _check_encoder_lineage(model["config"], e006b)
         provenance.update(subset_plan_sha256=plan_sha,
             source_checkpoints={name: value["checkpoint_sha256"] for name, value in evidence.items()},
             encoder_sha256=e006b["encoder_sha256"], determinism=determinism)
@@ -285,11 +326,11 @@ def run(args):
                 "fit_groups": [list(group) for group in fit_groups],
                 "development_groups": [list(group) for group in dev_groups],
                 "assessment_groups": [list(group) for group in assessment_groups],
-                "population": {name: e004a_run._population_summary(split_results["best-f1"][name])
+                "population": {name: e004a_run._population_summary(split_results[reference_model][name])
                                for name in ("training", "development", "assessment")},
                 "protocol": {"budget_tracks": [1], "draws": [0], "fit_seed": 0,
                              "error_target": ERROR_TARGET}, "runs": []}
-            fit = sorted(split_results["best-f1"]["training"], key=lambda row: row["locator"])
+            fit = sorted(split_results[reference_model]["training"], key=lambda row: row["locator"])
             if not fit:
                 raise ValueError("E006c smoke fitting sequence has no scored track")
             plan["runs"] = [{"budget": 1, "draw": 0,
@@ -299,7 +340,7 @@ def run(args):
         else:
             for source_rows in split_results.values():
                 _full_split(source_rows, audit)
-            plan = _load_saved_subset_plan(args.subset_plan, split_results["best-f1"]["training"],
+            plan = _load_saved_subset_plan(args.subset_plan, split_results[reference_model]["training"],
                                            fit_groups, dev_groups, assessment_groups)
             _copy_plan(args.subset_plan, output / "subset-plans.json")
         plan_path = output / ("smoke-plan.json" if args.smoke else "subset-plans.json")
@@ -307,8 +348,8 @@ def run(args):
             e004a_run.shared_run.write_json(plan_path, plan)
 
         for split in ("training", "development", "assessment"):
-            baseline = split_results["best-f1"][split]
-            for name in CHECKPOINTS[1:]:
+            baseline = split_results[reference_model][split]
+            for name in list(split_results)[1:]:
                 other = split_results[name][split]
                 if [row["locator"] for row in baseline] != [row["locator"] for row in other]:
                     raise ValueError(f"E007a {split} track identities differ between checkpoints")
@@ -320,7 +361,7 @@ def run(args):
 
         if not args.smoke:
             saved_population = plan.get("population", {})
-            if any(saved_population.get(split) != e004a_run._population_summary(split_results["best-f1"][split])
+            if any(saved_population.get(split) != e004a_run._population_summary(split_results[reference_model][split])
                    for split in ("training", "development", "assessment")):
                 raise ValueError("Saved E006c population provenance differs from extracted Euro-PVI tracks")
 
@@ -335,7 +376,7 @@ def run(args):
         if args.device == "cuda":
             torch.cuda.empty_cache()
         all_results = []
-        for name in CHECKPOINTS:
+        for name in split_results:
             all_results.extend(_run_checkpoint(output, name, split_results, plan, plan_path,
                                                evidence, args, args.smoke))
         report = {"status": "complete", "experiment": "E007a-head-follow-up",
@@ -347,7 +388,7 @@ def run(args):
             "split": {"fit_groups": [list(group) for group in fit_groups],
                       "development_groups": [list(group) for group in dev_groups],
                       "assessment_groups": [list(group) for group in assessment_groups],
-                      "population": {name: e004a_run._population_summary(split_results["best-f1"][name])
+                      "population": {name: e004a_run._population_summary(split_results[reference_model][name])
                                      for name in ("training", "development", "assessment")}},
             "subset_plan": {"path": str(args.subset_plan.resolve()), "sha256": plan_sha,
                             "run_plan": str(plan_path.resolve()), "run_plan_sha256": checksum(plan_path)},
@@ -380,6 +421,7 @@ def main():
     parser.add_argument("--audit", type=Path, default=AUDIT)
     parser.add_argument("--e006b-run", type=Path, default=E006B_RUN)
     parser.add_argument("--e007a-run", type=Path, default=DEFAULT_E007A_RUN)
+    parser.add_argument("--e006a-epoch6-run", type=Path, help="Evaluate only the epoch-6 plain CE control")
     parser.add_argument("--subset-plan", type=Path, default=DEFAULT_SUBSET_PLAN)
     parser.add_argument("--outputs-root", type=Path, default=Path("outputs"))
     parser.add_argument("--output", type=Path, required=True)

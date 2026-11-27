@@ -403,8 +403,9 @@ def run(args):
     if args.aalto_fast:
         args.allocator_cap_bytes = enable_aalto_fast(args.arm, args.device)
     torch.set_num_threads(2)
+    epochs = getattr(args, "epochs", SETTINGS["epochs"])
     return run_attempt(source, args.arm, VARIANT, output, args.device,
-                       settings=SETTINGS, assemble=lambda *_: assembly(args),
+                       settings=SETTINGS | {"epochs": epochs}, assemble=lambda *_: assembly(args),
                        classes=CLASSES, axes=axes(args.arm))
 
 
@@ -418,6 +419,7 @@ def main():
     parser.add_argument("--loki-cache", type=Path, help=f"LOKI cache for joint training (default: {DEFAULT_CACHE})")
     parser.add_argument("--road-cache", type=Path, help="Completed ROAD cache for joint training")
     parser.add_argument("--joint-profile", type=Path, help="Completed joint training calibration JSON")
+    parser.add_argument("--epochs", type=int, default=SETTINGS["epochs"], help="Maximum training epochs")
     parser.add_argument("--aalto-fast", action=argparse.BooleanOptionalAction,
                         help="Use the calibrated profile (default for g-rgb-utonia on the RTX 4080 Laptop GPU)")
     parser.add_argument("--output", type=Path, required=True)

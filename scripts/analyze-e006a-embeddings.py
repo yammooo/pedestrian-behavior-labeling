@@ -72,7 +72,7 @@ def probe(features, flags, domains, labels, groups):
     }
 
 
-def plot(method, panels, domains, labels, output):
+def plot(method, panels, domains, labels, output, title):
     fig, axes = plt.subplots(2, 2, figsize=(11, 8), layout="constrained")
     for row, (cohort, (indices, xy, names)) in enumerate(panels.items()):
         for column, (values, colors, legend) in enumerate((
@@ -90,13 +90,13 @@ def plot(method, panels, domains, labels, output):
                 handles = [plt.Line2D([], [], marker="o", linestyle="none", color=c, label=l, markersize=5)
                            for c, l in zip(colors, legend, strict=True)]
                 ax.legend(handles=handles, frameon=False, fontsize=8, loc="upper right")
-    fig.suptitle(f"E006a joint checkpoint · {method.upper()} of 128-D pre-head features")
+    fig.suptitle(f"{title} · {method.upper()} of 128-D pre-head features")
     for suffix in ("png", "svg"):
         fig.savefig(output / f"{method}.{suffix}", dpi=180)
     plt.close(fig)
 
 
-def run(inputs, output):
+def run(inputs, output, title="E006a joint checkpoint"):
     with np.load(inputs, allow_pickle=False) as archive:
         features, datasets, groups, tracks, labels, rgb, lidar = (
             archive[key] for key in ("features", "datasets", "groups", "locators", "labels", "rgb_valid", "lidar_valid"))
@@ -108,7 +108,7 @@ def run(inputs, output):
     rgb, lidar = rgb.astype(bool), lidar.astype(bool)
     flags = np.column_stack((rgb, lidar))
     output.mkdir(parents=True, exist_ok=False)
-    report = {"input": str(inputs), "input_sha256": checksum(inputs), "seed": 0,
+    report = {"input": str(inputs), "input_sha256": checksum(inputs), "title": title, "seed": 0,
               "per_track_cap": TRACK_CAP, "per_recording_cap": GROUP_CAP, "per_cell_cap": CELL_CAP,
               "probe_folds": 5, "umap": {"n_neighbors": 15, "min_dist": .1}, "cohorts": {}}
     arrays = {}
@@ -133,7 +133,7 @@ def run(inputs, output):
         }
     np.savez_compressed(output / "projection-coordinates.npz", **arrays)
     for method, values in panels.items():
-        plot(method, values, domains, labels, output)
+        plot(method, values, domains, labels, output, title)
     (output / "summary.json").write_text(json.dumps(report, indent=2, allow_nan=False) + "\n")
     print(json.dumps(report["cohorts"], indent=2))
 
@@ -142,5 +142,6 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--input", type=Path, required=True)
     p.add_argument("--output", type=Path, required=True)
+    p.add_argument("--title", default="E006a joint checkpoint")
     args = p.parse_args()
-    run(args.input, args.output)
+    run(args.input, args.output, args.title)

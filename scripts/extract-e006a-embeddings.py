@@ -1,4 +1,4 @@
-"""Export E006a pre-head validation embeddings after exact prediction replay."""
+"""Export pre-head validation embeddings from E006a or E007a joint checkpoints."""
 
 import argparse
 import json
@@ -22,24 +22,32 @@ SOURCES = ("road-waymo", "loki")
 LOGIT_RTOL, LOGIT_ATOL = 1e-4, 1e-5
 
 
-def _verify_run(run):
+def _verify_run(run, checkpoint_name):
     status = json.loads((run / "status.json").read_text())
     config = json.loads((run / "config.json").read_text())
     provenance = json.loads((run / "provenance.json").read_text())
-    checkpoint_path = run / "best.pt"
+    checkpoint_path = run / checkpoint_name
     checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
     checkpoint_config = json.loads(json.dumps(checkpoint.get("config")))
-    if (status.get("status") != "complete" or config.get("experiment") != "E005"
+    experiment = "E005" if checkpoint_name == "best.pt" else "E007a"
+    if (status.get("status") != "complete" or config.get("experiment") != experiment
             or config.get("source") != "joint" or config.get("configuration") != "g-rgb-utonia"
             or config.get("held_out_tests") is not False or config.get("smoke_limits") is not None
-            or checkpoint_config != config or checkpoint.get("epoch") != provenance.get("selected_checkpoint_epoch")
-            or checkpoint.get("selection") != provenance.get("selection")
+            or checkpoint_config != config or checkpoint.get("normalization") != provenance.get("source_statistics")
             or checkpoint.get("epoch") != checkpoint.get("selection", {}).get("epoch")):
-        raise ValueError("Expected the completed full E006a joint best checkpoint")
+        raise ValueError("Expected a selected checkpoint from a completed joint run")
+    if checkpoint_name == "best-ce.pt":
+        history = json.loads((run / "history.json").read_text())
+        best = min(history, key=lambda row: (row["validation_ce"], row["epoch"]))
+        if checkpoint["selection"] != {"epoch": best["epoch"], "ce": best["validation_ce"]}:
+            raise ValueError("CE checkpoint differs from the validation minimum")
+    elif (checkpoint["epoch"] != provenance.get("selected_checkpoint_epoch")
+          or checkpoint["selection"] != provenance.get("selection")):
+        raise ValueError("F1 checkpoint differs from recorded run selection")
     return config, checkpoint, checksum(checkpoint_path)
 
 
-def _verify_logits(records, predictions):
+def _verify_logits(records, predictions, *, compare_logits=True):
     expected = {row["locator"]: row for row in predictions}
     if len(expected) != len(predictions) or {row["locator"] for row in records} != expected.keys():
         raise ValueError("Extracted validation tracks differ from saved E006a predictions")
@@ -53,15 +61,16 @@ def _verify_logits(records, predictions):
                 or any(not np.array_equal(row["source_flags"][name], prior["source_flags"][name])
                        for name in ("rgb_valid", "lidar_valid"))
                 or logits.shape != prior["logits"].shape
-                or not np.allclose(logits, prior["logits"], rtol=LOGIT_RTOL, atol=LOGIT_ATOL)):
-            raise ValueError(f"Validation replay differs from saved E006a predictions for {row['locator']}")
-        maximum = max(maximum, float(np.abs(logits - prior["logits"]).max()))
-    return maximum
+                or (compare_logits and not np.allclose(logits, prior["logits"], rtol=LOGIT_RTOL, atol=LOGIT_ATOL))):
+            raise ValueError(f"Validation replay differs from saved predictions for {row['locator']}")
+        if compare_logits:
+            maximum = max(maximum, float(np.abs(logits - prior["logits"]).max()))
+    return maximum if compare_logits else None
 
 
 def run(args):
     run_dir = args.run.resolve()
-    config, checkpoint, checkpoint_sha = _verify_run(run_dir)
+    config, checkpoint, checkpoint_sha = _verify_run(run_dir, args.checkpoint)
     if args.output.suffix != ".npz" or args.output.exists():
         raise ValueError("Choose a fresh .npz output path")
     if not torch.cuda.is_available() and args.device == "cuda":
@@ -74,7 +83,9 @@ def run(args):
         aalto_fast=False, device=args.device))
     try:
         if prepared["config"]["profile"] != config["profile"]:
-            raise ValueError("Joint calibration profile differs from the selected E006a run")
+            raise ValueError("Joint calibration profile differs from the selected run")
+        if prepared["normalization"] != checkpoint["normalization"]:
+            raise ValueError("Replayed model inputs use different normalization")
         model = prepared["build_model"]().to(args.device)
         model.load_state_dict(checkpoint["model_state"], strict=True)
         model.eval()
@@ -87,7 +98,7 @@ def run(args):
             batches = prepared["batches"](dataset, seed=int(config["settings"]["seed"]))
             records = e005_transfer._extract_embedding_records(model, batches, args.device, mode=None)
             reference = load_predictions(run_dir / f"{source}-validation" / "predictions.npz")
-            replay_deltas[source] = _verify_logits(records, reference)
+            replay_deltas[source] = _verify_logits(records, reference, compare_logits=args.checkpoint != "best-ce.pt")
             for track in records:
                 valid = track["gt_valid"].astype(bool)
                 if not valid.any() or not np.isfinite(track["features"]).all():
@@ -108,7 +119,7 @@ def run(args):
                 or not np.isfinite(arrays["features"]).all()
                 or not np.isin(arrays["labels"], (0, 1, 2, 3)).all()
                 or set(arrays["datasets"]) != set(SOURCES)):
-            raise ValueError("Invalid joint E006a embedding export")
+            raise ValueError("Invalid joint embedding export")
         args.output.parent.mkdir(parents=True, exist_ok=True)
         np.savez_compressed(args.output, **arrays)
         print({"output": str(args.output.resolve()), "rows": count, "checkpoint_sha256": checkpoint_sha,
@@ -120,6 +131,7 @@ def run(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", type=Path, default=DEFAULT_RUN)
+    parser.add_argument("--checkpoint", choices=("best.pt", "best-f1.pt", "best-ce.pt"), default="best.pt")
     parser.add_argument("--profile", type=Path, default=DEFAULT_PROFILE)
     parser.add_argument("--loki-cache", type=Path, default=DEFAULT_LOKI_CACHE)
     parser.add_argument("--road-cache", type=Path, default=DEFAULT_ROAD_CACHE)

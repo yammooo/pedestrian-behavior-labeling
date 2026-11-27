@@ -27,6 +27,7 @@ from pedestrian_behavior.training import seed_run
 
 DEFAULT_E007A_RUN = Path("outputs/experiments/E007a/runs/joint-s0-20261126-170812")
 E006A_RUN = Path("experiments/E005/runs/joint-g-rgb-utonia-s0-20261122-001910")
+ROAD_RUN = Path("experiments/E005/runs/road-waymo-g-rgb-utonia-s0-20261120-030721")
 CHECKPOINTS = ("best-f1", "best-ce")
 CONTROL = "plain-ce-epoch6"
 FIT_BUDGET = 100
@@ -53,31 +54,32 @@ def _load_model(path, checkpoint, config, device):
     )
 
 
-def _load_control(run_root, reference, device):
+def _load_control(run_root, reference, epoch, device):
     path = run_root / "last.pt"
     checkpoint = torch.load(path, map_location="cpu", weights_only=True)
     config = json.loads((run_root / "config.json").read_text())
     status = json.loads((run_root / "status.json").read_text())
     original = json.loads((reference / "config.json").read_text())
     source_stats = json.loads((reference / "provenance.json").read_text())["source_statistics"]
-    if (status["status"] != "complete" or checkpoint["epoch"] != 6
+    if (status["status"] != "complete" or checkpoint["epoch"] != epoch
             or checkpoint["stopping_reason"] != "budget"
             or _canonical(checkpoint["config"]) != config
             or _canonical(checkpoint["normalization"]) != source_stats
-            or config["settings"] != (original["settings"] | {"epochs": 6})
-            or any(config[key] != original[key] for key in
+            or config["settings"] != (original["settings"] | {"epochs": epoch})
+            or any(config.get(key) != original.get(key) for key in
                    ("source", "arm", "experiment", "variant", "profile", "batching",
                     "joint_sampling", "determinism", "held_out_tests", "smoke_limits"))
-            or {s: r["manifest_sha256"] for s, r in config["caches"].items()}
-            != {s: r["manifest_sha256"] for s, r in original["caches"].items()}):
-        raise ValueError("Expected the completed six-epoch replay of the original E006a recipe")
+            or {s: r["manifest_sha256"] for s, r in _source_caches(config).items()}
+            != {s: r["manifest_sha256"] for s, r in _source_caches(original).items()}):
+        raise ValueError(f"Expected the completed {epoch}-epoch replay of the original {original['source']} recipe")
     history = json.loads((run_root / "history.json").read_text())
-    original_history = json.loads((reference / "history.json").read_text())[:6]
-    metrics = [key for key in original_history[0] if key.startswith("val/")]
+    original_history = json.loads((reference / "history.json").read_text())[:epoch]
+    metrics = ["validation_f1", "validation_ce",
+               *(key for key in original_history[0] if key.startswith("val/"))]
     for actual, expected in zip(history, original_history, strict=True):
         if actual["epoch"] != expected["epoch"] or not np.allclose(
                 [actual[k] for k in metrics], [expected[k] for k in metrics], atol=1e-7, rtol=1e-7):
-            raise ValueError(f"E006a source validation replay differs at epoch {actual['epoch']}")
+            raise ValueError(f"{config['source']} validation replay differs at epoch {actual['epoch']}")
     return _load_model(path, checkpoint, config, device)
 
 
@@ -117,10 +119,16 @@ def _load_e007a_models(run_root, device):
     return models, evidence
 
 
+def _source_caches(config):
+    return config["caches"] if config["source"] == "joint" else {config["source"]: config["cache"]}
+
+
 def _check_encoder_lineage(config, e006b):
-    if set(config.get("caches", {})) != {"road-waymo", "loki"}:
-        raise ValueError("E007a checkpoint lacks the frozen two-source cache lineage")
-    for cache in config["caches"].values():
+    caches = _source_caches(config)
+    expected = {"road-waymo", "loki"} if config["source"] == "joint" else {"road-waymo"}
+    if set(caches) != expected:
+        raise ValueError("Checkpoint lacks the frozen source cache lineage")
+    for cache in caches.values():
         provenance = cache.get("provenance", {})
         if (provenance.get("DINO", {}).get("checkpoint_sha256") != e006b["encoder_sha256"]["dino"]
                 or provenance.get("Tiny-Utonia", {}).get("checkpoint_sha256")
@@ -255,7 +263,7 @@ def _run_checkpoint(output, checkpoint_name, rows, plan, plan_path, evidence, ar
             raise ValueError(f"Saved E006c selection {budget}/{draw} does not match extracted tracks")
         result = e004a_run._run_one(attempt, cache, fit_rows, development, assessment, plan_row,
             plan, torch.device(args.fit_device), smoke, True, experiment="E007a-head-follow-up",
-            run_name_prefix=f"e007a-{checkpoint_name}-head", source="joint", target="euro-pvi",
+            run_name_prefix=f"e007a-{checkpoint_name}-head", source=checkpoint["config"]["source"], target="euro-pvi",
             wandb_enabled=False)
         result["checkpoint"], result["draw"] = checkpoint_name, draw
         _add_fixed_coverage(result)
@@ -281,7 +289,7 @@ def run(args):
     provenance = {"command": getattr(sys, "orig_argv", sys.argv),
         "started_utc": datetime.now(timezone.utc).isoformat(), "dataset": str(args.dataset.resolve()),
         "audit": str(args.audit.resolve()), "e006b_run": str(args.e006b_run.resolve()),
-                  "source_run": str((args.e006a_epoch6_run or args.e007a_run).resolve()),
+                  "source_run": str((args.road_epoch11_run or args.e006a_epoch6_run or args.e007a_run).resolve()),
                   "subset_plan": str(args.subset_plan.resolve()),
         "device": args.device, "fit_device": args.fit_device, "smoke": args.smoke,
         "held_out_tests": False}
@@ -292,9 +300,13 @@ def run(args):
         plan_sha = checksum(args.subset_plan)
         if plan_sha != SUBSET_PLAN_SHA256:
             raise ValueError("E007a follow-up must use the pinned completed E006c subset plan")
-        if args.e006a_epoch6_run:
+        if args.road_epoch11_run:
             model, record = _load_control(
-                args.e006a_epoch6_run.resolve(), args.outputs_root / E006A_RUN, args.device)
+                args.road_epoch11_run.resolve(), args.outputs_root / ROAD_RUN, 11, args.device)
+            models, evidence = {"road-ce-epoch11": model}, {"road-ce-epoch11": record}
+        elif args.e006a_epoch6_run:
+            model, record = _load_control(
+                args.e006a_epoch6_run.resolve(), args.outputs_root / E006A_RUN, 6, args.device)
             models, evidence = {CONTROL: model}, {CONTROL: record}
         else:
             models, evidence = _load_e007a_models(args.e007a_run.resolve(), args.device)
@@ -421,7 +433,9 @@ def main():
     parser.add_argument("--audit", type=Path, default=AUDIT)
     parser.add_argument("--e006b-run", type=Path, default=E006B_RUN)
     parser.add_argument("--e007a-run", type=Path, default=DEFAULT_E007A_RUN)
-    parser.add_argument("--e006a-epoch6-run", type=Path, help="Evaluate only the epoch-6 plain CE control")
+    replay = parser.add_mutually_exclusive_group()
+    replay.add_argument("--e006a-epoch6-run", type=Path, help="Evaluate only the epoch-6 plain CE control")
+    replay.add_argument("--road-epoch11-run", type=Path, help="Evaluate only the ROAD minimum-CE replay")
     parser.add_argument("--subset-plan", type=Path, default=DEFAULT_SUBSET_PLAN)
     parser.add_argument("--outputs-root", type=Path, default=Path("outputs"))
     parser.add_argument("--output", type=Path, required=True)
